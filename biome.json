@@ -85,6 +85,10 @@
               {
                 "group": ["@tauri-apps/**"],
                 "message": "Only @repo/ipc may import @tauri-apps/*. Use the typed functions from @repo/ipc."
+              },
+              {
+                "group": ["@xterm/**"],
+                "message": "The terminal's renderer lives behind @repo/terminal: only it may import @xterm/*."
               }
             ]
           }
@@ -142,6 +146,10 @@
                       "@repo/mcp"
                     ],
                     "message": "@repo/ipc is infrastructure: it may depend on @repo/contracts only."
+                  },
+                  {
+                    "group": ["@xterm/**"],
+                    "message": "The terminal's renderer lives behind @repo/terminal: only it may import @xterm/*."
                   }
                 ]
               }
@@ -208,6 +216,10 @@
                       "@nuvui/**"
                     ],
                     "message": "Foundation packages (contracts, kernel) are plain TypeScript: no UI, no IPC, no feature packages."
+                  },
+                  {
+                    "group": ["@xterm/**"],
+                    "message": "The terminal's renderer lives behind @repo/terminal: only it may import @xterm/*."
                   }
                 ]
               }
@@ -225,11 +237,75 @@
         "packages/settings/**",
         "packages/search/**",
         "packages/git/**",
-        "packages/terminal/**",
         "packages/lsp/**",
         "packages/debug/**",
         "packages/mcp/**"
       ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "codemirror",
+                      "codemirror/**",
+                      "@codemirror/**",
+                      "@lezer/**",
+                      "monaco-editor",
+                      "monaco-editor/**",
+                      "@monaco-editor/**",
+                      "ace-builds",
+                      "ace-builds/**",
+                      "react-ace",
+                      "@uiw/**",
+                      "@tiptap/**",
+                      "@nuvui/editor",
+                      "@nuvui/editor/**"
+                    ],
+                    "message": "The editor lives behind @repo/editor-surface: only it may import @nuvui/editor or an editor engine (plan.md: hard constraint)."
+                  },
+                  {
+                    "group": ["@repo/*/**"],
+                    "message": "Import a package through its public entry (@repo/<name>), never a deep path."
+                  },
+                  {
+                    "group": ["@tauri-apps/**"],
+                    "message": "Only @repo/ipc may import @tauri-apps/*. Use the typed functions from @repo/ipc."
+                  },
+                  {
+                    "group": [
+                      "@repo/ipc",
+                      "@repo/shell",
+                      "@repo/explorer",
+                      "@repo/tabs",
+                      "@repo/editor-surface",
+                      "@repo/commands",
+                      "@repo/settings",
+                      "@repo/lsp",
+                      "@repo/terminal",
+                      "@repo/git",
+                      "@repo/debug",
+                      "@repo/mcp",
+                      "@repo/search"
+                    ],
+                    "message": "A feature package never imports another feature package or @repo/ipc. Use @repo/kernel (commands, events), @repo/contracts (types, ports), and let apps/desktop wire them."
+                  },
+                  {
+                    "group": ["@xterm/**"],
+                    "message": "The terminal's renderer lives behind @repo/terminal: only it may import @xterm/*."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/terminal/**"],
       "linter": {
         "rules": {
           "style": {
@@ -337,6 +413,10 @@
                       "@repo/search"
                     ],
                     "message": "A feature package never imports another feature package or @repo/ipc. Use @repo/kernel (commands, events), @repo/contracts (types, ports), and let apps/desktop wire them."
+                  },
+                  {
+                    "group": ["@xterm/**"],
+                    "message": "The terminal's renderer lives behind @repo/terminal: only it may import @xterm/*."
                   }
                 ]
               }

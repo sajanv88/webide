@@ -1,0 +1,64 @@
+// The terminals in the shell's panel: a row of tabs and buttons, then the terminal.
+.terminal-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  block-size: 100%;
+  min-inline-size: 0;
+  overflow: hidden;
+  background-color: var(--color-surface);
+  color: var(--color-surface-foreground);
+
+  &--empty {
+    place-items: center;
+  }
+
+  &__tabs {
+    --nuv-tabs-gap: 0;
+
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    block-size: 100%;
+    min-block-size: 0;
+  }
+
+  &__bar {
+    display: flex;
+    gap: calc(var(--spacing) * 2);
+    align-items: center;
+    padding-inline: calc(var(--spacing) * 2);
+  }
+
+  &__list {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  &__tab {
+    gap: var(--spacing);
+    font-size: var(--text-xs);
+  }
+
+  &__actions {
+    display: flex;
+    flex: none;
+    gap: var(--spacing);
+  }
+
+  // Square, as the button holds only an icon.
+  &__icon {
+    aspect-ratio: 1;
+    padding: 0;
+  }
+
+  &__view {
+    block-size: 100%;
+    min-block-size: 0;
+    margin: 0;
+  }
+}
+
+// Every terminal stays mounted; only the chosen one is drawn.
+.terminal-panel__view[data-state="inactive"] {
+  display: none;
+}
