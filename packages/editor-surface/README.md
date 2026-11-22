@@ -1,11 +1,12 @@
 # @repo/editor-surface
 
-**Status:** Phase 4.
+**Status:** Milestone 3.
 
 ## Purpose
 
 The `EditorSurface` contract, and its implementation on nuvui's `CodeEditor`
-(`@nuvui/editor/code`, which runs CodeMirror). This is the only package that
+(`@nuvui/editor/code`, which runs CodeMirror); and `DiffSurface`, two
+versions of a file on nuvui's `DiffEditor`. This is the only package that
 may import `@nuvui/editor` or an editor engine: Biome fails anywhere else. To
 change the editor, change this package only.
 
@@ -21,6 +22,11 @@ change the editor, change this package only.
 - The CSP nonce goes to CodeMirror, which adds its styles as it runs.
 - Loaded the first time it's drawn (`React.lazy`, with a spinner): CodeMirror
   is most of its weight, and the welcome screen doesn't need it.
+- `focus()` and `revealPosition()` wait (up to a second) for a document just
+  shown to be drawn, so a file opened at a line gets its cursor there.
+- `DiffSurface`: read only (a review), side by side or in one column when
+  narrow, unchanged lines folded away; the language from the extension, for
+  the ones the editor colors. Loaded lazily too.
 
 ### Known limit
 
@@ -38,6 +44,8 @@ nuvui (a way to drop a path).
   `onChange`, and can be undone), `focus()`, `revealPosition(line, column)`
   (both from 1, clamped).
 - `SurfaceDiagnostic`.
+- `DiffSurface` with `DiffSurfaceProps`: `path`, `original`, `modified`,
+  `aria-label` (required), `styleNonce?`.
 
 ## May depend on
 

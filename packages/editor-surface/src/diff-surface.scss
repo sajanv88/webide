@@ -1,0 +1,6 @@
+// The diff fills what it's put in, and scrolls inside.
+.diff-surface {
+  box-sizing: border-box;
+  block-size: 100%;
+  min-block-size: 0;
+}

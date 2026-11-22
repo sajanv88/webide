@@ -57,3 +57,17 @@ export interface EditorSurfaceHandle {
    */
   revealPosition(line: number, column: number): void;
 }
+
+/** Two versions of a file, side by side (or in one column when narrow), to review. */
+export interface DiffSurfaceProps {
+  /** Workspace-relative, `/`-separated. The language comes from its extension. */
+  readonly path: string;
+  /** The text before; `""` for a file that's new. */
+  readonly original: string;
+  /** The text after; `""` for a file that's gone. */
+  readonly modified: string;
+  /** What changed, and in which file, for a screen reader. Required. */
+  readonly "aria-label": string;
+  /** The page's CSP nonce, for the styles the editor adds as it runs. */
+  readonly styleNonce?: string | undefined;
+}
