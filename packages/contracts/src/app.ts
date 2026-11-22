@@ -5,6 +5,9 @@ import type {
   FileChangeDto,
   FileListDto,
   FileStampDto,
+  GitBranchDto,
+  GitDiffDto,
+  GitStateDto,
   IpcError,
   ReadFileDto,
   SearchTextArgs,
@@ -33,6 +36,13 @@ export type AppCommandId =
   | "view.showExplorer"
   | "search.findInFiles"
   | "search.goToFile"
+  | "view.showSourceControl"
+  | "git.refresh"
+  | "git.commit"
+  | "git.stageAll"
+  | "git.unstageAll"
+  | "git.switchBranch"
+  | "git.init"
   | "file.save"
   | "file.saveAll"
   | "tabs.close"
@@ -100,4 +110,23 @@ export interface SearchPort {
   /** A new search cancels the one still running (its result says `cancelled`). */
   searchText(query: Omit<SearchTextArgs, "workspaceId">): Promise<IpcResult<TextSearchDto>>;
   listFiles(): Promise<IpcResult<FileListDto>>;
+}
+
+/**
+ * What source control needs: git in the open workspace. Paths are
+ * workspace-relative. A refusal from git is an `IpcError` with code `git` and
+ * git's own words as its message.
+ */
+export interface GitPort {
+  state(): Promise<IpcResult<GitStateDto>>;
+  /** The two versions of a file: `staged` (last commit → index) or `unstaged` (index → working tree). */
+  diff(path: string, side: "staged" | "unstaged"): Promise<IpcResult<GitDiffDto>>;
+  stage(paths: readonly string[]): Promise<IpcResult<null>>;
+  unstage(paths: readonly string[]): Promise<IpcResult<null>>;
+  /** Puts the files back as they are in the index: their unstaged changes are lost. */
+  discard(paths: readonly string[]): Promise<IpcResult<null>>;
+  commit(message: string): Promise<IpcResult<null>>;
+  branches(): Promise<IpcResult<GitBranchDto[]>>;
+  switchBranch(name: string, create: boolean): Promise<IpcResult<null>>;
+  init(): Promise<IpcResult<null>>;
 }

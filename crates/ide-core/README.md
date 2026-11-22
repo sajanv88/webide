@@ -1,6 +1,6 @@
 # ide-core
 
-**Status:** Milestone 2.
+**Status:** Milestone 3.
 
 ## Purpose
 
@@ -13,7 +13,7 @@ runtime: everything here is data and pure functions.
   absolute or drive prefix, valid names for the OS via `NameRules`). It's the
   first path guard, applied before any IO.
 - `PathError`, `IdeError` (`IdeError::from_io` maps `std::io::Error` kinds;
-  `InvalidQuery` for a search that doesn't parse).
+  `InvalidQuery` for a search that doesn't parse; `Git` for git's refusals).
 - `WorkspaceRoot`, `RecentWorkspace`, `workspace::display_path` (drops the `\\?\` prefix).
 - `fs`: `FileNode`, `DirListing`, `ReadOutcome`, `ReadLimits`, `FileStamp`,
   `LineEnding`, `ReadOnlyReason`, `sort_nodes`, `detect_line_ending`,
@@ -29,7 +29,14 @@ runtime: everything here is data and pure functions.
   `Span`s, all in UTF-16 units as JavaScript counts), `FileList`,
   `CancelFlag`, `line_match`, and the limits `MAX_MATCHES` (10,000 lines),
   `MAX_LISTED_FILES` (50,000), `MAX_PREVIEW_UNITS`.
-- Ports: `WorkspaceFs`, `WorkspaceStore`, `FsWatcher`, `WorkspaceSearch`.
+- `git`: `GitState` (unavailable, not a repository, or a `GitStatus`: the
+  `GitHead` and the changed `GitFileStatus`es, each with a staged and an
+  unstaged `GitChange`), `DiffSide`, `DiffTexts` (text, binary, too large),
+  `GitBranch`, `valid_branch_name`, `MAX_STATUS_FILES` (5,000).
+- `fs::is_git_internal` (a path in a `.git` folder) and
+  `ReadOnlyReason::GitInternal`.
+- Ports: `WorkspaceFs`, `WorkspaceStore`, `FsWatcher`, `WorkspaceSearch`,
+  `GitClient`.
 
 There's no `DocumentId` here: the backend identifies files by `RelPath`, and
 only the frontend's tabs need document ids (`@repo/tabs`).

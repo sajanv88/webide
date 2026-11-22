@@ -1,6 +1,6 @@
 # ide-ipc
 
-**Status:** Milestone 2.
+**Status:** Milestone 3.
 
 ## Purpose
 
@@ -36,6 +36,15 @@ ts-rs.
 | `update_settings`       | `SettingsPatchDto`                    | `SettingsDto`                                          |
 | `search_text`           | `SearchTextArgs`                      | `TextSearchDto` (a newer search cancels this one)      |
 | `list_files`            | `{ workspaceId }`                     | `FileListDto`, for quick open                          |
+| `git_state`             | `{ workspaceId }`                     | `GitStateDto` (switch on `kind`)                       |
+| `git_diff`              | `{ workspaceId, path, side }`         | `GitDiffDto` (switch on `kind`)                        |
+| `git_stage`             | `{ workspaceId, paths }`              | nothing                                                |
+| `git_unstage`           | `{ workspaceId, paths }`              | nothing                                                |
+| `git_discard`           | `{ workspaceId, paths }`              | nothing                                                |
+| `git_commit`            | `{ workspaceId, message }`            | nothing                                                |
+| `git_branches`          | `{ workspaceId }`                     | `GitBranchDto[]`                                       |
+| `git_switch_branch`     | `{ workspaceId, name, create }`       | nothing                                                |
+| `git_init`              | `{ workspaceId }`                     | nothing                                                |
 | `subscribe_events`      | `{ channel }` (a Tauri `Channel`)     | nothing; `BackendEventDto`s arrive on the channel      |
 | `set_close_guard`       | `{ unsaved }`                         | nothing                                                |
 | `close_window`          | none                                  | nothing; closes the calling window without asking      |
@@ -66,12 +75,14 @@ The rules that keep the webview contained:
 - Search walks only the open workspace's root (`ide-search` never follows
   symlinks) and skips files over the "don't open above" size. One search runs
   at a time: a new one, or opening another workspace, cancels it.
+- Git commands take workspace-relative paths, checked as `RelPath`s before git
+  sees them. Git's refusals come back as the `git` code with git's own words.
 - Each command has its own `allow-*` permission. The main window's capability
   grants the `ipc-commands` set and nothing else.
 
 ## Public API
 
-- `run(context, services)`, with `Services { fs, workspace, watcher, search }` and `AppPaths`.
+- `run(context, services)`, with `Services { fs, workspace, watcher, search, git }` and `AppPaths`.
 - `COMMAND_NAMES`, `IpcError`, `IpcErrorCode`, `MAIN_WINDOW`.
 
 ## May depend on

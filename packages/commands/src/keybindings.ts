@@ -19,6 +19,12 @@ export type Platform = "mac" | "other";
 export interface KeybindingSpec<Id extends string> {
   readonly key: string;
   readonly command: Id;
+  /**
+   * Taken before anything on the page sees the key, the editor included. For
+   * a key the editor has a use of its own for, which the app's should win
+   * (Ctrl+Shift+G is CodeMirror's "find previous", and Source Control's).
+   */
+  readonly global?: boolean;
 }
 
 interface Chord {
@@ -40,6 +46,8 @@ export interface Keybinding<Id extends string> {
   /** For `aria-keyshortcuts`: `Control+Shift+P`, or `Meta+Shift+P` on macOS. */
   readonly aria: string;
   readonly chord: Chord;
+  /** Taken before the page sees it (`KeybindingSpec.global`). */
+  readonly global: boolean;
 }
 
 /** Something wrong with the table: a key two commands claim, or one that can't be read. */
@@ -238,6 +246,7 @@ export function createKeybindings<Id extends string>(
       label: label(chord, platform),
       aria: aria(chord),
       chord,
+      global: spec.global === true,
     });
   }
   for (const [kept, losers] of conflicts) {
@@ -271,14 +280,24 @@ export function attachKeybindings<Id extends string>(
   keybindings: Keybindings<Id>,
   registry: CommandRegistry<Id>,
 ): Dispose {
-  const onKeyDown = (event: KeyboardEvent) => {
+  const run = (event: KeyboardEvent, global: boolean) => {
     if (event.defaultPrevented || event.isComposing || inDialog(event.target)) return;
     const binding = keybindings.match(event);
-    if (!binding || !registry.isEnabled(binding.command)) return;
+    if (!binding || binding.global !== global || !registry.isEnabled(binding.command)) return;
     event.preventDefault();
+    // A global key isn't seen by what has focus (the editor would act on it too).
+    if (global) event.stopPropagation();
     // Failures are reported by the registry's `onError`.
     void registry.execute(binding.command);
   };
-  target.addEventListener("keydown", onKeyDown);
-  return () => target.removeEventListener("keydown", onKeyDown);
+  // Global keys on the way down, before the focused element; the rest on the
+  // way up, after it, so the editor's own keys win.
+  const onCapture = (event: KeyboardEvent) => run(event, true);
+  const onBubble = (event: KeyboardEvent) => run(event, false);
+  target.addEventListener("keydown", onCapture, true);
+  target.addEventListener("keydown", onBubble);
+  return () => {
+    target.removeEventListener("keydown", onCapture, true);
+    target.removeEventListener("keydown", onBubble);
+  };
 }

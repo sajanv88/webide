@@ -1,5 +1,5 @@
 // The composition root: the only place that wires modules together.
-import { FolderIcon, SearchIcon } from "@nuvui/icons";
+import { FolderIcon, GitBranchIcon, SearchIcon } from "@nuvui/icons";
 import { Toaster, toast } from "@nuvui/react";
 import {
   attachKeybindings,
@@ -11,19 +11,30 @@ import type {
   AppCommandId,
   AppEvents,
   AppInfoDto,
+  GitPort,
   IpcError,
   RecentWorkspaceDto,
   SearchPort,
   WorkspaceDto,
 } from "@repo/contracts";
-import { EditorSurface } from "@repo/editor-surface";
+import { DiffSurface, EditorSurface } from "@repo/editor-surface";
 import { Explorer, type ExplorerSource } from "@repo/explorer";
+import { BranchPicker, BranchStatus, createGitStore, SourceControlView } from "@repo/git";
 import {
   appInfo,
   closeWindow,
   currentWorkspace,
   getSettings,
   getStyleNonce,
+  gitBranches,
+  gitCommit,
+  gitDiff,
+  gitDiscard,
+  gitInit,
+  gitStage,
+  gitState,
+  gitSwitchBranch,
+  gitUnstage,
   listDirectory,
   listFiles,
   openRecentWorkspace,
@@ -267,9 +278,27 @@ export function App() {
     [workspace],
   );
 
+  // Git for the open folder: one store, shared by the view, the status bar and the branch picker.
+  const gitPort = useMemo<GitPort | null>(() => {
+    if (!workspace) return null;
+    const workspaceId = workspace.id;
+    return {
+      state: () => gitState({ workspaceId }),
+      diff: (path, side) => gitDiff({ workspaceId, path, side }),
+      stage: (paths) => gitStage({ workspaceId, paths: [...paths] }),
+      unstage: (paths) => gitUnstage({ workspaceId, paths: [...paths] }),
+      discard: (paths) => gitDiscard({ workspaceId, paths: [...paths] }),
+      commit: (message) => gitCommit({ workspaceId, message }),
+      branches: () => gitBranches({ workspaceId }),
+      switchBranch: (name, create) => gitSwitchBranch({ workspaceId, name, create }),
+      init: () => gitInit({ workspaceId }),
+    };
+  }, [workspace]);
+  const git = useMemo(() => gitPort && createGitStore(gitPort), [gitPort]);
+
   const views = useMemo<SidebarView[]>(
     () =>
-      source && searchPort && workspace
+      source && searchPort && workspace && git && gitPort
         ? [
             {
               id: "explorer",
@@ -295,9 +324,35 @@ export function App() {
                 />
               ),
             },
+            {
+              id: "git",
+              title: "Source Control",
+              icon: <GitBranchIcon size={20} />,
+              command: "view.showSourceControl",
+              content: (
+                <SourceControlView
+                  key={workspace.id}
+                  store={git}
+                  readDiff={gitPort.diff}
+                  registry={registry}
+                  bus={bus}
+                  viewId="git"
+                  styleNonce={styleNonce}
+                  renderDiff={(diff) => (
+                    <DiffSurface
+                      path={diff.path}
+                      original={diff.original}
+                      modified={diff.modified}
+                      aria-label={diff.label}
+                      styleNonce={styleNonce}
+                    />
+                  )}
+                />
+              ),
+            },
           ]
         : [],
-    [source, searchPort, workspace],
+    [source, searchPort, workspace, git, gitPort],
   );
 
   const menus = useMemo<MenuSpec[]>(
@@ -336,6 +391,7 @@ export function App() {
           { kind: "separator" },
           { kind: "command", command: "view.showExplorer" },
           { kind: "command", command: "search.findInFiles" },
+          { kind: "command", command: "view.showSourceControl" },
           { kind: "command", command: "view.toggleSidebar" },
           { kind: "separator" },
           { kind: "command", command: "explorer.collapseAll" },
@@ -391,6 +447,7 @@ export function App() {
         }
         statusBar={
           <>
+            {git ? <BranchStatus store={git} registry={registry} /> : null}
             <span>{workspace ? workspace.path : "No folder open"}</span>
             {info ? <span>Version {info.version}</span> : null}
           </>
@@ -400,6 +457,9 @@ export function App() {
       <CommandPalette registry={registry} keybindings={keybindings} />
       {workspace && searchPort ? (
         <QuickOpen key={workspace.id} port={searchPort} registry={registry} bus={bus} />
+      ) : null}
+      {workspace && git ? (
+        <BranchPicker key={workspace.id} store={git} registry={registry} />
       ) : null}
       <SettingsDialog port={settingsPort} registry={registry} bus={bus} />
       <Toaster />

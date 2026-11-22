@@ -11,8 +11,9 @@ use tauri::{AppHandle, State, Webview, WebviewWindow, Wry};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::dto::{
-    AppInfoDto, CloseGuardArgs, DirListingDto, FileListDto, FileStampDto, OpenRecentArgs,
-    ReadFileDto, RecentWorkspaceDto, SearchTextArgs, SettingsDto, SettingsPatchDto,
+    AppInfoDto, CloseGuardArgs, DirListingDto, FileListDto, FileStampDto, GitBranchDto,
+    GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs,
+    OpenRecentArgs, ReadFileDto, RecentWorkspaceDto, SearchTextArgs, SettingsDto, SettingsPatchDto,
     SubscribeEventsArgs, TextSearchDto, WorkspaceArgs, WorkspaceDto, WorkspacePathArgs,
     WriteFileArgs,
 };
@@ -72,6 +73,15 @@ ipc_commands! {
         update_settings(SettingsPatchDto) -> SettingsDto;
         search_text(SearchTextArgs) -> TextSearchDto;
         list_files(WorkspaceArgs) -> FileListDto;
+        git_state(WorkspaceArgs) -> GitStateDto;
+        git_diff(GitDiffArgs) -> GitDiffDto;
+        git_stage(GitPathsArgs) -> ();
+        git_unstage(GitPathsArgs) -> ();
+        git_discard(GitPathsArgs) -> ();
+        git_commit(GitCommitArgs) -> ();
+        git_branches(WorkspaceArgs) -> Vec<GitBranchDto>;
+        git_switch_branch(GitSwitchArgs) -> ();
+        git_init(WorkspaceArgs) -> ();
     }
     custom {
         pick_workspace() -> Option<WorkspaceDto>;
@@ -195,6 +205,57 @@ pub async fn search_text(
 #[tauri::command]
 pub async fn list_files(state: Shared<'_>, args: WorkspaceArgs) -> Result<FileListDto, IpcError> {
     run_blocking(&state, move |state| handlers::list_files(state, args)).await
+}
+
+#[tauri::command]
+pub async fn git_state(state: Shared<'_>, args: WorkspaceArgs) -> Result<GitStateDto, IpcError> {
+    run_blocking(&state, move |state| handlers::git_state(state, args)).await
+}
+
+#[tauri::command]
+pub async fn git_diff(state: Shared<'_>, args: GitDiffArgs) -> Result<GitDiffDto, IpcError> {
+    run_blocking(&state, move |state| handlers::git_diff(state, args)).await
+}
+
+#[tauri::command]
+pub async fn git_stage(state: Shared<'_>, args: GitPathsArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::git_stage(state, args)).await
+}
+
+#[tauri::command]
+pub async fn git_unstage(state: Shared<'_>, args: GitPathsArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::git_unstage(state, args)).await
+}
+
+#[tauri::command]
+pub async fn git_discard(state: Shared<'_>, args: GitPathsArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::git_discard(state, args)).await
+}
+
+#[tauri::command]
+pub async fn git_commit(state: Shared<'_>, args: GitCommitArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::git_commit(state, args)).await
+}
+
+#[tauri::command]
+pub async fn git_branches(
+    state: Shared<'_>,
+    args: WorkspaceArgs,
+) -> Result<Vec<GitBranchDto>, IpcError> {
+    run_blocking(&state, move |state| handlers::git_branches(state, args)).await
+}
+
+#[tauri::command]
+pub async fn git_switch_branch(state: Shared<'_>, args: GitSwitchArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| {
+        handlers::git_switch_branch(state, args)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn git_init(state: Shared<'_>, args: WorkspaceArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::git_init(state, args)).await
 }
 
 /// Sends backend events (file changes, the close request) to the calling page,

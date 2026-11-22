@@ -1,0 +1,19 @@
+// "current" beside the branch the working tree is on.
+.branch-picker__current {
+  margin-inline-start: auto;
+  color: var(--color-muted-foreground);
+  font-size: var(--text-xs);
+}
+
+// The branch in the status bar: as small as the bar's text.
+.branch-status {
+  gap: var(--spacing);
+  min-block-size: 0;
+  padding-block: 0;
+  padding-inline: calc(var(--spacing) * 1.5);
+  font-size: var(--text-xs);
+
+  &__sync {
+    color: var(--color-muted-foreground);
+  }
+}

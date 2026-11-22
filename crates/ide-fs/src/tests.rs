@@ -386,3 +386,76 @@ fn a_removed_root_is_not_found() {
     let outcome = LocalFs::new().list_dir(&fx.root, &RelPath::root());
     assert!(matches!(outcome, Err(IdeError::NotFound)), "{outcome:?}");
 }
+
+#[test]
+fn git_internal_files_open_read_only_and_are_never_written() {
+    let fx = Fixture::new();
+    let fs_ = LocalFs::new();
+    fs::create_dir_all(fx.ws(".git/hooks")).unwrap();
+    fs::write(fx.ws(".git/config"), "[core]\n").unwrap();
+
+    let ReadOutcome::Text { read_only, .. } = fs_
+        .read_file(&fx.root, &rel(".git/config"), LIMITS)
+        .unwrap()
+    else {
+        panic!("expected text");
+    };
+    assert_eq!(read_only, Some(ReadOnlyReason::GitInternal));
+
+    for path in [
+        ".git/config",
+        ".git/hooks/pre-commit",
+        ".GIT/hooks/post-checkout",
+        ".git",
+    ] {
+        assert!(
+            matches!(
+                fs_.write_file(&fx.root, &rel(path), "x"),
+                Err(IdeError::PermissionDenied)
+            ),
+            "{path}"
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(fx.ws(".git/config")).unwrap(),
+        "[core]\n"
+    );
+    assert!(!fx.ws(".git/hooks/pre-commit").exists());
+    // .gitignore and .github are ordinary files.
+    fs_.write_file(&fx.root, &rel(".gitignore"), "dist/\n")
+        .unwrap();
+}
+
+#[test]
+fn a_link_into_git_is_not_written_through() {
+    let fx = Fixture::new();
+    fs::create_dir_all(fx.ws(".git")).unwrap();
+    fs::write(fx.ws(".git/config"), "[core]\n").unwrap();
+    if !try_symlink(&fx.ws(".git/config"), &fx.ws("innocent.txt")) {
+        return;
+    }
+    let result = LocalFs::new().write_file(&fx.root, &rel("innocent.txt"), "x");
+    assert!(
+        matches!(result, Err(IdeError::PermissionDenied)),
+        "{result:?}"
+    );
+    assert_eq!(
+        fs::read_to_string(fx.ws(".git/config")).unwrap(),
+        "[core]\n"
+    );
+}
+
+#[test]
+fn a_new_file_in_a_folder_linked_into_git_is_refused() {
+    let fx = Fixture::new();
+    fs::create_dir_all(fx.ws(".git/hooks")).unwrap();
+    if !try_symlink(&fx.ws(".git/hooks"), &fx.ws("hooks-link")) {
+        return;
+    }
+    let result = LocalFs::new().write_file(&fx.root, &rel("hooks-link/pre-commit"), "x");
+    assert!(
+        matches!(result, Err(IdeError::PermissionDenied)),
+        "{result:?}"
+    );
+    assert!(!fx.ws(".git/hooks/pre-commit").exists());
+}

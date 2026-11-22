@@ -5,6 +5,7 @@
 
 pub mod error;
 pub mod fs;
+pub mod git;
 pub mod path;
 pub mod ports;
 pub mod search;
@@ -14,7 +15,7 @@ pub mod workspace;
 
 pub use error::IdeError;
 pub use path::{NameRules, PathError, RelPath};
-pub use ports::{FsWatcher, WorkspaceFs, WorkspaceSearch, WorkspaceStore};
+pub use ports::{FsWatcher, GitClient, WorkspaceFs, WorkspaceSearch, WorkspaceStore};
 pub use search::{
     CancelFlag, FileList, FileMatches, LineMatch, Span, TextQuery, TextSearchOutcome,
 };

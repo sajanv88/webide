@@ -15,6 +15,8 @@ export const DEFAULT_KEYBINDINGS: readonly KeybindingSpec<AppCommandId>[] = [
   { key: "Mod+B", command: "view.toggleSidebar" },
   { key: "Mod+Shift+E", command: "view.showExplorer" },
   { key: "Mod+Shift+F", command: "search.findInFiles" },
+  // Global: in the editor, CodeMirror would take it as "find previous" (Shift+F3 does that too).
+  { key: "Ctrl+Shift+G", command: "view.showSourceControl", global: true },
   { key: "Mod+P", command: "search.goToFile" },
   { key: "Mod+,", command: "settings.open" },
 ];

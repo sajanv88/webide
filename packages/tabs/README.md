@@ -1,6 +1,6 @@
 # @repo/tabs
 
-**Status:** Milestone 2.
+**Status:** Milestone 3.
 
 ## Purpose
 
@@ -34,7 +34,8 @@ question asked before closing one that has.
   file whose save fails stays open.
 - **Files that aren't opened as text** open as a notice: too large (over the
   "refuse above" setting), binary, or not UTF-8. A file over the "read-only
-  above" setting, or read-only on disk, opens read-only with a bar saying why.
+  above" setting, read-only on disk, or one of git's own (inside `.git`),
+  opens read-only with a bar saying why.
 - Reloading the page with unsaved changes asks first (`beforeunload`).
 - **Changes on disk** (`workspace.filesChanged` on the bus): each open file
   under a changed path is read again and compared with what was last read or

@@ -18,6 +18,8 @@ pub enum IpcErrorCode {
     InvalidSettings,
     /// A search pattern or glob that doesn't parse. `message` says why.
     InvalidQuery,
+    /// Git refused or failed. `message` is git's own words.
+    Git,
     Io,
     /// A bug or an unexpected failure. `message` says what.
     Internal,
@@ -57,6 +59,7 @@ impl From<IdeError> for IpcError {
             IdeError::NotARecentWorkspace => IpcErrorCode::NotARecentWorkspace,
             IdeError::InvalidSettings(_) => IpcErrorCode::InvalidSettings,
             IdeError::InvalidQuery(_) => IpcErrorCode::InvalidQuery,
+            IdeError::Git(_) => IpcErrorCode::Git,
             IdeError::Io(_) => IpcErrorCode::Io,
         };
         Self {

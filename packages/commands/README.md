@@ -1,6 +1,6 @@
 # @repo/commands
 
-**Status:** Phase 6.
+**Status:** Milestone 3.
 
 ## Purpose
 
@@ -28,6 +28,9 @@ The app writes one table (`apps/desktop/src/keybindings.ts`):
   leaves a key alone when something already handled it (`defaultPrevented`:
   the editor's own keys), when it's pressed inside a dialog, or when its
   command is disabled, so the key keeps whatever it does by default.
+- A binding marked `global` is taken first, before the element with focus
+  sees the key, for a key the editor has a use of its own for that the app's
+  should win (Ctrl+Shift+G is CodeMirror's "find previous").
 
 ### The palette
 

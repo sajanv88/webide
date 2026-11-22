@@ -7,14 +7,15 @@ use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 use ide_core::workspace::display_path;
 use ide_core::{
-    CancelFlag, FsWatcher, IdeError, RelPath, TextQuery, WatchEvent, WatchGuard, WatchSink,
-    WorkspaceFs, WorkspaceRoot, WorkspaceSearch, WorkspaceStore,
+    CancelFlag, FsWatcher, GitClient, IdeError, RelPath, TextQuery, WatchEvent, WatchGuard,
+    WatchSink, WorkspaceFs, WorkspaceRoot, WorkspaceSearch, WorkspaceStore,
 };
 
 use crate::dto::{
-    AppInfoDto, BackendEventDto, DirListingDto, FileListDto, FileStampDto, OpenRecentArgs,
-    ReadFileDto, RecentWorkspaceDto, SearchTextArgs, SettingsDto, SettingsPatchDto, TextSearchDto,
-    WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
+    AppInfoDto, BackendEventDto, DirListingDto, FileListDto, FileStampDto, GitBranchDto,
+    GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs,
+    OpenRecentArgs, ReadFileDto, RecentWorkspaceDto, SearchTextArgs, SettingsDto, SettingsPatchDto,
+    TextSearchDto, WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::IpcError;
 
@@ -25,6 +26,7 @@ pub struct Services {
     pub workspace: Arc<dyn WorkspaceStore>,
     pub watcher: Arc<dyn FsWatcher>,
     pub search: Arc<dyn WorkspaceSearch>,
+    pub git: Arc<dyn GitClient>,
 }
 
 impl std::fmt::Debug for Services {
@@ -267,4 +269,80 @@ pub fn list_files(state: &IpcState, args: WorkspaceArgs) -> Result<FileListDto, 
         .search
         .list_files(&root, &CancelFlag::new())?
         .into())
+}
+
+fn paths(list: &[String]) -> Result<Vec<RelPath>, IpcError> {
+    list.iter()
+        .map(|path| RelPath::parse(path).map_err(IpcError::from))
+        .collect()
+}
+
+/// Whether git can be used in the workspace, and its branch and changes.
+pub fn git_state(state: &IpcState, args: WorkspaceArgs) -> Result<GitStateDto, IpcError> {
+    let root = state.root_for(&args.workspace_id)?;
+    Ok(state.services.git.state(&root)?.into())
+}
+
+/// The two versions of a file, each no larger than the "don't open above" size.
+pub fn git_diff(state: &IpcState, args: GitDiffArgs) -> Result<GitDiffDto, IpcError> {
+    let path = RelPath::parse(&args.path)?;
+    let root = state.root_for(&args.workspace_id)?;
+    let limit = state
+        .services
+        .workspace
+        .settings()?
+        .read_limits()
+        .refuse_above;
+    Ok(state
+        .services
+        .git
+        .diff_texts(&root, &path, args.side.into(), limit)?
+        .into())
+}
+
+pub fn git_stage(state: &IpcState, args: GitPathsArgs) -> Result<(), IpcError> {
+    let paths = paths(&args.paths)?;
+    let root = state.root_for(&args.workspace_id)?;
+    Ok(state.services.git.stage(&root, &paths)?)
+}
+
+pub fn git_unstage(state: &IpcState, args: GitPathsArgs) -> Result<(), IpcError> {
+    let paths = paths(&args.paths)?;
+    let root = state.root_for(&args.workspace_id)?;
+    Ok(state.services.git.unstage(&root, &paths)?)
+}
+
+pub fn git_discard(state: &IpcState, args: GitPathsArgs) -> Result<(), IpcError> {
+    let paths = paths(&args.paths)?;
+    let root = state.root_for(&args.workspace_id)?;
+    Ok(state.services.git.discard(&root, &paths)?)
+}
+
+pub fn git_commit(state: &IpcState, args: GitCommitArgs) -> Result<(), IpcError> {
+    let root = state.root_for(&args.workspace_id)?;
+    Ok(state.services.git.commit(&root, &args.message)?)
+}
+
+pub fn git_branches(state: &IpcState, args: WorkspaceArgs) -> Result<Vec<GitBranchDto>, IpcError> {
+    let root = state.root_for(&args.workspace_id)?;
+    Ok(state
+        .services
+        .git
+        .branches(&root)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+pub fn git_switch_branch(state: &IpcState, args: GitSwitchArgs) -> Result<(), IpcError> {
+    let root = state.root_for(&args.workspace_id)?;
+    Ok(state
+        .services
+        .git
+        .switch_branch(&root, &args.name, args.create)?)
+}
+
+pub fn git_init(state: &IpcState, args: WorkspaceArgs) -> Result<(), IpcError> {
+    let root = state.root_for(&args.workspace_id)?;
+    Ok(state.services.git.init(&root)?)
 }

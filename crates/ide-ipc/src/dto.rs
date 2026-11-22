@@ -8,6 +8,9 @@
 use ide_core::fs::{
     DirListing, FileNode, FileStamp, LineEnding, NodeKind, ReadOnlyReason, ReadOutcome,
 };
+use ide_core::git::{
+    DiffSide, DiffTexts, GitBranch, GitChange, GitFileStatus, GitHead, GitState, GitStatus,
+};
 use ide_core::workspace::display_path;
 use ide_core::{
     FileList, FileMatches, FsChange, LineMatch, RecentWorkspace, RelPath, Settings, SettingsPatch,
@@ -105,6 +108,7 @@ pub enum ReadOnlyReasonDto {
     TooLargeToEdit,
     /// The file system says it can't be written.
     ReadOnlyOnDisk,
+    GitInternal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -258,6 +262,95 @@ pub struct FileListDto {
     pub truncated: bool,
 }
 
+/// What happened to a file on one side (the index, or the working tree).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum GitChangeDto {
+    Modified,
+    Added,
+    Deleted,
+    Renamed,
+    Copied,
+    TypeChanged,
+    Untracked,
+    Conflicted,
+}
+
+/// One changed file in the workspace.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFileDto {
+    pub path: String,
+    /// Where it was renamed or copied from.
+    pub from: Option<String>,
+    /// Its change in the index: staged for the next commit.
+    pub staged: Option<GitChangeDto>,
+    /// Its change in the working tree that isn't staged.
+    pub unstaged: Option<GitChangeDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHeadDto {
+    /// `null` when the head is detached.
+    pub branch: Option<String>,
+    /// Abbreviated; `null` before the first commit.
+    pub commit: Option<String>,
+    pub upstream: Option<String>,
+    pub ahead: u32,
+    pub behind: u32,
+}
+
+/// Whether the workspace can use git, and if so its branch and changes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum GitStateDto {
+    /// No `git` program was found.
+    Unavailable,
+    NotARepository,
+    #[serde(rename_all = "camelCase")]
+    Repository {
+        head: GitHeadDto,
+        /// In path order.
+        files: Vec<GitFileDto>,
+        /// More files changed than are listed.
+        truncated: bool,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum DiffSideDto {
+    /// The last commit and the index.
+    Staged,
+    /// The index and the working tree.
+    Unstaged,
+}
+
+/// The two versions of a file to compare.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum GitDiffDto {
+    /// Empty where the file doesn't exist on that side.
+    #[serde(rename_all = "camelCase")]
+    Text {
+        original: String,
+        modified: String,
+    },
+    Binary,
+    #[serde(rename_all = "camelCase")]
+    TooLarge {
+        limit: u64,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranchDto {
+    pub name: String,
+    pub current: bool,
+}
+
 // ---------- Arguments ----------
 
 #[derive(Debug, Clone, Deserialize, TS)]
@@ -280,6 +373,38 @@ pub struct WorkspacePathArgs {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkspaceArgs {
     pub workspace_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GitDiffArgs {
+    pub workspace_id: String,
+    pub path: String,
+    pub side: DiffSideDto,
+}
+
+/// Files to stage, unstage or discard; workspace-relative.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GitPathsArgs {
+    pub workspace_id: String,
+    pub paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GitCommitArgs {
+    pub workspace_id: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GitSwitchArgs {
+    pub workspace_id: String,
+    pub name: String,
+    /// Make the branch from the current commit first.
+    pub create: bool,
 }
 
 /// Find in files. A new search cancels the one still running.
@@ -415,6 +540,7 @@ impl From<ReadOnlyReason> for ReadOnlyReasonDto {
         match reason {
             ReadOnlyReason::TooLargeToEdit => Self::TooLargeToEdit,
             ReadOnlyReason::ReadOnlyOnDisk => Self::ReadOnlyOnDisk,
+            ReadOnlyReason::GitInternal => Self::GitInternal,
         }
     }
 }
@@ -555,6 +681,90 @@ impl From<FileList> for FileListDto {
                 .map(|path| path.as_str().to_owned())
                 .collect(),
             truncated: list.truncated,
+        }
+    }
+}
+
+impl From<GitChange> for GitChangeDto {
+    fn from(change: GitChange) -> Self {
+        match change {
+            GitChange::Modified => Self::Modified,
+            GitChange::Added => Self::Added,
+            GitChange::Deleted => Self::Deleted,
+            GitChange::Renamed => Self::Renamed,
+            GitChange::Copied => Self::Copied,
+            GitChange::TypeChanged => Self::TypeChanged,
+            GitChange::Untracked => Self::Untracked,
+            GitChange::Conflicted => Self::Conflicted,
+        }
+    }
+}
+
+impl From<GitFileStatus> for GitFileDto {
+    fn from(file: GitFileStatus) -> Self {
+        Self {
+            path: file.path.as_str().to_owned(),
+            from: file.from.map(|from| from.as_str().to_owned()),
+            staged: file.staged.map(Into::into),
+            unstaged: file.unstaged.map(Into::into),
+        }
+    }
+}
+
+impl From<GitHead> for GitHeadDto {
+    fn from(head: GitHead) -> Self {
+        Self {
+            branch: head.branch,
+            commit: head.commit,
+            upstream: head.upstream,
+            ahead: head.ahead,
+            behind: head.behind,
+        }
+    }
+}
+
+impl From<GitState> for GitStateDto {
+    fn from(state: GitState) -> Self {
+        match state {
+            GitState::Unavailable => Self::Unavailable,
+            GitState::NotARepository => Self::NotARepository,
+            GitState::Repository(GitStatus {
+                head,
+                files,
+                truncated,
+            }) => Self::Repository {
+                head: head.into(),
+                files: files.into_iter().map(Into::into).collect(),
+                truncated,
+            },
+        }
+    }
+}
+
+impl From<DiffSideDto> for DiffSide {
+    fn from(side: DiffSideDto) -> Self {
+        match side {
+            DiffSideDto::Staged => Self::Staged,
+            DiffSideDto::Unstaged => Self::Unstaged,
+        }
+    }
+}
+
+impl From<DiffTexts> for GitDiffDto {
+    fn from(texts: DiffTexts) -> Self {
+        match texts {
+            DiffTexts::Text { original, modified } => Self::Text { original, modified },
+            DiffTexts::Binary => Self::Binary,
+            DiffTexts::TooLarge { limit } => Self::TooLarge { limit },
+        }
+    }
+}
+
+impl From<GitBranch> for GitBranchDto {
+    fn from(branch: GitBranch) -> Self {
+        Self {
+            name: branch.name,
+            current: branch.current,
         }
     }
 }

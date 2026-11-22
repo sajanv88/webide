@@ -109,7 +109,9 @@ export function DocumentNotice({ tab, onReload, onKeepMine }: DocumentNoticeProp
         <AlertDescription>
           {content.readOnly === "tooLargeToEdit"
             ? `${tab.name} is too large to edit here, so it opened read-only.`
-            : `${tab.name} is read-only on disk, so it can't be changed here.`}
+            : content.readOnly === "gitInternal"
+              ? `${tab.name} is one of git's own files (inside .git), so it can't be changed here.`
+              : `${tab.name} is read-only on disk, so it can't be changed here.`}
         </AlertDescription>
       </Alert>,
     );

@@ -1,0 +1,10 @@
+// A file's changes: a wide dialog, and the diff gets the height.
+.git-diff {
+  --nuv-dialog-width: 72rem;
+
+  &__body {
+    display: grid;
+    block-size: min(70dvh, 48rem);
+    min-block-size: 0;
+  }
+}

@@ -8,6 +8,7 @@ use std::path::Path;
 
 use crate::IdeError;
 use crate::fs::{DirListing, FileStamp, ReadLimits, ReadOutcome};
+use crate::git::{DiffSide, DiffTexts, GitBranch, GitState};
 use crate::path::RelPath;
 use crate::search::{CancelFlag, FileList, TextQuery, TextSearchOutcome};
 use crate::settings::{Settings, SettingsPatch};
@@ -74,4 +75,43 @@ pub trait WorkspaceSearch: Send + Sync {
 
     /// Every file, for quick open.
     fn list_files(&self, root: &WorkspaceRoot, cancel: &CancelFlag) -> Result<FileList, IdeError>;
+}
+
+/// Git for a workspace. Paths are workspace-relative; an operation that git
+/// refuses fails with [`IdeError::Git`] and git's own words.
+pub trait GitClient: Send + Sync {
+    /// Whether git can be used here, and if so the branch and what changed.
+    fn state(&self, root: &WorkspaceRoot) -> Result<GitState, IdeError>;
+
+    /// The two versions of `path` to compare, each at most `limit` bytes.
+    fn diff_texts(
+        &self,
+        root: &WorkspaceRoot,
+        path: &RelPath,
+        side: DiffSide,
+        limit: u64,
+    ) -> Result<DiffTexts, IdeError>;
+
+    /// Puts the files' changes (deletions included) in the index.
+    fn stage(&self, root: &WorkspaceRoot, paths: &[RelPath]) -> Result<(), IdeError>;
+
+    /// Takes the files' changes out of the index, keeping them in the working tree.
+    fn unstage(&self, root: &WorkspaceRoot, paths: &[RelPath]) -> Result<(), IdeError>;
+
+    /// Puts the files in the working tree back as they are in the index.
+    /// Changes that weren't staged are lost; untracked files are left alone.
+    fn discard(&self, root: &WorkspaceRoot, paths: &[RelPath]) -> Result<(), IdeError>;
+
+    /// Commits what's staged, running the repository's hooks.
+    fn commit(&self, root: &WorkspaceRoot, message: &str) -> Result<(), IdeError>;
+
+    /// The local branches.
+    fn branches(&self, root: &WorkspaceRoot) -> Result<Vec<GitBranch>, IdeError>;
+
+    /// Switches to branch `name`, made from the current commit when `create`.
+    fn switch_branch(&self, root: &WorkspaceRoot, name: &str, create: bool)
+    -> Result<(), IdeError>;
+
+    /// Makes the workspace folder a new repository.
+    fn init(&self, root: &WorkspaceRoot) -> Result<(), IdeError>;
 }

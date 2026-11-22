@@ -1,0 +1,94 @@
+// The Source Control view, in the side pane. Head as the explorer's.
+.source-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  block-size: 100%;
+  min-inline-size: 0;
+  background-color: var(--color-surface);
+  color: var(--color-surface-foreground);
+
+  &__header {
+    display: flex;
+    gap: calc(var(--spacing) * 2);
+    align-items: center;
+    justify-content: space-between;
+    padding-block: calc(var(--spacing) * 2);
+    padding-inline: calc(var(--spacing) * 4) calc(var(--spacing) * 2);
+    border-block-end: var(--nuv-border-width) solid var(--color-border);
+  }
+
+  &__title {
+    margin: 0;
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--text-sm--line-height);
+  }
+
+  // Square, as the button holds only an icon.
+  &__icon {
+    aspect-ratio: 1;
+    padding: 0;
+  }
+
+  &__scroll {
+    block-size: 100%;
+  }
+
+  &__loading {
+    display: grid;
+    place-items: center;
+    padding: calc(var(--spacing) * 6);
+  }
+
+  &__empty {
+    padding: calc(var(--spacing) * 4);
+  }
+
+  &__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: calc(var(--spacing) * 2);
+    padding-block-end: calc(var(--spacing) * 4);
+  }
+
+  &__branch {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing);
+    align-items: center;
+    margin: 0;
+    padding-block-start: calc(var(--spacing) * 3);
+    padding-inline: calc(var(--spacing) * 3);
+    color: var(--color-muted-foreground);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+  }
+
+  &__commit {
+    display: grid;
+    gap: calc(var(--spacing) * 2);
+    padding-inline: calc(var(--spacing) * 3);
+  }
+
+  &__label {
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+  }
+
+  &__hint {
+    font-size: var(--text-xs);
+  }
+
+  &__commit-button {
+    justify-self: stretch;
+  }
+
+  &__clean {
+    margin: 0;
+    padding-inline: calc(var(--spacing) * 3);
+    color: var(--color-muted-foreground);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+  }
+}

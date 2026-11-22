@@ -7,6 +7,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use ide_fs::LocalFs;
+use ide_git::LocalGit;
 use ide_ipc::Services;
 use ide_search::LocalSearch;
 use ide_watcher::LocalWatcher;
@@ -18,6 +19,7 @@ fn main() -> ExitCode {
         workspace: Arc::new(JsonWorkspaceStore::new(paths.config_dir.clone())),
         watcher: Arc::new(LocalWatcher::new()),
         search: Arc::new(LocalSearch::new()),
+        git: Arc::new(LocalGit::new()),
     });
     match result {
         Ok(()) => ExitCode::SUCCESS,

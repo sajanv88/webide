@@ -1,6 +1,6 @@
 # ide-fs
 
-**Status:** Phase 2.
+**Status:** Milestone 3.
 
 ## Purpose
 
@@ -19,9 +19,20 @@ Writes go to a temporary file beside the target (`TEMP_FILE_PREFIX`), are
 flushed, keep the original's permissions, and are renamed over it. Read-only
 files are refused, and writes never follow a dangling symlink.
 
-Known limit: a process that can already write inside the workspace could swap
-a folder for a symlink between the check and the open (TOCTOU). Closing that
-needs handle-relative IO, which std doesn't provide.
+Git's own files are never written: a path with a `.git` segment (any case),
+or one whose resolved target is inside a `.git` folder (through a symlink, a
+new file in a linked folder included), fails with `PermissionDenied`. A hook
+or a config line written there would run the next time git does. Reading
+them works, read-only (`ReadOnlyReason::GitInternal`).
+
+Known limits:
+
+- A process that can already write inside the workspace could swap a folder
+  for a symlink between the check and the open (TOCTOU). Closing that needs
+  handle-relative IO, which std doesn't provide.
+- A repository whose `.git` is a file pointing to a git folder with another
+  name (`gitdir: ./repo.git`, some worktree setups) isn't covered by the
+  `.git` rule.
 
 ## Public API
 

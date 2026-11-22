@@ -1,7 +1,7 @@
 import "./editor-surface-loading.scss";
 import { Spinner } from "@nuvui/react";
 import { lazy, Suspense } from "react";
-import type { EditorSurfaceProps } from "./contract";
+import type { DiffSurfaceProps, EditorSurfaceProps } from "./contract";
 
 // CodeMirror is most of the editor's weight, and only a screen with a file
 // open needs it, so it's loaded then: the first time a file is shown.
@@ -20,6 +20,25 @@ export function EditorSurface(props: EditorSurfaceProps) {
       }
     >
       <Surface {...props} />
+    </Suspense>
+  );
+}
+
+const Diff = lazy(() =>
+  import("./diff-surface").then((module) => ({ default: module.DiffSurface })),
+);
+
+/** Two versions of a file side by side, loaded the first time it's drawn. */
+export function DiffSurface(props: DiffSurfaceProps) {
+  return (
+    <Suspense
+      fallback={
+        <div className="editor-surface-loading">
+          <Spinner label="Loading the changes" />
+        </div>
+      }
+    >
+      <Diff {...props} />
     </Suspense>
   );
 }
