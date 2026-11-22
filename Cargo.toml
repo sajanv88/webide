@@ -1,0 +1,51 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/desktop/src-tauri", "xtask"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# Tauri 2.12's MSRV. The toolchain itself is pinned in rust-toolchain.toml.
+rust-version = "1.90"
+publish = false
+
+[workspace.dependencies]
+# Only what some crate uses: Cargo warns about unused workspace dependencies.
+
+# Workspace crates
+ide-core = { path = "crates/ide-core" }
+ide-fs = { path = "crates/ide-fs" }
+ide-ipc = { path = "crates/ide-ipc" }
+ide-watcher = { path = "crates/ide-watcher" }
+ide-workspace = { path = "crates/ide-workspace" }
+
+# External (Cargo.lock holds the exact patch)
+# notify 8.2 underneath. (notify 9.0 and debouncer 0.8 were released on
+# 2026-11-21, under a day before this was added; same rule as pnpm's release-age gate.)
+notify-debouncer-full = { version = "0.7.0", default-features = false, features = ["macos_fsevent"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "2.12.7", features = [] }
+tauri-build = { version = "2.7.6", features = [] }
+tauri-plugin-dialog = "2.8.4"
+tempfile = "3.27.0"
+thiserror = "2.0.21"
+ts-rs = "12.0.1"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+dbg_macro = "warn"
+expect_used = "warn"
+todo = "warn"
+unwrap_used = "warn"
+
+# Release build tuning, as recommended by Tauri: https://tauri.app/concept/size/
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

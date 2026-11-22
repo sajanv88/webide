@@ -1,0 +1,9 @@
+[alias]
+# `cargo xtask <task>`: check-boundaries, check-csp, check-contracts (see xtask/README.md).
+xtask = "run --quiet --package xtask --"
+
+# Where `pnpm contracts:generate` writes (crates/ide-ipc/src/export.rs).
+# Relative to the repo root; `cargo xtask check-contracts` overrides both with a temp folder.
+[env]
+IDE_CONTRACTS_TS_DIR = { value = "packages/contracts/src/generated", relative = true }
+IDE_CONTRACTS_TAURI_DIR = { value = "apps/desktop/src-tauri", relative = true }

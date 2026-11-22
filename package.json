@@ -1,0 +1,36 @@
+{
+  "name": "webide-workspace",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @repo/desktop tauri dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "pnpm run \"/^lint:check:/\"",
+    "lint:check:biome": "biome check .",
+    "lint:check:styles": "stylelint \"**/*.scss\" --allow-empty-input",
+    "lint:check:boundaries": "turbo boundaries",
+    "lint:check:rust-boundaries": "cargo xtask check-boundaries",
+    "lint:check:csp": "cargo xtask check-csp",
+    "lint:check:contracts": "cargo xtask check-contracts",
+    "contracts:generate": "cargo test --quiet --package ide-ipc --lib export::export_bindings -- --ignored --exact",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "rust:fmt": "cargo fmt --all --check",
+    "rust:clippy": "cargo clippy --workspace --all-targets -- -D warnings",
+    "rust:test": "cargo test --workspace",
+    "tauri": "pnpm --filter @repo/desktop tauri"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "postcss": "catalog:",
+    "stylelint": "catalog:",
+    "stylelint-config-standard-scss": "catalog:",
+    "turbo": "2.11.13"
+  }
+}

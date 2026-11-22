@@ -1,0 +1,339 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.8/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**",
+      "!!**/dist",
+      "!!**/.turbo",
+      "!!**/coverage",
+      "!!**/target",
+      "!!**/src-tauri/gen",
+      "!!packages/contracts/src/generated"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "domains": {
+      "react": "recommended"
+    },
+    "rules": {
+      "preset": "recommended",
+      "a11y": "error",
+      "suspicious": {
+        "noConsole": {
+          "level": "warn",
+          "options": {
+            "allow": ["error", "warn"]
+          }
+        }
+      },
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": [
+                  "codemirror",
+                  "codemirror/**",
+                  "@codemirror/**",
+                  "@lezer/**",
+                  "monaco-editor",
+                  "monaco-editor/**",
+                  "@monaco-editor/**",
+                  "ace-builds",
+                  "ace-builds/**",
+                  "react-ace",
+                  "@uiw/**",
+                  "@tiptap/**",
+                  "@nuvui/editor",
+                  "@nuvui/editor/**"
+                ],
+                "message": "The editor lives behind @repo/editor-surface: only it may import @nuvui/editor or an editor engine (plan.md: hard constraint)."
+              },
+              {
+                "group": ["@repo/*/**"],
+                "message": "Import a package through its public entry (@repo/<name>), never a deep path."
+              },
+              {
+                "group": ["@tauri-apps/**"],
+                "message": "Only @repo/ipc may import @tauri-apps/*. Use the typed functions from @repo/ipc."
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["packages/ipc/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "codemirror",
+                      "codemirror/**",
+                      "@codemirror/**",
+                      "@lezer/**",
+                      "monaco-editor",
+                      "monaco-editor/**",
+                      "@monaco-editor/**",
+                      "ace-builds",
+                      "ace-builds/**",
+                      "react-ace",
+                      "@uiw/**",
+                      "@tiptap/**",
+                      "@nuvui/editor",
+                      "@nuvui/editor/**"
+                    ],
+                    "message": "The editor lives behind @repo/editor-surface: only it may import @nuvui/editor or an editor engine (plan.md: hard constraint)."
+                  },
+                  {
+                    "group": ["@repo/*/**"],
+                    "message": "Import a package through its public entry (@repo/<name>), never a deep path."
+                  },
+                  {
+                    "group": [
+                      "@repo/kernel",
+                      "@repo/shell",
+                      "@repo/explorer",
+                      "@repo/tabs",
+                      "@repo/editor-surface",
+                      "@repo/commands",
+                      "@repo/settings"
+                    ],
+                    "message": "@repo/ipc is infrastructure: it may depend on @repo/contracts only."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/contracts/**", "packages/kernel/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "codemirror",
+                      "codemirror/**",
+                      "@codemirror/**",
+                      "@lezer/**",
+                      "monaco-editor",
+                      "monaco-editor/**",
+                      "@monaco-editor/**",
+                      "ace-builds",
+                      "ace-builds/**",
+                      "react-ace",
+                      "@uiw/**",
+                      "@tiptap/**",
+                      "@nuvui/editor",
+                      "@nuvui/editor/**"
+                    ],
+                    "message": "The editor lives behind @repo/editor-surface: only it may import @nuvui/editor or an editor engine (plan.md: hard constraint)."
+                  },
+                  {
+                    "group": ["@repo/*/**"],
+                    "message": "Import a package through its public entry (@repo/<name>), never a deep path."
+                  },
+                  {
+                    "group": ["@tauri-apps/**"],
+                    "message": "Only @repo/ipc may import @tauri-apps/*. Use the typed functions from @repo/ipc."
+                  },
+                  {
+                    "group": [
+                      "@repo/ipc",
+                      "@repo/shell",
+                      "@repo/explorer",
+                      "@repo/tabs",
+                      "@repo/editor-surface",
+                      "@repo/commands",
+                      "@repo/settings",
+                      "react",
+                      "react-dom",
+                      "react/**",
+                      "react-dom/**",
+                      "@nuvui/**"
+                    ],
+                    "message": "Foundation packages (contracts, kernel) are plain TypeScript: no UI, no IPC, no feature packages."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "packages/shell/**",
+        "packages/explorer/**",
+        "packages/tabs/**",
+        "packages/commands/**",
+        "packages/settings/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "codemirror",
+                      "codemirror/**",
+                      "@codemirror/**",
+                      "@lezer/**",
+                      "monaco-editor",
+                      "monaco-editor/**",
+                      "@monaco-editor/**",
+                      "ace-builds",
+                      "ace-builds/**",
+                      "react-ace",
+                      "@uiw/**",
+                      "@tiptap/**",
+                      "@nuvui/editor",
+                      "@nuvui/editor/**"
+                    ],
+                    "message": "The editor lives behind @repo/editor-surface: only it may import @nuvui/editor or an editor engine (plan.md: hard constraint)."
+                  },
+                  {
+                    "group": ["@repo/*/**"],
+                    "message": "Import a package through its public entry (@repo/<name>), never a deep path."
+                  },
+                  {
+                    "group": ["@tauri-apps/**"],
+                    "message": "Only @repo/ipc may import @tauri-apps/*. Use the typed functions from @repo/ipc."
+                  },
+                  {
+                    "group": [
+                      "@repo/ipc",
+                      "@repo/shell",
+                      "@repo/explorer",
+                      "@repo/tabs",
+                      "@repo/editor-surface",
+                      "@repo/commands",
+                      "@repo/settings",
+                      "@repo/lsp",
+                      "@repo/terminal",
+                      "@repo/git",
+                      "@repo/debug",
+                      "@repo/mcp",
+                      "@repo/search"
+                    ],
+                    "message": "A feature package never imports another feature package or @repo/ipc. Use @repo/kernel (commands, events), @repo/contracts (types, ports), and let apps/desktop wire them."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/editor-surface/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "monaco-editor",
+                      "monaco-editor/**",
+                      "@monaco-editor/**",
+                      "ace-builds",
+                      "ace-builds/**",
+                      "react-ace",
+                      "@uiw/**",
+                      "@tiptap/**",
+                      "@nuvui/editor"
+                    ],
+                    "message": "The editor is nuvui's CodeEditor, from @nuvui/editor/code (the rich text entry pulls in Tiptap). No other editor library."
+                  },
+                  {
+                    "group": ["@repo/*/**"],
+                    "message": "Import a package through its public entry (@repo/<name>), never a deep path."
+                  },
+                  {
+                    "group": ["@tauri-apps/**"],
+                    "message": "Only @repo/ipc may import @tauri-apps/*. Use the typed functions from @repo/ipc."
+                  },
+                  {
+                    "group": [
+                      "@repo/ipc",
+                      "@repo/shell",
+                      "@repo/explorer",
+                      "@repo/tabs",
+                      "@repo/editor-surface",
+                      "@repo/commands",
+                      "@repo/settings",
+                      "@repo/lsp",
+                      "@repo/terminal",
+                      "@repo/git",
+                      "@repo/debug",
+                      "@repo/mcp",
+                      "@repo/search"
+                    ],
+                    "message": "A feature package never imports another feature package or @repo/ipc. Use @repo/kernel (commands, events), @repo/contracts (types, ports), and let apps/desktop wire them."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-d.ts"],
+      "linter": {
+        "domains": {
+          "test": "recommended"
+        }
+      }
+    }
+  ]
+}
