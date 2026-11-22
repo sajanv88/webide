@@ -1,6 +1,6 @@
 # ide-watcher
 
-**Status:** Phase 5.
+**Status:** Milestone 2.
 
 ## Purpose
 
@@ -22,9 +22,18 @@ and reports them as `ide_core::watch` events.
 - No file-id cache: the debouncer's default one walks the whole tree when the
   watch starts. Without it, a move the system reports as two separate names
   arrives as `Removed` and `Created`, which is all the frontend needs.
+- Each batch is checked against the disk before it's sent: a path that's
+  gone is `Removed`, and a "removed" path that's there again is `Modified`.
+  Systems don't always say what happened (FSEvents merges a file's flags, so
+  a file created and deleted moments apart can arrive as `Modified`). The
+  root's own creation (FSEvents can report it late) is left out.
 
 ### Known limits
 
+- On Linux, inotify watches a new folder only once it has seen it created,
+  so files written into a brand-new folder at once (an unzip, a checkout)
+  can arrive as the folder alone. That's enough for the explorer, which lists
+  a new folder when it's opened.
 - On Linux, inotify needs one watch per folder. A workspace with more folders
   than `fs.inotify.max_user_watches` (often 65,536 or more; 8,192 on older
   systems) fails to watch past that, and says so (`Failed`). Nothing is

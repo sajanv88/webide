@@ -101,7 +101,7 @@ fn start(root: &Path, debounce: Duration, sink: WatchSink, slot: &Arc<Slot>) {
             return;
         }
         if let Some(event) = to_watch_event(&handler_root, result) {
-            handler_sink(event);
+            handler_sink(as_on_disk(&handler_root, event));
         }
     };
     let config = Config::default().with_follow_symlinks(false);
@@ -137,6 +137,30 @@ fn start(root: &Path, debounce: Duration, sink: WatchSink, slot: &Arc<Slot>) {
             }
         }
     }
+}
+
+/// Corrects each change's kind by what's on disk now. Systems don't always
+/// say what happened: FSEvents merges a file's flags, so a file created,
+/// changed and deleted moments apart can arrive as `Modified`. A path that's
+/// gone was removed; a "removed" path that's there again was replaced. The
+/// root itself being created or changed isn't a change inside it.
+fn as_on_disk(root: &Path, event: WatchEvent) -> WatchEvent {
+    let WatchEvent::Changed { changes, rescan } = event else {
+        return event;
+    };
+    let exists = |path: &RelPath| path.to_native(root).symlink_metadata().is_ok();
+    let changes = changes
+        .into_iter()
+        .filter_map(|change| match change {
+            FsChange::Created(path) | FsChange::Modified(path) if path.is_root() => None,
+            FsChange::Created(path) | FsChange::Modified(path) if !exists(&path) => {
+                Some(FsChange::Removed(path))
+            }
+            FsChange::Removed(path) if exists(&path) => Some(FsChange::Modified(path)),
+            other => Some(other),
+        })
+        .collect();
+    WatchEvent::Changed { changes, rescan }
 }
 
 /// One debounced batch as a [`WatchEvent`]; `None` when nothing in it matters.

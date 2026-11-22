@@ -247,9 +247,41 @@ fn an_atomic_write_reports_the_target_and_never_its_temporary_file() {
 fn dropping_the_guard_stops_the_watch() {
     let (_dir, root) = workspace();
     let (guard, events) = start_watch(&root);
+    // What was reported before the drop (FSEvents can report the folder's
+    // own creation late) doesn't count.
+    std::thread::sleep(Duration::from_millis(300));
+    let _before: Vec<_> = events.try_iter().collect();
     drop(guard);
     std::fs::write(root.path().join("late.txt"), "x").unwrap();
     std::thread::sleep(Duration::from_millis(500));
     let late: Vec<_> = events.try_iter().collect();
     assert!(late.is_empty(), "{late:?}");
+}
+
+#[test]
+fn change_kinds_are_corrected_by_what_is_on_disk() {
+    let (_dir, root) = workspace();
+    std::fs::write(root.path().join("here.txt"), "x").unwrap();
+    let event = WatchEvent::Changed {
+        changes: vec![
+            FsChange::Created(p("gone.txt")),
+            FsChange::Modified(p("gone2.txt")),
+            FsChange::Modified(p("here.txt")),
+            FsChange::Removed(p("here.txt")),
+            FsChange::Created(RelPath::root()),
+        ],
+        rescan: false,
+    };
+    assert_eq!(
+        as_on_disk(root.path(), event),
+        WatchEvent::Changed {
+            changes: vec![
+                FsChange::Removed(p("gone.txt")),
+                FsChange::Removed(p("gone2.txt")),
+                FsChange::Modified(p("here.txt")),
+                FsChange::Modified(p("here.txt")),
+            ],
+            rescan: false,
+        }
+    );
 }
