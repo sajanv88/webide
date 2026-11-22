@@ -2,6 +2,8 @@
 
 import type { AppInfoDto } from "./AppInfoDto";
 import type { CloseGuardArgs } from "./CloseGuardArgs";
+import type { CompletionsDto } from "./CompletionsDto";
+import type { DefinitionDto } from "./DefinitionDto";
 import type { DirListingDto } from "./DirListingDto";
 import type { FileListDto } from "./FileListDto";
 import type { FileStampDto } from "./FileStampDto";
@@ -12,7 +14,11 @@ import type { GitDiffDto } from "./GitDiffDto";
 import type { GitPathsArgs } from "./GitPathsArgs";
 import type { GitStateDto } from "./GitStateDto";
 import type { GitSwitchArgs } from "./GitSwitchArgs";
+import type { HoverDto } from "./HoverDto";
+import type { LspDocumentArgs } from "./LspDocumentArgs";
+import type { LspPositionArgs } from "./LspPositionArgs";
 import type { OpenRecentArgs } from "./OpenRecentArgs";
+import type { ProblemDto } from "./ProblemDto";
 import type { ReadFileDto } from "./ReadFileDto";
 import type { RecentWorkspaceDto } from "./RecentWorkspaceDto";
 import type { SearchTextArgs } from "./SearchTextArgs";
@@ -55,6 +61,14 @@ export interface CommandMap {
   terminal_write: { args: TerminalWriteArgs; output: null };
   terminal_resize: { args: TerminalResizeArgs; output: null };
   terminal_close: { args: TerminalIdArgs; output: null };
+  lsp_open: { args: LspDocumentArgs; output: null };
+  lsp_change: { args: LspDocumentArgs; output: null };
+  lsp_close: { args: WorkspacePathArgs; output: null };
+  lsp_problems: { args: WorkspacePathArgs; output: Array<ProblemDto> };
+  lsp_completions: { args: LspPositionArgs; output: CompletionsDto };
+  lsp_hover: { args: LspPositionArgs; output: HoverDto | null };
+  lsp_definition: { args: LspPositionArgs; output: Array<DefinitionDto> };
+  lsp_restart: { args: WorkspaceArgs; output: null };
   pick_workspace: { args: null; output: WorkspaceDto | null };
   subscribe_events: { args: SubscribeEventsArgs; output: null };
   set_close_guard: { args: CloseGuardArgs; output: null };

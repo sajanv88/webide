@@ -22,6 +22,9 @@
     "vitest": "catalog:"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "catalog:",
+    "@codemirror/state": "catalog:",
+    "@codemirror/view": "catalog:",
     "@nuvui/editor": "catalog:",
     "@nuvui/react": "catalog:",
     "react": "catalog:"

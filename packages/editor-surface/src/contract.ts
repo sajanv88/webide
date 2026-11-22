@@ -2,7 +2,7 @@
 // editor implements it is this package's business only.
 import type { Ref } from "react";
 
-/** A problem to mark in the text. Reserved: nothing reports problems yet. */
+/** A problem to mark in the text. */
 export interface SurfaceDiagnostic {
   /** Characters from the start of the text. */
   readonly from: number;
@@ -35,13 +35,44 @@ export interface EditorSurfaceProps {
   readonly onChange: (value: string) => void;
   /** Ctrl+S, or Cmd+S on macOS, in the editor. */
   readonly onSave: () => void;
-  /** Reserved. */
+  /** Problems to mark in the text, underlined and in the gutter. */
   readonly diagnostics?: readonly SurfaceDiagnostic[];
+  /** Completion, hover and go to definition, from a language server. */
+  readonly language?: SurfaceLanguage | undefined;
   /** What a screen reader calls the text, such as the file's path. Required. */
   readonly "aria-label": string;
   /** The page's CSP nonce, for the styles the editor adds as it runs. */
   readonly styleNonce?: string | undefined;
   readonly ref?: Ref<EditorSurfaceHandle>;
+}
+
+/** A place in the text: 0-based line, and column in UTF-16 units. */
+export interface SurfacePosition {
+  readonly line: number;
+  readonly character: number;
+}
+
+/** One suggestion while typing. */
+export interface SurfaceCompletion {
+  readonly label: string;
+  /** What kind of thing: `method`, `function`, `variable`, `class`, `keyword`… */
+  readonly kind?: string;
+  /** A type or signature, shown beside it. */
+  readonly detail?: string;
+  /** What's inserted, when it isn't the label. */
+  readonly insert?: string;
+}
+
+/**
+ * Language features for the document shown, answered by its owner (a
+ * language server). Any answer may come back `null`: nothing to say.
+ */
+export interface SurfaceLanguage {
+  completions(at: SurfacePosition): Promise<readonly SurfaceCompletion[] | null>;
+  /** Markdown. */
+  hover(at: SurfacePosition): Promise<string | null>;
+  /** Goes to where the thing at `at` is defined (F12, or Ctrl/Cmd and a click). */
+  goToDefinition(at: SurfacePosition): void;
 }
 
 /** The editor from outside, for the document it shows now. */

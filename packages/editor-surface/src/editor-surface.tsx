@@ -6,8 +6,9 @@ import {
   type CodeEditorHandle,
   CodeEditorStatus,
 } from "@nuvui/editor/code";
-import { type KeyboardEvent, useImperativeHandle, useRef } from "react";
-import type { EditorSurfaceProps } from "./contract";
+import { type KeyboardEvent, useImperativeHandle, useMemo, useRef } from "react";
+import type { EditorSurfaceProps, SurfaceLanguage } from "./contract";
+import { languageExtensions } from "./language";
 
 const isSave = (event: KeyboardEvent): boolean =>
   (event.ctrlKey || event.metaKey) &&
@@ -35,11 +36,17 @@ export function EditorSurface({
   onChange,
   onSave,
   diagnostics,
+  language,
   "aria-label": label,
   styleNonce,
   ref,
 }: EditorSurfaceProps) {
   const editor = useRef<CodeEditorHandle>(null);
+  // The extensions are made once; they ask for the language features of the
+  // document shown now, which change with it.
+  const currentLanguage = useRef<SurfaceLanguage | undefined>(language);
+  currentLanguage.current = language;
+  const extensions = useMemo(() => languageExtensions(() => currentLanguage.current), []);
 
   useImperativeHandle(ref, () => {
     // The editor draws its view a render after it mounts, so a document opened
@@ -81,6 +88,7 @@ export function EditorSurface({
       readOnly={readOnly}
       {...(languageId ? { language: languageId } : {})}
       {...(diagnostics ? { diagnostics } : {})}
+      extensions={extensions}
       {...(styleNonce ? { nonce: styleNonce } : {})}
       onKeyDown={(event) => {
         if (!isSave(event)) return;

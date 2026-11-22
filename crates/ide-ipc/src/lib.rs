@@ -37,6 +37,8 @@ pub const MAIN_WINDOW: &str = "main";
 #[derive(Debug, Clone)]
 pub struct AppPaths {
     pub config_dir: PathBuf,
+    /// Where the app's bundled files are (the TypeScript language server).
+    pub resource_dir: PathBuf,
 }
 
 /// Builds and runs the app until the last window closes.
@@ -69,6 +71,7 @@ where
                 && let Some(state) = webview.try_state::<Arc<IpcState>>()
             {
                 state.close_terminals();
+                state.stop_language();
             }
         })
         .on_window_event(|window, event| {
@@ -82,6 +85,7 @@ where
         .setup(move |app| {
             let paths = AppPaths {
                 config_dir: app.path().app_config_dir()?,
+                resource_dir: app.path().resource_dir()?,
             };
             let info = AppInfoDto {
                 name: app.package_info().name.clone(),

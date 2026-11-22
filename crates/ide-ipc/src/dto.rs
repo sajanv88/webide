@@ -11,6 +11,10 @@ use ide_core::fs::{
 use ide_core::git::{
     DiffSide, DiffTexts, GitBranch, GitChange, GitFileStatus, GitHead, GitState, GitStatus,
 };
+use ide_core::language::{
+    Completion, CompletionKind, Completions, Definition, HoverText, LanguageStatus, Problem,
+    Severity, TextPosition, TextRange,
+};
 use ide_core::workspace::display_path;
 use ide_core::{
     FileList, FileMatches, FsChange, LineMatch, RecentWorkspace, RelPath, Settings, SettingsPatch,
@@ -212,6 +216,12 @@ pub enum BackendEventDto {
     /// The window is closing while `set_close_guard` says there are unsaved
     /// changes. It stays open until the webview calls `close_window`.
     CloseRequested,
+    /// The workspace's language server started, is ready, or failed.
+    #[serde(rename_all = "camelCase")]
+    LanguageStatus {
+        workspace_id: String,
+        status: LanguageStatusDto,
+    },
 }
 
 /// A span inside a search preview, in UTF-16 code units (JavaScript string indices).
@@ -372,6 +382,114 @@ pub enum TerminalEventDto {
     Exited { code: Option<u32> },
 }
 
+/// A place in a text: 0-based line, and column in UTF-16 units.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TextPositionDto {
+    pub line: u32,
+    pub character: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TextRangeDto {
+    pub start: TextPositionDto,
+    pub end: TextPositionDto,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum SeverityDto {
+    Error,
+    Warning,
+    Info,
+    Hint,
+}
+
+/// A problem a language server found in a file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ProblemDto {
+    pub range: TextRangeDto,
+    pub severity: SeverityDto,
+    pub message: String,
+    pub source: Option<String>,
+    pub code: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum CompletionKindDto {
+    Text,
+    Method,
+    Function,
+    Constructor,
+    Field,
+    Variable,
+    Class,
+    Interface,
+    Module,
+    Property,
+    Keyword,
+    Snippet,
+    Constant,
+    Enum,
+    EnumMember,
+    TypeParameter,
+    File,
+    Folder,
+    Other,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionDto {
+    pub label: String,
+    pub kind: CompletionKindDto,
+    pub detail: Option<String>,
+    /// What's inserted, when it isn't the label.
+    pub insert: Option<String>,
+    pub sort: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionsDto {
+    pub items: Vec<CompletionDto>,
+    /// More would come with more typed: ask again.
+    pub incomplete: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct HoverDto {
+    pub markdown: String,
+}
+
+/// Where something is defined.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum DefinitionDto {
+    /// In the workspace: `path` is workspace-relative, and it can be opened.
+    #[serde(rename_all = "camelCase")]
+    Workspace { path: String, range: TextRangeDto },
+    /// Outside it: `path` is the file's own, for saying where.
+    #[serde(rename_all = "camelCase")]
+    Outside { path: String, range: TextRangeDto },
+}
+
+/// How the open workspace's language server is doing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub enum LanguageStatusDto {
+    Starting,
+    Ready,
+    #[serde(rename_all = "camelCase")]
+    Failed {
+        message: String,
+    },
+}
+
 // ---------- Arguments ----------
 
 #[derive(Debug, Clone, Deserialize, TS)]
@@ -426,6 +544,25 @@ pub struct GitSwitchArgs {
     pub name: String,
     /// Make the branch from the current commit first.
     pub create: bool,
+}
+
+/// A file's text, for the language server.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LspDocumentArgs {
+    pub workspace_id: String,
+    pub path: String,
+    pub text: String,
+}
+
+/// A place in a file, for the language server.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LspPositionArgs {
+    pub workspace_id: String,
+    pub path: String,
+    pub line: u32,
+    pub character: u32,
 }
 
 /// Find in files. A new search cancels the one still running.
@@ -839,6 +976,119 @@ impl From<TerminalEvent> for TerminalEventDto {
         match event {
             TerminalEvent::Output(data) => Self::Output { data },
             TerminalEvent::Exited { code } => Self::Exited { code },
+        }
+    }
+}
+
+impl From<TextPosition> for TextPositionDto {
+    fn from(at: TextPosition) -> Self {
+        Self {
+            line: at.line,
+            character: at.character,
+        }
+    }
+}
+
+impl From<TextRange> for TextRangeDto {
+    fn from(range: TextRange) -> Self {
+        Self {
+            start: range.start.into(),
+            end: range.end.into(),
+        }
+    }
+}
+
+impl From<Problem> for ProblemDto {
+    fn from(problem: Problem) -> Self {
+        Self {
+            range: problem.range.into(),
+            severity: match problem.severity {
+                Severity::Error => SeverityDto::Error,
+                Severity::Warning => SeverityDto::Warning,
+                Severity::Info => SeverityDto::Info,
+                Severity::Hint => SeverityDto::Hint,
+            },
+            message: problem.message,
+            source: problem.source,
+            code: problem.code,
+        }
+    }
+}
+
+impl From<CompletionKind> for CompletionKindDto {
+    fn from(kind: CompletionKind) -> Self {
+        match kind {
+            CompletionKind::Text => Self::Text,
+            CompletionKind::Method => Self::Method,
+            CompletionKind::Function => Self::Function,
+            CompletionKind::Constructor => Self::Constructor,
+            CompletionKind::Field => Self::Field,
+            CompletionKind::Variable => Self::Variable,
+            CompletionKind::Class => Self::Class,
+            CompletionKind::Interface => Self::Interface,
+            CompletionKind::Module => Self::Module,
+            CompletionKind::Property => Self::Property,
+            CompletionKind::Keyword => Self::Keyword,
+            CompletionKind::Snippet => Self::Snippet,
+            CompletionKind::Constant => Self::Constant,
+            CompletionKind::Enum => Self::Enum,
+            CompletionKind::EnumMember => Self::EnumMember,
+            CompletionKind::TypeParameter => Self::TypeParameter,
+            CompletionKind::File => Self::File,
+            CompletionKind::Folder => Self::Folder,
+            CompletionKind::Other => Self::Other,
+        }
+    }
+}
+
+impl From<Completions> for CompletionsDto {
+    fn from(list: Completions) -> Self {
+        Self {
+            items: list
+                .items
+                .into_iter()
+                .map(|item: Completion| CompletionDto {
+                    label: item.label,
+                    kind: item.kind.into(),
+                    detail: item.detail,
+                    insert: item.insert,
+                    sort: item.sort,
+                })
+                .collect(),
+            incomplete: list.incomplete,
+        }
+    }
+}
+
+impl From<HoverText> for HoverDto {
+    fn from(hover: HoverText) -> Self {
+        Self {
+            markdown: hover.markdown,
+        }
+    }
+}
+
+impl From<Definition> for DefinitionDto {
+    fn from(definition: Definition) -> Self {
+        match definition {
+            Definition::Workspace { path, range } => Self::Workspace {
+                path: path.as_str().to_owned(),
+                range: range.into(),
+            },
+            Definition::Outside { path, range } => Self::Outside {
+                path,
+                range: range.into(),
+            },
+        }
+    }
+}
+
+impl From<LanguageStatus> for LanguageStatusDto {
+    fn from(status: LanguageStatus) -> Self {
+        match status {
+            LanguageStatus::Starting => Self::Starting,
+            LanguageStatus::Ready => Self::Ready,
+            LanguageStatus::Failed(message) => Self::Failed { message },
         }
     }
 }

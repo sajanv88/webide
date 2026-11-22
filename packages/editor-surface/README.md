@@ -1,6 +1,6 @@
 # @repo/editor-surface
 
-**Status:** Milestone 3.
+**Status:** Milestone 5.
 
 ## Purpose
 
@@ -24,6 +24,15 @@ change the editor, change this package only.
   is most of its weight, and the welcome screen doesn't need it.
 - `focus()` and `revealPosition()` wait (up to a second) for a document just
   shown to be drawn, so a file opened at a line gets its cursor there.
+- **Problems** (`diagnostics`, by character offset) are underlined and marked
+  in the gutter.
+- **Language features** (`language`, a `SurfaceLanguage`): completion as you
+  type (after a word starts or a dot; Ctrl+Space asks), added to what the
+  language suggests itself; hover, the server's Markdown drawn as text (code
+  as code), never as HTML; go to definition with F12 or Ctrl+click (Cmd on
+  macOS), which then doesn't add a cursor. These are CodeMirror extensions
+  (`@codemirror/state`, `view`, `autocomplete`, the versions nuvui uses), made
+  once; they ask the `language` of the document shown.
 - `DiffSurface`: read only (a review), side by side or in one column when
   narrow, unchanged lines folded away; the language from the extension, for
   the ones the editor colors. Loaded lazily too.
@@ -39,7 +48,9 @@ nuvui (a way to drop a path).
 
 - `EditorSurface` with `EditorSurfaceProps`: `documentId`, `path`,
   `languageId?`, `initialValue`, `readOnly`, `onChange(value)`, `onSave()`,
-  `diagnostics?` (reserved), `aria-label` (required), `styleNonce?`, `ref`.
+  `diagnostics?`, `language?`, `aria-label` (required), `styleNonce?`, `ref`.
+- `SurfaceLanguage` (`completions`, `hover`, `goToDefinition`), `SurfacePosition`,
+  `SurfaceCompletion`.
 - `EditorSurfaceHandle` (through `ref`): `getValue()`, `setValue(value)` (calls
   `onChange`, and can be undone), `focus()`, `revealPosition(line, column)`
   (both from 1, clamped).

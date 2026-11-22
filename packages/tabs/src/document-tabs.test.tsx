@@ -59,7 +59,7 @@ function setup(files: Record<string, ReadFileDto>) {
       ).toBe(true),
     );
   };
-  return { ...view, documents, registry, written, open };
+  return { ...view, documents, registry, bus, written, open };
 }
 
 const textFile = (path: string, text: string, extra: Partial<ReadFileDto> = {}): ReadFileDto =>
@@ -352,5 +352,24 @@ describe("DocumentTabs", () => {
       bus.emit("file.openRequested", { path: "a.ts", line: 4, column: 2 });
     });
     await waitFor(() => expect(calls).toEqual(["reveal 4:2"]));
+  });
+
+  it("tells the app which files are open and their text, as it changes", async () => {
+    const { open, bus, registry } = setup({ "a.ts": textFile("a.ts", "one") });
+    const events: string[] = [];
+    bus.on("document.opened", ({ path, text }) => events.push(`opened ${path} ${text}`));
+    bus.on("document.changed", ({ path, text }) => events.push(`changed ${path} ${text}`));
+    bus.on("document.closed", ({ path }) => events.push(`closed ${path}`));
+
+    await open("a.ts");
+    expect(events).toEqual(["opened a.ts one"]);
+    fireEvent.change(screen.getByLabelText("Editor for a.ts"), { target: { value: "two" } });
+    expect(events.at(-1)).toBe("changed a.ts two");
+    // Unsaved: it asks first (the command waits for the answer); don't save, and it closes.
+    act(() => {
+      void registry.execute("tabs.close");
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Don't save" }));
+    await waitFor(() => expect(events.at(-1)).toBe("closed a.ts"));
   });
 });

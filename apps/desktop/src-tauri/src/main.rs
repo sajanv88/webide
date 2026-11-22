@@ -9,6 +9,7 @@ use std::sync::Arc;
 use ide_fs::LocalFs;
 use ide_git::LocalGit;
 use ide_ipc::Services;
+use ide_lsp::TypeScriptServers;
 use ide_search::LocalSearch;
 use ide_terminal::LocalTerminals;
 use ide_watcher::LocalWatcher;
@@ -22,6 +23,13 @@ fn main() -> ExitCode {
         search: Arc::new(LocalSearch::new()),
         git: Arc::new(LocalGit::new()),
         terminals: Arc::new(LocalTerminals::new()),
+        // Staged into the bundle by scripts/stage-typescript.mjs.
+        languages: Arc::new(TypeScriptServers::new(
+            paths
+                .resource_dir
+                .join("typescript")
+                .join(if cfg!(windows) { "tsc.exe" } else { "tsc" }),
+        )),
     });
     match result {
         Ok(()) => ExitCode::SUCCESS,

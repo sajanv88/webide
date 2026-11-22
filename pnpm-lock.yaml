@@ -176,6 +176,15 @@ catalogs:
     '@biomejs/biome':
       specifier: 2.6.8
       version: 2.6.8
+    '@codemirror/autocomplete':
+      specifier: 6.20.4
+      version: 6.20.4
+    '@codemirror/state':
+      specifier: 6.7.6
+      version: 6.7.6
+    '@codemirror/view':
+      specifier: 6.43.15
+      version: 6.43.15
     '@nuvui/backgrounds':
       specifier: 0.1.2
       version: 0.1.2
@@ -298,6 +307,9 @@ importers:
       '@repo/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@repo/lsp':
+        specifier: workspace:*
+        version: link:../../packages/lsp
       '@repo/search':
         specifier: workspace:*
         version: link:../../packages/search
@@ -402,6 +414,15 @@ importers:
 
   packages/editor-surface:
     dependencies:
+      '@codemirror/autocomplete':
+        specifier: 'catalog:'
+        version: 6.20.4
+      '@codemirror/state':
+        specifier: 'catalog:'
+        version: 6.7.6
+      '@codemirror/view':
+        specifier: 'catalog:'
+        version: 6.43.15
       '@nuvui/editor':
         specifier: 'catalog:'
         version: 0.2.0(@floating-ui/dom@1.8.0)(@nuvui/react@0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -559,6 +580,52 @@ importers:
       '@repo/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.1.1(@types/node@24.19.2)(jsdom@31.0.1)(vite@8.3.8(@types/node@24.19.2)(sass@1.108.2))
+
+  packages/lsp:
+    dependencies:
+      '@nuvui/icons':
+        specifier: 'catalog:'
+        version: 0.1.0(react@19.3.1)
+      '@nuvui/react':
+        specifier: 'catalog:'
+        version: 0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@repo/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@repo/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      react:
+        specifier: 'catalog:'
+        version: 19.3.1
+    devDependencies:
+      '@repo/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@testing-library/dom':
+        specifier: 'catalog:'
+        version: 10.4.2
+      '@testing-library/react':
+        specifier: 'catalog:'
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.3.0(@types/react@19.3.0)
+      jsdom:
+        specifier: 'catalog:'
+        version: 31.0.1
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.3.1(react@19.3.1)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

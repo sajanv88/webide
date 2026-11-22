@@ -230,6 +230,43 @@ export function DocumentTabs({ documents, registry, bus, renderEditor, empty }: 
     };
   }, [documents, registry, close]);
 
+  // Tell the rest of the app which files are open, and their text (for the
+  // language server): opened once their text is read, changed as it's typed
+  // or reloaded, closed when their tab goes.
+  const known = useRef(new Map<DocumentId, { path: string; text: string }>());
+  const syncOpen = useCallback(() => {
+    const seen = new Set<DocumentId>();
+    for (const tab of documents.getState().tabs) {
+      if (tab.content.kind !== "text") continue;
+      const text = documents.getText(tab.id);
+      if (text === undefined) continue;
+      seen.add(tab.id);
+      const before = known.current.get(tab.id);
+      if (!before) {
+        known.current.set(tab.id, { path: tab.path, text });
+        bus.emit("document.opened", { path: tab.path, text });
+      } else if (before.text !== text) {
+        before.text = text;
+        bus.emit("document.changed", { path: tab.path, text });
+      }
+    }
+    for (const [id, doc] of known.current) {
+      if (seen.has(id)) continue;
+      known.current.delete(id);
+      bus.emit("document.closed", { path: doc.path });
+    }
+  }, [documents, bus]);
+  useEffect(() => {
+    const open = known.current;
+    syncOpen();
+    const unsubscribe = documents.subscribe(syncOpen);
+    return () => {
+      unsubscribe();
+      for (const doc of open.values()) bus.emit("document.closed", { path: doc.path });
+      open.clear();
+    };
+  }, [documents, bus, syncOpen]);
+
   // A file chosen in the explorer opens here.
   useEffect(
     () =>
@@ -285,9 +322,12 @@ export function DocumentTabs({ documents, registry, bus, renderEditor, empty }: 
   const editorId = editorTab?.id;
   const onChange = useCallback(
     (value: string) => {
-      if (editorId) documents.setText(editorId, value);
+      if (!editorId) return;
+      documents.setText(editorId, value);
+      // Typing doesn't change the store's state, so it isn't heard there.
+      syncOpen();
     },
-    [documents, editorId],
+    [documents, editorId, syncOpen],
   );
   const onSave = useCallback(() => {
     if (editorId) void documents.save(editorId);
