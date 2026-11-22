@@ -1,5 +1,5 @@
 // The composition root: the only place that wires modules together.
-import { FolderIcon, GitBranchIcon, SearchIcon } from "@nuvui/icons";
+import { BugIcon, FolderIcon, GitBranchIcon, SearchIcon } from "@nuvui/icons";
 import { Toaster, toast } from "@nuvui/react";
 import {
   attachKeybindings,
@@ -11,6 +11,7 @@ import type {
   AppCommandId,
   AppEvents,
   AppInfoDto,
+  DebugPort,
   EditorProblem,
   GitPort,
   IpcError,
@@ -20,6 +21,7 @@ import type {
   TerminalPort,
   WorkspaceDto,
 } from "@repo/contracts";
+import { createDebugStore, DebugView, debuggable } from "@repo/debug";
 import { DiffSurface, EditorSurface } from "@repo/editor-surface";
 import { Explorer, type ExplorerSource } from "@repo/explorer";
 import { BranchPicker, BranchStatus, createGitStore, SourceControlView } from "@repo/git";
@@ -28,6 +30,15 @@ import {
   closeTerminal,
   closeWindow,
   currentWorkspace,
+  debugBreakpoints,
+  debugEvaluate,
+  debugPause,
+  debugResume,
+  debugScopes,
+  debugStack,
+  debugStart,
+  debugStop,
+  debugVariables,
   getSettings,
   getStyleNonce,
   gitBranches,
@@ -69,7 +80,7 @@ import { SettingsDialog } from "@repo/settings";
 import { type MenuSpec, Shell, type SidebarView } from "@repo/shell";
 import { createDocuments, type Documents, DocumentTabs } from "@repo/tabs";
 import { TerminalPanel } from "@repo/terminal";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AboutDialog } from "./about/about-dialog";
 import { DEFAULT_KEYBINDINGS, terminalPassesKey } from "./keybindings";
 import { NoFileOpen } from "./no-file-open/no-file-open";
@@ -96,6 +107,9 @@ const applyTheme = (theme: string) => {
   document.documentElement.dataset.theme = theme;
 };
 bus.on("settings.changed", (settings) => applyTheme(settings.theme));
+
+const noSubscribe = () => () => {};
+const noState = () => null;
 
 function showError(title: string, error: IpcError) {
   toast(title, { intent: "danger", description: error.message });
@@ -165,6 +179,9 @@ export function App() {
               description: `Watching ${current.name} for changes failed: ${event.message}. Use Refresh Explorer to see them.`,
             });
           }
+          break;
+        case "debug":
+          if (event.workspaceId === current?.id) bus.emit("debug.event", event.event);
           break;
         case "languageStatus":
           if (event.workspaceId === current?.id) bus.emit("language.status", event.status);
@@ -362,6 +379,39 @@ export function App() {
     );
   }, [language]);
 
+  // The debugger: one program at a time, in the open folder.
+  const debugPort = useMemo<DebugPort | null>(() => {
+    if (!workspace) return null;
+    const workspaceId = workspace.id;
+    return {
+      start: (path, breakpoints) =>
+        debugStart({
+          workspaceId,
+          path,
+          breakpoints: breakpoints.map((file) => ({ path: file.path, lines: [...file.lines] })),
+        }),
+      stop: () => debugStop({ workspaceId }),
+      setBreakpoints: (path, lines) => debugBreakpoints({ workspaceId, path, lines: [...lines] }),
+      resume: (threadId, step) => debugResume({ workspaceId, threadId, ...(step ? { step } : {}) }),
+      pause: (threadId) => debugPause({ workspaceId, threadId }),
+      stack: (threadId) => debugStack({ workspaceId, threadId }),
+      scopes: (frameId) => debugScopes({ workspaceId, reference: frameId }),
+      variables: (reference) => debugVariables({ workspaceId, reference }),
+      evaluate: (expression, frameId) =>
+        debugEvaluate({ workspaceId, expression, ...(frameId === undefined ? {} : { frameId }) }),
+    };
+  }, [workspace]);
+  const debug = useMemo(() => debugPort && createDebugStore(debugPort, bus), [debugPort]);
+  useEffect(() => () => debug?.dispose(), [debug]);
+  // Breakpoints and the paused line, for the editor.
+  useSyncExternalStore(debug?.subscribe ?? noSubscribe, debug?.getState ?? noState);
+  // The file the editor shows, which Run and Debug runs.
+  const currentFile = useCallback(() => {
+    const state = documentsRef.current?.getState();
+    const tab = state?.tabs.find((candidate) => candidate.id === state.activeId);
+    return tab?.content.kind === "text" ? tab.path : undefined;
+  }, []);
+
   const views = useMemo<SidebarView[]>(
     () =>
       source && searchPort && workspace && git && gitPort
@@ -420,6 +470,31 @@ export function App() {
         : [],
     [source, searchPort, workspace, git, gitPort],
   );
+  const allViews = useMemo<SidebarView[]>(
+    () =>
+      debug && workspace
+        ? [
+            ...views,
+            {
+              id: "debug",
+              title: "Run and Debug",
+              icon: <BugIcon size={20} />,
+              command: "view.showDebug",
+              content: (
+                <DebugView
+                  key={workspace.id}
+                  store={debug}
+                  registry={registry}
+                  currentFile={currentFile}
+                  viewId="debug"
+                  styleNonce={styleNonce}
+                />
+              ),
+            },
+          ]
+        : views,
+    [views, debug, workspace, currentFile],
+  );
 
   const menus = useMemo<MenuSpec[]>(
     () => [
@@ -476,6 +551,21 @@ export function App() {
           { kind: "command", command: "tabs.previous" },
         ],
       },
+      {
+        label: "Run",
+        items: [
+          { kind: "command", command: "debug.start" },
+          { kind: "command", command: "debug.stop" },
+          { kind: "separator" },
+          { kind: "command", command: "debug.continue" },
+          { kind: "command", command: "debug.pause" },
+          { kind: "command", command: "debug.stepOver" },
+          { kind: "command", command: "debug.stepInto" },
+          { kind: "command", command: "debug.stepOut" },
+          { kind: "separator" },
+          { kind: "command", command: "view.showDebug" },
+        ],
+      },
       { label: "Help", items: [{ kind: "command", command: "help.about" }] },
     ],
     [recent],
@@ -494,7 +584,7 @@ export function App() {
         registry={registry}
         menus={menus}
         shortcutFor={keybindings.forCommand}
-        views={views}
+        views={allViews}
         {...(workspace && terminalPort
           ? {
               panel: {
@@ -529,6 +619,14 @@ export function App() {
                   language={
                     language?.handles(document.path) ? language.features(document.path) : undefined
                   }
+                  {...(debug && debuggable(document.path)
+                    ? {
+                        breakpoints: debug.getState().breakpoints.get(document.path) ?? [],
+                        onToggleBreakpoint: (line: number) =>
+                          debug.toggleBreakpoint(document.path, line),
+                        executionLine: debug.executionLine(document.path),
+                      }
+                    : {})}
                 />
               )}
             />

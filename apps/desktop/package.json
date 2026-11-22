@@ -17,6 +17,7 @@
     "@nuvui/react": "catalog:",
     "@repo/commands": "workspace:*",
     "@repo/contracts": "workspace:*",
+    "@repo/debug": "workspace:*",
     "@repo/editor-surface": "workspace:*",
     "@repo/explorer": "workspace:*",
     "@repo/git": "workspace:*",

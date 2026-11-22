@@ -22,9 +22,7 @@
       }
     ],
     "security": {
-      "capabilities": [
-        "main"
-      ],
+      "capabilities": ["main"],
       "freezePrototype": true,
       "csp": {
         "default-src": "'self'",
