@@ -11,13 +11,14 @@ use tauri::{AppHandle, State, Webview, WebviewWindow, Wry};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::dto::{
-    AppInfoDto, CloseGuardArgs, CompletionsDto, DefinitionDto, DirListingDto, FileListDto,
-    FileStampDto, GitBranchDto, GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto,
-    GitSwitchArgs, HoverDto, LspDocumentArgs, LspPositionArgs, OpenRecentArgs, ProblemDto,
-    ReadFileDto, RecentWorkspaceDto, SearchTextArgs, SettingsDto, SettingsPatchDto,
-    SubscribeEventsArgs, TerminalDto, TerminalEventDto, TerminalIdArgs, TerminalOpenArgs,
-    TerminalResizeArgs, TerminalWriteArgs, TextSearchDto, WorkspaceArgs, WorkspaceDto,
-    WorkspacePathArgs, WriteFileArgs,
+    AppInfoDto, BreakpointDto, CloseGuardArgs, CompletionsDto, DebugBreakpointsArgs,
+    DebugEvaluateArgs, DebugReferenceArgs, DebugStartArgs, DebugThreadArgs, DefinitionDto,
+    DirListingDto, FileListDto, FileStampDto, GitBranchDto, GitCommitArgs, GitDiffArgs, GitDiffDto,
+    GitPathsArgs, GitStateDto, GitSwitchArgs, HoverDto, LspDocumentArgs, LspPositionArgs,
+    OpenRecentArgs, ProblemDto, ReadFileDto, RecentWorkspaceDto, ScopeDto, SearchTextArgs,
+    SettingsDto, SettingsPatchDto, StackFrameDto, SubscribeEventsArgs, TerminalDto,
+    TerminalEventDto, TerminalIdArgs, TerminalOpenArgs, TerminalResizeArgs, TerminalWriteArgs,
+    TextSearchDto, VariableDto, WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::IpcError;
 use crate::events::EventHub;
@@ -95,6 +96,15 @@ ipc_commands! {
         lsp_hover(LspPositionArgs) -> Option<HoverDto>;
         lsp_definition(LspPositionArgs) -> Vec<DefinitionDto>;
         lsp_restart(WorkspaceArgs) -> ();
+        debug_start(DebugStartArgs) -> ();
+        debug_stop(WorkspaceArgs) -> ();
+        debug_breakpoints(DebugBreakpointsArgs) -> Vec<BreakpointDto>;
+        debug_resume(DebugThreadArgs) -> ();
+        debug_pause(DebugThreadArgs) -> ();
+        debug_stack(DebugThreadArgs) -> Vec<StackFrameDto>;
+        debug_scopes(DebugReferenceArgs) -> Vec<ScopeDto>;
+        debug_variables(DebugReferenceArgs) -> Vec<VariableDto>;
+        debug_evaluate(DebugEvaluateArgs) -> String;
     }
     custom {
         pick_workspace() -> Option<WorkspaceDto>;
@@ -356,6 +366,69 @@ pub async fn lsp_definition(
 #[tauri::command]
 pub async fn lsp_restart(state: Shared<'_>, args: WorkspaceArgs) -> Result<(), IpcError> {
     run_blocking(&state, move |state| handlers::lsp_restart(state, args)).await
+}
+
+#[tauri::command]
+pub async fn debug_start(state: Shared<'_>, args: DebugStartArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::debug_start(state, args)).await
+}
+
+#[tauri::command]
+pub async fn debug_stop(state: Shared<'_>, args: WorkspaceArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::debug_stop(state, args)).await
+}
+
+#[tauri::command]
+pub async fn debug_breakpoints(
+    state: Shared<'_>,
+    args: DebugBreakpointsArgs,
+) -> Result<Vec<BreakpointDto>, IpcError> {
+    run_blocking(&state, move |state| {
+        handlers::debug_breakpoints(state, args)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn debug_resume(state: Shared<'_>, args: DebugThreadArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::debug_resume(state, args)).await
+}
+
+#[tauri::command]
+pub async fn debug_pause(state: Shared<'_>, args: DebugThreadArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::debug_pause(state, args)).await
+}
+
+#[tauri::command]
+pub async fn debug_stack(
+    state: Shared<'_>,
+    args: DebugThreadArgs,
+) -> Result<Vec<StackFrameDto>, IpcError> {
+    run_blocking(&state, move |state| handlers::debug_stack(state, args)).await
+}
+
+#[tauri::command]
+pub async fn debug_scopes(
+    state: Shared<'_>,
+    args: DebugReferenceArgs,
+) -> Result<Vec<ScopeDto>, IpcError> {
+    run_blocking(&state, move |state| handlers::debug_scopes(state, args)).await
+}
+
+#[tauri::command]
+pub async fn debug_variables(
+    state: Shared<'_>,
+    args: DebugReferenceArgs,
+) -> Result<Vec<VariableDto>, IpcError> {
+    run_blocking(&state, move |state| handlers::debug_variables(state, args)).await
+}
+
+#[tauri::command]
+pub async fn debug_evaluate(
+    state: Shared<'_>,
+    args: DebugEvaluateArgs,
+) -> Result<String, IpcError> {
+    run_blocking(&state, move |state| handlers::debug_evaluate(state, args)).await
 }
 
 /// Sends backend events (file changes, the close request) to the calling page,

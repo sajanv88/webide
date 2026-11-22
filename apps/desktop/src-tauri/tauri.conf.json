@@ -22,7 +22,9 @@
       }
     ],
     "security": {
-      "capabilities": ["main"],
+      "capabilities": [
+        "main"
+      ],
       "freezePrototype": true,
       "csp": {
         "default-src": "'self'",
@@ -49,7 +51,8 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "resources/typescript/": "typescript/"
+      "resources/typescript/": "typescript/",
+      "resources/js-debug/": "js-debug/"
     }
   }
 }

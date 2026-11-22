@@ -1643,9 +1643,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ide-debug"
+version = "0.1.0"
+dependencies = [
+ "ide-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "ide-desktop"
 version = "0.1.0"
 dependencies = [
+ "ide-debug",
  "ide-fs",
  "ide-git",
  "ide-ipc",

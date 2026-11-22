@@ -5,6 +5,7 @@
 //! sizes and times as plain numbers (u64 is exported as `number`; every value
 //! here is far below 2^53).
 
+use ide_core::debug::{Breakpoint, DebugEvent, FrameSource, Scope, StackFrame, Step, Variable};
 use ide_core::fs::{
     DirListing, FileNode, FileStamp, LineEnding, NodeKind, ReadOnlyReason, ReadOutcome,
 };
@@ -216,6 +217,12 @@ pub enum BackendEventDto {
     /// The window is closing while `set_close_guard` says there are unsaved
     /// changes. It stays open until the webview calls `close_window`.
     CloseRequested,
+    /// What the debug session of the workspace reports.
+    #[serde(rename_all = "camelCase")]
+    Debug {
+        workspace_id: String,
+        event: DebugEventDto,
+    },
     /// The workspace's language server started, is ready, or failed.
     #[serde(rename_all = "camelCase")]
     LanguageStatus {
@@ -490,6 +497,80 @@ pub enum LanguageStatusDto {
     },
 }
 
+/// What the debugger reports.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum DebugEventDto {
+    /// The program wrote this (`stdout`, `stderr`), or the debugger said it (`console`).
+    #[serde(rename_all = "camelCase")]
+    Output {
+        category: String,
+        text: String,
+    },
+    /// Paused: `reason` is `breakpoint`, `step`, `pause`, `exception`, `debugger statement`…
+    #[serde(rename_all = "camelCase")]
+    Stopped {
+        thread_id: i64,
+        reason: String,
+        description: Option<String>,
+    },
+    Continued,
+    /// The program ended.
+    Terminated,
+}
+
+/// Where a stack frame is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum FrameSourceDto {
+    /// In the workspace: `path` is workspace-relative, and it can be opened.
+    #[serde(rename_all = "camelCase")]
+    Workspace { path: String },
+    /// Outside it, or with no file: only named.
+    #[serde(rename_all = "camelCase")]
+    Outside { name: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct StackFrameDto {
+    pub id: i64,
+    pub name: String,
+    pub source: Option<FrameSourceDto>,
+    /// 1-based.
+    pub line: u32,
+    pub column: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ScopeDto {
+    pub name: String,
+    /// For `debug_variables`; 0 when it has none.
+    pub reference: i64,
+    /// Many variables (the globals): best shown closed.
+    pub expensive: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct VariableDto {
+    pub name: String,
+    pub value: String,
+    pub kind: Option<String>,
+    /// For its children; 0 when it has none.
+    pub reference: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct BreakpointDto {
+    pub line: u32,
+    pub verified: bool,
+    /// Where it was placed, when that's another line.
+    pub actual_line: Option<u32>,
+}
+
 // ---------- Arguments ----------
 
 #[derive(Debug, Clone, Deserialize, TS)]
@@ -563,6 +644,68 @@ pub struct LspPositionArgs {
     pub path: String,
     pub line: u32,
     pub character: u32,
+}
+
+/// One file's breakpoint lines (1-based).
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FileBreakpoints {
+    pub path: String,
+    pub lines: Vec<u32>,
+}
+
+/// Runs a file under the debugger, with breakpoints set before it starts.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DebugStartArgs {
+    pub workspace_id: String,
+    pub path: String,
+    pub breakpoints: Vec<FileBreakpoints>,
+}
+
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DebugBreakpointsArgs {
+    pub workspace_id: String,
+    pub path: String,
+    pub lines: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum StepDto {
+    Over,
+    Into,
+    Out,
+}
+
+/// Continue, pause, step: on a thread.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DebugThreadArgs {
+    pub workspace_id: String,
+    pub thread_id: i64,
+    #[serde(default)]
+    #[ts(optional)]
+    pub step: Option<StepDto>,
+}
+
+/// A frame's scopes, or a reference's variables.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DebugReferenceArgs {
+    pub workspace_id: String,
+    pub reference: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DebugEvaluateArgs {
+    pub workspace_id: String,
+    pub expression: String,
+    #[serde(default)]
+    #[ts(optional)]
+    pub frame_id: Option<i64>,
 }
 
 /// Find in files. A new search cancels the one still running.
@@ -1089,6 +1232,83 @@ impl From<LanguageStatus> for LanguageStatusDto {
             LanguageStatus::Starting => Self::Starting,
             LanguageStatus::Ready => Self::Ready,
             LanguageStatus::Failed(message) => Self::Failed { message },
+        }
+    }
+}
+
+impl From<DebugEvent> for DebugEventDto {
+    fn from(event: DebugEvent) -> Self {
+        match event {
+            DebugEvent::Output { category, text } => Self::Output { category, text },
+            DebugEvent::Stopped {
+                thread_id,
+                reason,
+                description,
+            } => Self::Stopped {
+                thread_id,
+                reason,
+                description,
+            },
+            DebugEvent::Continued => Self::Continued,
+            DebugEvent::Terminated => Self::Terminated,
+        }
+    }
+}
+
+impl From<StackFrame> for StackFrameDto {
+    fn from(frame: StackFrame) -> Self {
+        Self {
+            id: frame.id,
+            name: frame.name,
+            source: frame.source.map(|source| match source {
+                FrameSource::Workspace(path) => FrameSourceDto::Workspace {
+                    path: path.as_str().to_owned(),
+                },
+                FrameSource::Outside(name) => FrameSourceDto::Outside { name },
+            }),
+            line: frame.line,
+            column: frame.column,
+        }
+    }
+}
+
+impl From<Scope> for ScopeDto {
+    fn from(scope: Scope) -> Self {
+        Self {
+            name: scope.name,
+            reference: scope.reference,
+            expensive: scope.expensive,
+        }
+    }
+}
+
+impl From<Variable> for VariableDto {
+    fn from(variable: Variable) -> Self {
+        Self {
+            name: variable.name,
+            value: variable.value,
+            kind: variable.kind,
+            reference: variable.reference,
+        }
+    }
+}
+
+impl From<Breakpoint> for BreakpointDto {
+    fn from(breakpoint: Breakpoint) -> Self {
+        Self {
+            line: breakpoint.line,
+            verified: breakpoint.verified,
+            actual_line: breakpoint.actual_line,
+        }
+    }
+}
+
+impl From<StepDto> for Step {
+    fn from(step: StepDto) -> Self {
+        match step {
+            StepDto::Over => Self::Over,
+            StepDto::Into => Self::Into,
+            StepDto::Out => Self::Out,
         }
     }
 }

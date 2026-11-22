@@ -72,6 +72,7 @@ where
             {
                 state.close_terminals();
                 state.stop_language();
+                state.stop_debugging();
             }
         })
         .on_window_event(|window, event| {
