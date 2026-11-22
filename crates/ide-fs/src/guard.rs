@@ -36,6 +36,11 @@ pub(crate) fn resolve_existing(root: &WorkspaceRoot, rel: &RelPath) -> Result<Pa
 /// Where a write to `rel` should go: the existing file (symlinks followed and
 /// checked), or a new name inside an existing folder that is itself inside.
 pub(crate) fn resolve_for_write(root: &WorkspaceRoot, rel: &RelPath) -> Result<PathBuf, IdeError> {
+    // Git's own files are never written: a hook or a config line there runs
+    // code the next time git does.
+    if ide_core::fs::is_git_internal(rel) {
+        return Err(IdeError::PermissionDenied);
+    }
     let (Some(parent), Some(name)) = (rel.parent(), rel.file_name()) else {
         return Err(IdeError::NotAFile);
     };
@@ -53,6 +58,14 @@ pub(crate) fn resolve_for_write(root: &WorkspaceRoot, rel: &RelPath) -> Result<P
             let root = canonical_root(root)?;
             let target = fs::canonicalize(&candidate)?;
             ensure_inside(&root, &target)?;
+            // Nor through a link that leads into one.
+            if target.strip_prefix(&root).is_ok_and(|inside| {
+                inside
+                    .components()
+                    .any(|part| part.as_os_str().eq_ignore_ascii_case(".git"))
+            }) {
+                return Err(IdeError::PermissionDenied);
+            }
             let metadata = fs::metadata(&target)?;
             if !metadata.is_file() {
                 return Err(IdeError::NotAFile);

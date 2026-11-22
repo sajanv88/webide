@@ -57,6 +57,9 @@ const GLOBAL_ARGS: &[&str] = &[
     "core.quotepath=false",
     "-c",
     "color.ui=false",
+    // A configured fsmonitor is a program git runs on each status: never here.
+    "-c",
+    "core.fsmonitor=false",
 ];
 
 /// Runs `git <args>` in `cwd`, with `stdin` written to it when given.

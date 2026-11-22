@@ -202,6 +202,14 @@ fn binary_and_large_files_are_not_shown_as_text() {
             .unwrap(),
         DiffTexts::TooLarge { limit: 10 }
     );
+    // A stored version is measured before it's read, too.
+    LocalGit.stage(&root, &[p("big.txt")]).unwrap();
+    assert_eq!(
+        LocalGit
+            .diff_texts(&root, &p("big.txt"), DiffSide::Staged, 10)
+            .unwrap(),
+        DiffTexts::TooLarge { limit: 10 }
+    );
 }
 
 #[test]

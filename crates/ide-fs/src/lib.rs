@@ -123,7 +123,9 @@ impl WorkspaceFs for LocalFs {
             return Ok(ReadOutcome::NotUtf8 { stamp });
         };
 
-        let read_only = if stamp.size > limits.read_only_above {
+        let read_only = if ide_core::fs::is_git_internal(file) {
+            Some(ReadOnlyReason::GitInternal)
+        } else if stamp.size > limits.read_only_above {
             Some(ReadOnlyReason::TooLargeToEdit)
         } else if metadata.permissions().readonly() {
             Some(ReadOnlyReason::ReadOnlyOnDisk)

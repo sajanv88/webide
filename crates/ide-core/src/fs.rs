@@ -66,6 +66,16 @@ pub enum ReadOnlyReason {
     TooLargeToEdit,
     /// The file system says it can't be written.
     ReadOnlyOnDisk,
+    /// It's inside a `.git` folder: git's own files, which the editor never writes.
+    GitInternal,
+}
+
+/// Whether `path` is in, or is, a `.git` folder (any letter case, as Windows
+/// and macOS file systems ignore it). Those files are git's: a hook or a
+/// config line written there runs code the next time git does.
+pub fn is_git_internal(path: &crate::RelPath) -> bool {
+    path.segments()
+        .any(|segment| segment.eq_ignore_ascii_case(".git"))
 }
 
 /// Size limits for opening a file.
@@ -169,5 +179,32 @@ mod tests {
         let mut late_nul = vec![b'a'; BINARY_SNIFF_LEN];
         late_nul.push(0);
         assert!(!looks_binary(&late_nul));
+    }
+}
+
+#[cfg(test)]
+mod git_internal_tests {
+    use super::is_git_internal;
+    use crate::RelPath;
+
+    #[test]
+    fn any_git_segment_in_any_case() {
+        for inside in [
+            ".git",
+            ".git/config",
+            ".GIT/hooks/pre-commit",
+            "sub/.git/HEAD",
+        ] {
+            assert!(
+                is_git_internal(&RelPath::parse(inside).unwrap()),
+                "{inside}"
+            );
+        }
+        for outside in ["", "src/a.ts", ".gitignore", ".github/ci.yaml", "my.git/x"] {
+            assert!(
+                !is_git_internal(&RelPath::parse(outside).unwrap()),
+                "{outside}"
+            );
+        }
     }
 }

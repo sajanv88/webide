@@ -108,6 +108,7 @@ pub enum ReadOnlyReasonDto {
     TooLargeToEdit,
     /// The file system says it can't be written.
     ReadOnlyOnDisk,
+    GitInternal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -539,6 +540,7 @@ impl From<ReadOnlyReason> for ReadOnlyReasonDto {
         match reason {
             ReadOnlyReason::TooLargeToEdit => Self::TooLargeToEdit,
             ReadOnlyReason::ReadOnlyOnDisk => Self::ReadOnlyOnDisk,
+            ReadOnlyReason::GitInternal => Self::GitInternal,
         }
     }
 }

@@ -65,45 +65,71 @@ fn has_head(cwd: &Path) -> bool {
     .is_ok()
 }
 
-/// A version of a file from git: `rev` is `HEAD` or `""` (the index). `None`
-/// when the file isn't in that version.
-fn blob(cwd: &Path, rev: &str, path: &RelPath) -> Option<Vec<u8>> {
+/// One side of a diff, read only when it's within the size limit.
+enum Side {
+    Missing,
+    TooLarge,
+    Bytes(Vec<u8>),
+}
+
+/// A version of a file from git: `rev` is `HEAD` or `""` (the index).
+/// `Missing` when the file isn't in that version.
+fn blob(cwd: &Path, rev: &str, path: &RelPath, limit: u64) -> Side {
     // `./` makes the path relative to the workspace, not the repository's top.
     let spec = format!("{rev}:./{}", path.as_str());
-    git(cwd, &["cat-file", "blob", &spec], None, READ_LIMIT)
-        .ok()
-        .map(|output| output.stdout)
+    // Its size first, so a large one is never read.
+    let Ok(size) = git(cwd, &["cat-file", "-s", &spec], None, READ_LIMIT) else {
+        return Side::Missing;
+    };
+    let size: u64 = String::from_utf8_lossy(&size.stdout)
+        .trim()
+        .parse()
+        .unwrap_or(u64::MAX);
+    if size > limit {
+        return Side::TooLarge;
+    }
+    match git(cwd, &["cat-file", "blob", &spec], None, READ_LIMIT) {
+        Ok(output) => Side::Bytes(output.stdout),
+        Err(_) => Side::Missing,
+    }
 }
 
 /// The working-tree file, if it's there and inside the workspace.
-fn working_file(root: &WorkspaceRoot, path: &RelPath) -> Result<Option<Vec<u8>>, IdeError> {
+fn working_file(root: &WorkspaceRoot, path: &RelPath, limit: u64) -> Result<Side, IdeError> {
     let canonical_root = std::fs::canonicalize(root.path()).map_err(|e| IdeError::from_io(&e))?;
     let target = path.to_native(&canonical_root);
     let canonical = match std::fs::canonicalize(&target) {
         Ok(canonical) => canonical,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Side::Missing),
         Err(error) => return Err(IdeError::from_io(&error)),
     };
     if !canonical.starts_with(&canonical_root) {
         return Err(IdeError::OutsideWorkspace);
     }
-    if canonical.is_dir() {
-        return Ok(None);
+    let metadata = std::fs::metadata(&canonical).map_err(|error| IdeError::from_io(&error))?;
+    if metadata.is_dir() {
+        return Ok(Side::Missing);
+    }
+    // Its size first, so a large one is never read.
+    if metadata.len() > limit {
+        return Ok(Side::TooLarge);
     }
     std::fs::read(&canonical)
-        .map(Some)
+        .map(Side::Bytes)
         .map_err(|error| IdeError::from_io(&error))
 }
 
 /// Two versions as texts, unless one is binary or too large.
-fn texts(original: Option<Vec<u8>>, modified: Option<Vec<u8>>, limit: u64) -> DiffTexts {
-    let sides = [original.unwrap_or_default(), modified.unwrap_or_default()];
-    if sides
-        .iter()
-        .any(|side| u64::try_from(side.len()).unwrap_or(u64::MAX) > limit)
-    {
+fn texts(original: Side, modified: Side, limit: u64) -> DiffTexts {
+    let bytes = |side: Side| match side {
+        Side::Missing => Some(Vec::new()),
+        Side::TooLarge => None,
+        Side::Bytes(bytes) => Some(bytes),
+    };
+    let (Some(original), Some(modified)) = (bytes(original), bytes(modified)) else {
         return DiffTexts::TooLarge { limit };
-    }
+    };
+    let sides = [original, modified];
     if sides.iter().any(|side| side.contains(&0)) {
         return DiffTexts::Binary;
     }
@@ -154,8 +180,16 @@ impl GitClient for LocalGit {
     ) -> Result<DiffTexts, IdeError> {
         let cwd = folder(root);
         Ok(match side {
-            DiffSide::Staged => texts(blob(&cwd, "HEAD", path), blob(&cwd, "", path), limit),
-            DiffSide::Unstaged => texts(blob(&cwd, "", path), working_file(root, path)?, limit),
+            DiffSide::Staged => texts(
+                blob(&cwd, "HEAD", path, limit),
+                blob(&cwd, "", path, limit),
+                limit,
+            ),
+            DiffSide::Unstaged => texts(
+                blob(&cwd, "", path, limit),
+                working_file(root, path, limit)?,
+                limit,
+            ),
         })
     }
 
