@@ -5,6 +5,11 @@ packages:
 # Exact versions only. An upgrade is one reviewed line here.
 catalog:
   "@biomejs/biome": 2.6.8
+  # CodeMirror, for the editor surface's language features only: the same
+  # versions @nuvui/editor uses, so there's one copy of each.
+  "@codemirror/autocomplete": 6.20.4
+  "@codemirror/state": 6.7.6
+  "@codemirror/view": 6.43.15
   "@nuvui/backgrounds": 0.1.2
   "@nuvui/editor": 0.2.0
   "@nuvui/icons": 0.1.0

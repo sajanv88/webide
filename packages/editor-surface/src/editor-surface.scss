@@ -20,3 +20,26 @@
   flex: 1 1 0;
   min-block-size: 0;
 }
+
+// A hover from the language server: the signature as code, then the words.
+.editor-surface-hover {
+  display: grid;
+  gap: var(--spacing);
+  max-inline-size: 36rem;
+  max-block-size: 20rem;
+  overflow: auto;
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+  font-size: var(--text-xs);
+  line-height: var(--text-xs--line-height);
+
+  &__code {
+    margin: 0;
+    font-family: var(--font-mono);
+    white-space: pre-wrap;
+  }
+
+  &__text {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+}

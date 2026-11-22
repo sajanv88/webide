@@ -4,6 +4,9 @@ export type {
   DiffSurfaceProps,
   EditorSurfaceHandle,
   EditorSurfaceProps,
+  SurfaceCompletion,
   SurfaceDiagnostic,
+  SurfaceLanguage,
+  SurfacePosition,
 } from "./contract";
 export { DiffSurface, EditorSurface } from "./lazy-surface";
