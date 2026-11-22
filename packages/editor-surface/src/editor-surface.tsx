@@ -6,8 +6,9 @@ import {
   type CodeEditorHandle,
   CodeEditorStatus,
 } from "@nuvui/editor/code";
-import { type KeyboardEvent, useImperativeHandle, useMemo, useRef } from "react";
+import { type KeyboardEvent, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import type { EditorSurfaceProps, SurfaceLanguage } from "./contract";
+import { debugExtensions, setDebugMarks } from "./debug-gutter";
 import { languageExtensions } from "./language";
 
 const isSave = (event: KeyboardEvent): boolean =>
@@ -37,6 +38,9 @@ export function EditorSurface({
   onSave,
   diagnostics,
   language,
+  breakpoints,
+  onToggleBreakpoint,
+  executionLine,
   "aria-label": label,
   styleNonce,
   ref,
@@ -46,7 +50,35 @@ export function EditorSurface({
   // document shown now, which change with it.
   const currentLanguage = useRef<SurfaceLanguage | undefined>(language);
   currentLanguage.current = language;
-  const extensions = useMemo(() => languageExtensions(() => currentLanguage.current), []);
+  const currentToggle = useRef(onToggleBreakpoint);
+  currentToggle.current = onToggleBreakpoint;
+  const extensions = useMemo(
+    () => [
+      ...languageExtensions(() => currentLanguage.current),
+      ...debugExtensions(() => currentToggle.current),
+    ],
+    [],
+  );
+
+  // The document's breakpoints and paused line, put in the editor once it's
+  // drawn (and again when it shows another document).
+  const lines = (breakpoints ?? []).join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `lines` stands for `breakpoints`; `path` is which document is shown
+  useEffect(() => {
+    const marks = {
+      breakpoints: lines ? lines.split(",").map(Number) : [],
+      execution: executionLine ?? null,
+    };
+    let frames = 0;
+    let request = 0;
+    const apply = () => {
+      const view = editor.current?.view;
+      if (view) view.dispatch({ effects: setDebugMarks.of(marks) });
+      else if (++frames < READY_FRAMES) request = requestAnimationFrame(apply);
+    };
+    apply();
+    return () => cancelAnimationFrame(request);
+  }, [lines, executionLine, path, documentId]);
 
   useImperativeHandle(ref, () => {
     // The editor draws its view a render after it mounts, so a document opened

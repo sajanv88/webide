@@ -43,3 +43,34 @@
     white-space: pre-wrap;
   }
 }
+
+// The breakpoint gutter: a dot on each line with a breakpoint.
+.editor-surface-breakpoints {
+  min-inline-size: calc(var(--spacing) * 4);
+  cursor: pointer;
+}
+
+.editor-surface-breakpoint {
+  display: inline-block;
+  inline-size: calc(var(--spacing) * 2.5);
+  block-size: calc(var(--spacing) * 2.5);
+  margin-inline-start: var(--spacing);
+  border-radius: var(--radius-full);
+  background-color: var(--color-danger);
+
+  // In forced colors the background goes: keep a mark.
+  @media (forced-colors: active) {
+    border: 2px solid CanvasText;
+  }
+}
+
+// The line the debugger is paused on: tinted, and outlined in forced colors.
+// It's usually the cursor's line too, whose tint CodeMirror sets with up to
+// three classes in styles it adds after ours: this one needs four to show.
+.editor-surface__code .cm-editor .cm-line.editor-surface-execution {
+  background-color: color-mix(in oklch, var(--color-warning) 22%, transparent);
+
+  @media (forced-colors: active) {
+    outline: 2px solid Highlight;
+  }
+}

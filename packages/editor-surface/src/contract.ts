@@ -39,6 +39,12 @@ export interface EditorSurfaceProps {
   readonly diagnostics?: readonly SurfaceDiagnostic[];
   /** Completion, hover and go to definition, from a language server. */
   readonly language?: SurfaceLanguage | undefined;
+  /** Lines (1-based) with a breakpoint, marked in a gutter. */
+  readonly breakpoints?: readonly number[] | undefined;
+  /** A press in the gutter, or F9: toggles that line's breakpoint. Without it, there are none. */
+  readonly onToggleBreakpoint?: ((line: number) => void) | undefined;
+  /** The line (1-based) the debugger is paused on, highlighted. */
+  readonly executionLine?: number | null | undefined;
   /** What a screen reader calls the text, such as the file's path. Required. */
   readonly "aria-label": string;
   /** The page's CSP nonce, for the styles the editor adds as it runs. */
