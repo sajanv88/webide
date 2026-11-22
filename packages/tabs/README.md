@@ -1,6 +1,6 @@
 # @repo/tabs
 
-**Status:** Milestone 3.
+**Status:** Milestone 5.
 
 ## Purpose
 
@@ -20,6 +20,9 @@ question asked before closing one that has.
 - A file chosen in the explorer (`explorer.fileActivated`) opens in a new tab
   next to the active one, or activates the tab it's already in. Two open files
   with the same name are labelled with their folders.
+- Open files are announced, for the language server: `document.opened` once
+  a file's text is read, `document.changed` as it's typed or reloaded,
+  `document.closed` when its tab goes.
 - A file asked for elsewhere (`file.openRequested`: a search result, Go to
   File) opens the same way, and the editor takes focus once it shows the
   file, with the cursor at the line and column given.
