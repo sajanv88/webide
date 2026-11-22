@@ -16,10 +16,16 @@ publish = false
 ide-core = { path = "crates/ide-core" }
 ide-fs = { path = "crates/ide-fs" }
 ide-ipc = { path = "crates/ide-ipc" }
+ide-search = { path = "crates/ide-search" }
 ide-watcher = { path = "crates/ide-watcher" }
 ide-workspace = { path = "crates/ide-workspace" }
 
 # External (Cargo.lock holds the exact patch)
+# ripgrep's own crates, for ide-search.
+grep-matcher = "0.1.9"
+grep-regex = "0.1.14"
+grep-searcher = "0.1.17"
+ignore = "0.4.34"
 # notify 8.2 underneath. (notify 9.0 and debouncer 0.8 were released on
 # 2026-11-21, under a day before this was added; same rule as pnpm's release-age gate.)
 notify-debouncer-full = { version = "0.7.0", default-features = false, features = ["macos_fsevent"] }

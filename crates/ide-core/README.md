@@ -1,6 +1,6 @@
 # ide-core
 
-**Status:** Phase 5.
+**Status:** Milestone 2.
 
 ## Purpose
 
@@ -12,7 +12,8 @@ runtime: everything here is data and pure functions.
 - `RelPath`: a validated workspace-relative path (`/`-separated, no `..`, no
   absolute or drive prefix, valid names for the OS via `NameRules`). It's the
   first path guard, applied before any IO.
-- `PathError`, `IdeError` (`IdeError::from_io` maps `std::io::Error` kinds).
+- `PathError`, `IdeError` (`IdeError::from_io` maps `std::io::Error` kinds;
+  `InvalidQuery` for a search that doesn't parse).
 - `WorkspaceRoot`, `RecentWorkspace`, `workspace::display_path` (drops the `\\?\` prefix).
 - `fs`: `FileNode`, `DirListing`, `ReadOutcome`, `ReadLimits`, `FileStamp`,
   `LineEnding`, `ReadOnlyReason`, `sort_nodes`, `detect_line_ending`,
@@ -22,7 +23,13 @@ runtime: everything here is data and pure functions.
   (changes, possibly `rescan`; or failed), `WatchSink`, `WatchGuard` (dropping
   it stops the watch), `coalesce` (one change per path; over
   `MAX_CHANGES_PER_BATCH`, a rescan instead).
-- Ports: `WorkspaceFs`, `WorkspaceStore`, `FsWatcher`.
+- `search`: `TextQuery` (pattern, regex, case, whole word, include and
+  exclude globs, a file size limit), `TextSearchOutcome` of `FileMatches` of
+  `LineMatch` (line, column, a preview cut around the first match, and
+  `Span`s, all in UTF-16 units as JavaScript counts), `FileList`,
+  `CancelFlag`, `line_match`, and the limits `MAX_MATCHES` (10,000 lines),
+  `MAX_LISTED_FILES` (50,000), `MAX_PREVIEW_UNITS`.
+- Ports: `WorkspaceFs`, `WorkspaceStore`, `FsWatcher`, `WorkspaceSearch`.
 
 There's no `DocumentId` here: the backend identifies files by `RelPath`, and
 only the frontend's tabs need document ids (`@repo/tabs`).

@@ -9,6 +9,7 @@ use std::path::Path;
 use crate::IdeError;
 use crate::fs::{DirListing, FileStamp, ReadLimits, ReadOutcome};
 use crate::path::RelPath;
+use crate::search::{CancelFlag, FileList, TextQuery, TextSearchOutcome};
 use crate::settings::{Settings, SettingsPatch};
 use crate::watch::{WatchGuard, WatchSink};
 use crate::workspace::{RecentWorkspace, WorkspaceRoot};
@@ -58,4 +59,19 @@ pub trait FsWatcher: Send + Sync {
     /// Events go to `sink`, on another thread, until the guard is dropped.
     /// A watch that can't start, or stops working, reports `WatchEvent::Failed`.
     fn watch(&self, root: &WorkspaceRoot, sink: WatchSink) -> WatchGuard;
+}
+
+/// Searching a workspace. Both walks skip ignored files and the `.git` folder,
+/// never follow symlinks, and stop early once `cancel` is set.
+pub trait WorkspaceSearch: Send + Sync {
+    /// The lines that match `query`, in every file it covers.
+    fn search_text(
+        &self,
+        root: &WorkspaceRoot,
+        query: &TextQuery,
+        cancel: &CancelFlag,
+    ) -> Result<TextSearchOutcome, IdeError>;
+
+    /// Every file, for quick open.
+    fn list_files(&self, root: &WorkspaceRoot, cancel: &CancelFlag) -> Result<FileList, IdeError>;
 }

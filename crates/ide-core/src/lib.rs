@@ -7,13 +7,17 @@ pub mod error;
 pub mod fs;
 pub mod path;
 pub mod ports;
+pub mod search;
 pub mod settings;
 pub mod watch;
 pub mod workspace;
 
 pub use error::IdeError;
 pub use path::{NameRules, PathError, RelPath};
-pub use ports::{FsWatcher, WorkspaceFs, WorkspaceStore};
+pub use ports::{FsWatcher, WorkspaceFs, WorkspaceSearch, WorkspaceStore};
+pub use search::{
+    CancelFlag, FileList, FileMatches, LineMatch, Span, TextQuery, TextSearchOutcome,
+};
 pub use settings::{Settings, SettingsPatch, Theme};
 pub use watch::{FsChange, WatchEvent, WatchGuard, WatchSink};
 pub use workspace::{RecentWorkspace, WorkspaceRoot};
