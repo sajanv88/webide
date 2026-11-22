@@ -21,6 +21,7 @@
     "@repo/git": "workspace:*",
     "@repo/ipc": "workspace:*",
     "@repo/kernel": "workspace:*",
+    "@repo/lsp": "workspace:*",
     "@repo/search": "workspace:*",
     "@repo/settings": "workspace:*",
     "@repo/shell": "workspace:*",

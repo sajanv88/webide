@@ -1,6 +1,6 @@
 # ide-ipc
 
-**Status:** Milestone 4.
+**Status:** Milestone 5.
 
 ## Purpose
 
@@ -22,36 +22,43 @@ ts-rs.
 
 ## Commands
 
-| Command                 | Args                                   | Output                                                 |
-| ----------------------- | -------------------------------------- | ------------------------------------------------------ |
-| `app_info`              | none                                   | `AppInfoDto` (name and version from tauri.conf.json)   |
-| `pick_workspace`        | none                                   | `WorkspaceDto \| null`, after the native folder picker |
-| `open_recent_workspace` | `{ path }` (from `recent_workspaces`)  | `WorkspaceDto`                                         |
-| `recent_workspaces`     | none                                   | `RecentWorkspaceDto[]`                                 |
-| `current_workspace`     | none                                   | `WorkspaceDto \| null`                                 |
-| `list_directory`        | `{ workspaceId, path }`                | `DirListingDto`                                        |
-| `read_file`             | `{ workspaceId, path }`                | `ReadFileDto` (switch on `kind`)                       |
-| `write_file`            | `{ workspaceId, path, text }`          | `FileStampDto`                                         |
-| `get_settings`          | none                                   | `SettingsDto`                                          |
-| `update_settings`       | `SettingsPatchDto`                     | `SettingsDto`                                          |
-| `search_text`           | `SearchTextArgs`                       | `TextSearchDto` (a newer search cancels this one)      |
-| `list_files`            | `{ workspaceId }`                      | `FileListDto`, for quick open                          |
-| `git_state`             | `{ workspaceId }`                      | `GitStateDto` (switch on `kind`)                       |
-| `git_diff`              | `{ workspaceId, path, side }`          | `GitDiffDto` (switch on `kind`)                        |
-| `git_stage`             | `{ workspaceId, paths }`               | nothing                                                |
-| `git_unstage`           | `{ workspaceId, paths }`               | nothing                                                |
-| `git_discard`           | `{ workspaceId, paths }`               | nothing                                                |
-| `git_commit`            | `{ workspaceId, message }`             | nothing                                                |
-| `git_branches`          | `{ workspaceId }`                      | `GitBranchDto[]`                                       |
-| `git_switch_branch`     | `{ workspaceId, name, create }`        | nothing                                                |
-| `git_init`              | `{ workspaceId }`                      | nothing                                                |
-| `terminal_open`         | `{ workspaceId, cols, rows, channel }` | `TerminalDto`; `TerminalEventDto`s on the channel      |
-| `terminal_write`        | `{ id, data }`                         | nothing                                                |
-| `terminal_resize`       | `{ id, cols, rows }`                   | nothing                                                |
-| `terminal_close`        | `{ id }`                               | nothing; ends the shell                                |
-| `subscribe_events`      | `{ channel }` (a Tauri `Channel`)      | nothing; `BackendEventDto`s arrive on the channel      |
-| `set_close_guard`       | `{ unsaved }`                          | nothing                                                |
-| `close_window`          | none                                   | nothing; closes the calling window without asking      |
+| Command                  | Args                                     | Output                                                 |
+| ------------------------ | ---------------------------------------- | ------------------------------------------------------ |
+| `app_info`               | none                                     | `AppInfoDto` (name and version from tauri.conf.json)   |
+| `pick_workspace`         | none                                     | `WorkspaceDto \| null`, after the native folder picker |
+| `open_recent_workspace`  | `{ path }` (from `recent_workspaces`)    | `WorkspaceDto`                                         |
+| `recent_workspaces`      | none                                     | `RecentWorkspaceDto[]`                                 |
+| `current_workspace`      | none                                     | `WorkspaceDto \| null`                                 |
+| `list_directory`         | `{ workspaceId, path }`                  | `DirListingDto`                                        |
+| `read_file`              | `{ workspaceId, path }`                  | `ReadFileDto` (switch on `kind`)                       |
+| `write_file`             | `{ workspaceId, path, text }`            | `FileStampDto`                                         |
+| `get_settings`           | none                                     | `SettingsDto`                                          |
+| `update_settings`        | `SettingsPatchDto`                       | `SettingsDto`                                          |
+| `search_text`            | `SearchTextArgs`                         | `TextSearchDto` (a newer search cancels this one)      |
+| `list_files`             | `{ workspaceId }`                        | `FileListDto`, for quick open                          |
+| `git_state`              | `{ workspaceId }`                        | `GitStateDto` (switch on `kind`)                       |
+| `git_diff`               | `{ workspaceId, path, side }`            | `GitDiffDto` (switch on `kind`)                        |
+| `git_stage`              | `{ workspaceId, paths }`                 | nothing                                                |
+| `git_unstage`            | `{ workspaceId, paths }`                 | nothing                                                |
+| `git_discard`            | `{ workspaceId, paths }`                 | nothing                                                |
+| `git_commit`             | `{ workspaceId, message }`               | nothing                                                |
+| `git_branches`           | `{ workspaceId }`                        | `GitBranchDto[]`                                       |
+| `git_switch_branch`      | `{ workspaceId, name, create }`          | nothing                                                |
+| `git_init`               | `{ workspaceId }`                        | nothing                                                |
+| `terminal_open`          | `{ workspaceId, cols, rows, channel }`   | `TerminalDto`; `TerminalEventDto`s on the channel      |
+| `terminal_write`         | `{ id, data }`                           | nothing                                                |
+| `terminal_resize`        | `{ id, cols, rows }`                     | nothing                                                |
+| `terminal_close`         | `{ id }`                                 | nothing; ends the shell                                |
+| `lsp_open`, `lsp_change` | `{ workspaceId, path, text }`            | nothing                                                |
+| `lsp_close`              | `{ workspaceId, path }`                  | nothing                                                |
+| `lsp_problems`           | `{ workspaceId, path }`                  | `ProblemDto[]`                                         |
+| `lsp_completions`        | `{ workspaceId, path, line, character }` | `CompletionsDto`                                       |
+| `lsp_hover`              | `{ workspaceId, path, line, character }` | `HoverDto \| null`                                     |
+| `lsp_definition`         | `{ workspaceId, path, line, character }` | `DefinitionDto[]` (switch on `kind`)                   |
+| `lsp_restart`            | `{ workspaceId }`                        | nothing; it starts again when next needed              |
+| `subscribe_events`       | `{ channel }` (a Tauri `Channel`)        | nothing; `BackendEventDto`s arrive on the channel      |
+| `set_close_guard`        | `{ unsaved }`                            | nothing                                                |
+| `close_window`           | none                                     | nothing; closes the calling window without asking      |
 
 ## Events (backend → webview)
 
@@ -64,6 +71,8 @@ loading drops the old one.
   workspace (`ide-watcher`), started when a workspace opens and stopped when
   another does.
 - `watchFailed { workspaceId, message }`.
+- `languageStatus { workspaceId, status }`: the workspace's language server is
+  `starting`, `ready`, or `failed` (with why).
 - `closeRequested`: the window (or, on macOS, the app) is closing while the
   page has said `set_close_guard({ unsaved: true })`. The close is held; the
   page asks the person, then calls `close_window`. With nothing unsaved, or no
@@ -86,13 +95,17 @@ The rules that keep the webview contained:
   10 at once; a write is at most 1 MiB. Each belongs to the workspace it was
   opened in: opening another workspace, or the page starting again, ends
   them, and one still starting when the workspace changes is refused.
+- The language server starts when a file it handles is first opened, once per
+  workspace; one that couldn't start isn't tried again until the workspace
+  opens again or `lsp_restart`. Another workspace, or the page starting
+  again, stops it. Files it doesn't handle get empty answers.
 - Each command has its own `allow-*` permission. The main window's capability
   grants the `ipc-commands` set and nothing else.
 
 ## Public API
 
-- `run(context, services)`, with `Services { fs, workspace, watcher, search, git, terminals }`
-  and `AppPaths`.
+- `run(context, services)`, with `Services { fs, workspace, watcher, search, git, terminals,
+  languages }` and `AppPaths` (`config_dir`, `resource_dir`).
 - `COMMAND_NAMES`, `IpcError`, `IpcErrorCode`, `MAIN_WINDOW`.
 
 ## May depend on

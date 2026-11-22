@@ -21,6 +21,8 @@ Status and plan: [checklist.md](checklist.md), from [plan.md](plan.md).
 | Ctrl+Shift+G                | Show source control       |
 | Ctrl+`                      | Toggle the terminal       |
 | Ctrl+Shift+`                | New terminal              |
+| F12, Ctrl+click             | Go to definition          |
+| Ctrl+Space                  | Show completions          |
 | Ctrl+B                      | Show or hide the side bar |
 | Ctrl+,                      | Settings                  |
 
@@ -34,6 +36,12 @@ the menus and the palette show them from there.
 - Node 24+, pnpm (the version in `packageManager` is fetched by pnpm itself)
 - Rust via rustup (the toolchain in `rust-toolchain.toml` is installed on first use)
 - The [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS
+
+`pnpm build` (and `pnpm dev`) first copies the TypeScript language server for
+your platform, from the app's own `typescript` dependency, into
+`apps/desktop/src-tauri/resources/`, which the app bundles. Run `pnpm build`
+once before `cargo` builds the app on its own (Tauri checks the resources
+exist).
 
 ## Commands
 
@@ -51,11 +59,11 @@ the menus and the palette show them from there.
 
 ```
 crates/            Rust: ide-core, ide-fs, ide-watcher, ide-workspace, ide-search, ide-git,
-                   ide-terminal, ide-ipc
+                   ide-terminal, ide-lsp, ide-ipc
 apps/desktop/      The Vite frontend (src/) and the Tauri composition root (src-tauri/)
 packages/          Frontend modules: contracts, kernel, ipc, shell, explorer, tabs,
-                   editor-surface, commands, settings, search, git, terminal, and the
-                   shared tsconfig
+                   editor-surface, commands, settings, search, git, terminal, lsp, and
+                   the shared tsconfig
 xtask/             cargo xtask check-boundaries, check-csp, check-contracts
 ```
 

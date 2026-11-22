@@ -11,8 +11,10 @@ import type {
   AppCommandId,
   AppEvents,
   AppInfoDto,
+  EditorProblem,
   GitPort,
   IpcError,
+  LanguagePort,
   RecentWorkspaceDto,
   SearchPort,
   TerminalPort,
@@ -39,6 +41,14 @@ import {
   gitUnstage,
   listDirectory,
   listFiles,
+  lspChange,
+  lspClose,
+  lspCompletions,
+  lspDefinition,
+  lspHover,
+  lspOpen,
+  lspProblems,
+  lspRestart,
   openRecentWorkspace,
   openTerminal,
   pickWorkspace,
@@ -53,6 +63,7 @@ import {
   writeTerminal,
 } from "@repo/ipc";
 import { createCommandRegistry, createEventBus } from "@repo/kernel";
+import { createLanguageClient, LanguageStatusItem } from "@repo/lsp";
 import { QuickOpen, SearchView } from "@repo/search";
 import { SettingsDialog } from "@repo/settings";
 import { type MenuSpec, Shell, type SidebarView } from "@repo/shell";
@@ -154,6 +165,9 @@ export function App() {
               description: `Watching ${current.name} for changes failed: ${event.message}. Use Refresh Explorer to see them.`,
             });
           }
+          break;
+        case "languageStatus":
+          if (event.workspaceId === current?.id) bus.emit("language.status", event.status);
           break;
         case "closeRequested":
           void settleUnsaved().then(async (settled) => {
@@ -314,6 +328,39 @@ export function App() {
       close: closeTerminal,
     };
   }, [workspace]);
+
+  // The language server for TypeScript and JavaScript files, in the open folder.
+  const languagePort = useMemo<LanguagePort | null>(() => {
+    if (!workspace) return null;
+    const workspaceId = workspace.id;
+    return {
+      open: (path, text) => lspOpen({ workspaceId, path, text }),
+      change: (path, text) => lspChange({ workspaceId, path, text }),
+      close: (path) => lspClose({ workspaceId, path }),
+      problems: (path) => lspProblems({ workspaceId, path }),
+      completions: (path, line, character) =>
+        lspCompletions({ workspaceId, path, line, character }),
+      hover: (path, line, character) => lspHover({ workspaceId, path, line, character }),
+      definition: (path, line, character) => lspDefinition({ workspaceId, path, line, character }),
+      restart: () => lspRestart({ workspaceId }),
+    };
+  }, [workspace]);
+  const language = useMemo(
+    () => languagePort && createLanguageClient(languagePort, bus),
+    [languagePort],
+  );
+  useEffect(() => () => language?.dispose(), [language]);
+  // The problems of each open file, for its editor.
+  const [problems, setProblems] = useState<ReadonlyMap<string, readonly EditorProblem[]>>(
+    new Map(),
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new client (another folder) starts with no problems
+  useEffect(() => {
+    setProblems(new Map());
+    return bus.on("language.problems", ({ path, problems: found }) =>
+      setProblems((now) => new Map(now).set(path, found)),
+    );
+  }, [language]);
 
   const views = useMemo<SidebarView[]>(
     () =>
@@ -478,6 +525,10 @@ export function App() {
                   {...document}
                   aria-label={`Text of ${document.path}`}
                   styleNonce={styleNonce}
+                  diagnostics={problems.get(document.path) ?? []}
+                  language={
+                    language?.handles(document.path) ? language.features(document.path) : undefined
+                  }
                 />
               )}
             />
@@ -488,6 +539,9 @@ export function App() {
         statusBar={
           <>
             {git ? <BranchStatus store={git} registry={registry} /> : null}
+            {language ? (
+              <LanguageStatusItem client={language} registry={registry} bus={bus} />
+            ) : null}
             <span>{workspace ? workspace.path : "No folder open"}</span>
             {info ? <span>Version {info.version}</span> : null}
           </>

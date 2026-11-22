@@ -1,6 +1,6 @@
 # ide-core
 
-**Status:** Milestone 4.
+**Status:** Milestone 5.
 
 ## Purpose
 
@@ -40,6 +40,12 @@ runtime: everything here is data and pure functions.
   (output as text, or the exit), `TerminalSink`, `Utf8Stream` (bytes to text
   without splitting a character), `MAX_TERMINALS` (10), `MAX_WRITE_BYTES`
   (1 MiB), and the ports `TerminalHost` and `TerminalSession`.
+- `language`: `TextPosition` and `TextRange` (0-based lines, UTF-16
+  columns), `Problem` and `Severity`, `Completion`/`Completions` and
+  `CompletionKind`, `HoverText`, `Definition` (in the workspace, or outside
+  it), `LanguageStatus`, `LanguageSink`, `script_language` (a JavaScript or
+  TypeScript file's LSP language id), and the ports `LanguageServers` and
+  `LanguageServer`.
 - Ports: `WorkspaceFs`, `WorkspaceStore`, `FsWatcher`, `WorkspaceSearch`,
   `GitClient`.
 
