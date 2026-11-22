@@ -14,8 +14,9 @@ use crate::dto::{
     AppInfoDto, CloseGuardArgs, DirListingDto, FileListDto, FileStampDto, GitBranchDto,
     GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs,
     OpenRecentArgs, ReadFileDto, RecentWorkspaceDto, SearchTextArgs, SettingsDto, SettingsPatchDto,
-    SubscribeEventsArgs, TextSearchDto, WorkspaceArgs, WorkspaceDto, WorkspacePathArgs,
-    WriteFileArgs,
+    SubscribeEventsArgs, TerminalDto, TerminalEventDto, TerminalIdArgs, TerminalOpenArgs,
+    TerminalResizeArgs, TerminalWriteArgs, TextSearchDto, WorkspaceArgs, WorkspaceDto,
+    WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::IpcError;
 use crate::events::EventHub;
@@ -82,12 +83,16 @@ ipc_commands! {
         git_branches(WorkspaceArgs) -> Vec<GitBranchDto>;
         git_switch_branch(GitSwitchArgs) -> ();
         git_init(WorkspaceArgs) -> ();
+        terminal_write(TerminalWriteArgs) -> ();
+        terminal_resize(TerminalResizeArgs) -> ();
+        terminal_close(TerminalIdArgs) -> ();
     }
     custom {
         pick_workspace() -> Option<WorkspaceDto>;
         subscribe_events(SubscribeEventsArgs) -> ();
         set_close_guard(CloseGuardArgs) -> ();
         close_window() -> ();
+        terminal_open(TerminalOpenArgs) -> TerminalDto;
     }
 }
 
@@ -256,6 +261,40 @@ pub async fn git_switch_branch(state: Shared<'_>, args: GitSwitchArgs) -> Result
 #[tauri::command]
 pub async fn git_init(state: Shared<'_>, args: WorkspaceArgs) -> Result<(), IpcError> {
     run_blocking(&state, move |state| handlers::git_init(state, args)).await
+}
+
+#[tauri::command]
+pub async fn terminal_write(state: Shared<'_>, args: TerminalWriteArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::terminal_write(state, args)).await
+}
+
+#[tauri::command]
+pub async fn terminal_resize(state: Shared<'_>, args: TerminalResizeArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::terminal_resize(state, args)).await
+}
+
+#[tauri::command]
+pub async fn terminal_close(state: Shared<'_>, args: TerminalIdArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::terminal_close(state, args)).await
+}
+
+/// Starts a terminal; its output and its exit arrive on the channel passed.
+#[tauri::command]
+pub async fn terminal_open(
+    webview: Webview,
+    state: Shared<'_>,
+    args: TerminalOpenArgs,
+) -> Result<TerminalDto, IpcError> {
+    let channel = args.channel.channel_on(webview);
+    let sink: ide_core::TerminalSink = Arc::new(move |event| {
+        // A page that's gone has nobody to tell.
+        let _ = channel.send(TerminalEventDto::from(event));
+    });
+    let (workspace_id, cols, rows) = (args.workspace_id, args.cols, args.rows);
+    run_blocking(&state, move |state| {
+        handlers::terminal_open(state, &workspace_id, cols, rows, sink)
+    })
+    .await
 }
 
 /// Sends backend events (file changes, the close request) to the calling page,

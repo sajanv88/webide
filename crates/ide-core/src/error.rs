@@ -30,6 +30,9 @@ pub enum IdeError {
     InvalidSettings(String),
     #[error("invalid search: {0}")]
     InvalidQuery(String),
+    /// A value the operation can't take (a terminal size, too many terminals…).
+    #[error("{0}")]
+    InvalidArgument(String),
     /// Git refused or failed; git's own words.
     #[error("{0}")]
     Git(String),

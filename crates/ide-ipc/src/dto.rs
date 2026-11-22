@@ -14,7 +14,7 @@ use ide_core::git::{
 use ide_core::workspace::display_path;
 use ide_core::{
     FileList, FileMatches, FsChange, LineMatch, RecentWorkspace, RelPath, Settings, SettingsPatch,
-    Span, TextSearchOutcome, Theme,
+    Span, TerminalEvent, TextSearchOutcome, Theme,
 };
 use serde::{Deserialize, Serialize};
 use tauri::ipc::JavaScriptChannelId;
@@ -351,6 +351,27 @@ pub struct GitBranchDto {
     pub current: bool,
 }
 
+/// A terminal that was started.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalDto {
+    pub id: u32,
+    /// The shell's name, for its tab: `pwsh`, `zsh`.
+    pub shell: String,
+}
+
+/// What a terminal sends on its channel.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum TerminalEventDto {
+    /// Text the shell wrote, with its escape sequences, for the terminal to draw.
+    #[serde(rename_all = "camelCase")]
+    Output { data: String },
+    /// The shell ended. Nothing follows.
+    #[serde(rename_all = "camelCase")]
+    Exited { code: Option<u32> },
+}
+
 // ---------- Arguments ----------
 
 #[derive(Debug, Clone, Deserialize, TS)]
@@ -461,6 +482,50 @@ impl std::fmt::Debug for SubscribeEventsArgs {
         f.debug_struct("SubscribeEventsArgs")
             .finish_non_exhaustive()
     }
+}
+
+/// Starts the person's shell in the open workspace's folder.
+#[derive(Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TerminalOpenArgs {
+    pub workspace_id: String,
+    pub cols: u16,
+    pub rows: u16,
+    /// A Tauri `Channel` for `TerminalEventDto`s.
+    #[ts(type = "unknown")]
+    pub channel: JavaScriptChannelId,
+}
+
+impl std::fmt::Debug for TerminalOpenArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TerminalOpenArgs")
+            .field("workspace_id", &self.workspace_id)
+            .field("cols", &self.cols)
+            .field("rows", &self.rows)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Keystrokes or pasted text for a terminal.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TerminalWriteArgs {
+    pub id: u32,
+    pub data: String,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TerminalResizeArgs {
+    pub id: u32,
+    pub cols: u16,
+    pub rows: u16,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TerminalIdArgs {
+    pub id: u32,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, TS)]
@@ -765,6 +830,15 @@ impl From<GitBranch> for GitBranchDto {
         Self {
             name: branch.name,
             current: branch.current,
+        }
+    }
+}
+
+impl From<TerminalEvent> for TerminalEventDto {
+    fn from(event: TerminalEvent) -> Self {
+        match event {
+            TerminalEvent::Output(data) => Self::Output { data },
+            TerminalEvent::Exited { code } => Self::Exited { code },
         }
     }
 }

@@ -1,0 +1,17 @@
+[package]
+name = "ide-terminal"
+description = "Terminals: the person's shell over the system's pseudo-terminal."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+ide-core = { workspace = true }
+portable-pty = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

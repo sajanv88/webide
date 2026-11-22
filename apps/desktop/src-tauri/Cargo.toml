@@ -14,6 +14,7 @@ ide-fs = { workspace = true }
 ide-git = { workspace = true }
 ide-ipc = { workspace = true }
 ide-search = { workspace = true }
+ide-terminal = { workspace = true }
 ide-watcher = { workspace = true }
 ide-workspace = { workspace = true }
 # Needed here because tauri::generate_context!() expands in this crate.

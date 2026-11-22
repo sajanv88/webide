@@ -8,17 +8,20 @@ use ide_core::git::{
     DiffSide, DiffTexts, GitBranch, GitChange, GitFileStatus, GitHead, GitState, GitStatus,
 };
 use ide_core::search::line_match;
+use ide_core::terminal::{MAX_TERMINALS, MAX_WRITE_BYTES};
 use ide_core::{
     CancelFlag, FileList, FileMatches, FsChange, FsWatcher, GitClient, IdeError, RecentWorkspace,
-    RelPath, Settings, SettingsPatch, TextQuery, TextSearchOutcome, WatchEvent, WatchGuard,
-    WatchSink, WorkspaceFs, WorkspaceRoot, WorkspaceSearch, WorkspaceStore,
+    RelPath, Settings, SettingsPatch, TerminalEvent, TerminalHost, TerminalSession, TerminalSink,
+    TerminalSize, TextQuery, TextSearchOutcome, WatchEvent, WatchGuard, WatchSink, WorkspaceFs,
+    WorkspaceRoot, WorkspaceSearch, WorkspaceStore,
 };
 use serde_json::json;
 
 use crate::dto::{
     AppInfoDto, BackendEventDto, CloseGuardArgs, DiffSideDto, GitCommitArgs, GitDiffArgs,
     GitPathsArgs, GitSwitchArgs, OpenRecentArgs, ReadFileDto, SearchTextArgs, SettingsPatchDto,
-    WorkspaceArgs, WorkspacePathArgs, WriteFileArgs,
+    TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs, WorkspaceArgs, WorkspacePathArgs,
+    WriteFileArgs,
 };
 use crate::error::{IpcError, IpcErrorCode};
 use crate::handlers::{self, IpcState, Services};
@@ -271,6 +274,67 @@ impl GitClient for FakeGit {
     }
 }
 
+/// Records what happens to each terminal; says hello on start.
+#[derive(Default)]
+struct FakeTerminals {
+    log: Arc<Mutex<Vec<String>>>,
+}
+
+struct FakeSession {
+    n: usize,
+    log: Arc<Mutex<Vec<String>>>,
+}
+
+impl TerminalHost for FakeTerminals {
+    fn spawn(
+        &self,
+        cwd: &Path,
+        size: TerminalSize,
+        sink: TerminalSink,
+    ) -> Result<Box<dyn TerminalSession>, IdeError> {
+        let mut log = self.log.lock().unwrap();
+        let n = log.iter().filter(|line| line.starts_with("spawn")).count() + 1;
+        log.push(format!(
+            "spawn {n} in {} at {}x{}",
+            cwd.file_name().unwrap().to_string_lossy(),
+            size.cols,
+            size.rows
+        ));
+        sink(TerminalEvent::Output("hello".into()));
+        Ok(Box::new(FakeSession {
+            n,
+            log: Arc::clone(&self.log),
+        }))
+    }
+}
+
+impl TerminalSession for FakeSession {
+    fn write(&self, data: &[u8]) -> Result<(), IdeError> {
+        self.log.lock().unwrap().push(format!(
+            "write {} {}",
+            self.n,
+            String::from_utf8_lossy(data)
+        ));
+        Ok(())
+    }
+    fn resize(&self, size: TerminalSize) -> Result<(), IdeError> {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("resize {} {}x{}", self.n, size.cols, size.rows));
+        Ok(())
+    }
+    fn shell(&self) -> &str {
+        "fakesh"
+    }
+}
+
+impl Drop for FakeSession {
+    fn drop(&mut self) {
+        self.log.lock().unwrap().push(format!("end {}", self.n));
+    }
+}
+
 fn folder(name: &str) -> PathBuf {
     std::env::temp_dir().join(name)
 }
@@ -282,6 +346,7 @@ struct Fixture {
     watcher: Arc<FakeWatcher>,
     search: Arc<FakeSearch>,
     git: Arc<FakeGit>,
+    terminals: Arc<FakeTerminals>,
     /// What was sent to the webview.
     emitted: Arc<Mutex<Vec<BackendEventDto>>>,
 }
@@ -306,12 +371,14 @@ fn fixture() -> Fixture {
     let watcher = Arc::new(FakeWatcher::default());
     let search = Arc::new(FakeSearch::default());
     let git = Arc::new(FakeGit::default());
+    let terminals = Arc::new(FakeTerminals::default());
     let services = Services {
         fs: fs.clone(),
         workspace: store.clone(),
         watcher: watcher.clone(),
         search: search.clone(),
         git: git.clone(),
+        terminals: terminals.clone(),
     };
     let info = AppInfoDto {
         name: "test".to_owned(),
@@ -327,6 +394,7 @@ fn fixture() -> Fixture {
         watcher,
         search,
         git,
+        terminals,
         emitted,
     }
 }
@@ -785,4 +853,133 @@ fn git_state_has_the_shape_the_frontend_expects() {
         serde_json::from_value(json!({ "workspaceId": "1", "path": "a", "side": "unstaged" }))
             .unwrap();
     assert_eq!(args.side, DiffSideDto::Unstaged);
+}
+
+fn collect() -> (TerminalSink, Arc<Mutex<Vec<TerminalEvent>>>) {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let into = Arc::clone(&seen);
+    (
+        Arc::new(move |event| into.lock().unwrap().push(event)),
+        seen,
+    )
+}
+
+#[test]
+fn terminals_open_in_the_workspace_and_take_input() {
+    let fx = fixture();
+    let (sink, seen) = collect();
+    assert_eq!(
+        code(handlers::terminal_open(
+            &fx.state,
+            "1",
+            80,
+            24,
+            sink.clone()
+        )),
+        IpcErrorCode::NoWorkspace
+    );
+    let ws = handlers::open_picked(&fx.state, &folder("alpha")).unwrap();
+    // A size no terminal has never reaches the system.
+    assert_eq!(
+        code(handlers::terminal_open(
+            &fx.state,
+            &ws.id,
+            0,
+            24,
+            sink.clone()
+        )),
+        IpcErrorCode::InvalidArgument
+    );
+    let term = handlers::terminal_open(&fx.state, &ws.id, 80, 24, sink).unwrap();
+    assert_eq!(term.shell, "fakesh");
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [TerminalEvent::Output("hello".into())]
+    );
+
+    handlers::terminal_write(
+        &fx.state,
+        TerminalWriteArgs {
+            id: term.id,
+            data: "ls\r".into(),
+        },
+    )
+    .unwrap();
+    handlers::terminal_resize(
+        &fx.state,
+        TerminalResizeArgs {
+            id: term.id,
+            cols: 100,
+            rows: 30,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        code(handlers::terminal_write(
+            &fx.state,
+            TerminalWriteArgs {
+                id: term.id,
+                data: "x".repeat(MAX_WRITE_BYTES + 1),
+            },
+        )),
+        IpcErrorCode::InvalidArgument
+    );
+    handlers::terminal_close(&fx.state, TerminalIdArgs { id: term.id }).unwrap();
+    assert_eq!(
+        code(handlers::terminal_write(
+            &fx.state,
+            TerminalWriteArgs {
+                id: term.id,
+                data: "x".into(),
+            },
+        )),
+        IpcErrorCode::NotFound
+    );
+    assert_eq!(
+        *fx.terminals.log.lock().unwrap(),
+        [
+            "spawn 1 in alpha at 80x24",
+            "write 1 ls\r",
+            "resize 1 100x30",
+            "end 1"
+        ]
+    );
+}
+
+#[test]
+fn another_workspace_or_too_many_terminals_end_or_refuse_them() {
+    let fx = fixture();
+    let ws = handlers::open_picked(&fx.state, &folder("alpha")).unwrap();
+    for _ in 0..MAX_TERMINALS {
+        handlers::terminal_open(&fx.state, &ws.id, 80, 24, collect().0).unwrap();
+    }
+    assert_eq!(
+        code(handlers::terminal_open(
+            &fx.state,
+            &ws.id,
+            80,
+            24,
+            collect().0
+        )),
+        IpcErrorCode::InvalidArgument
+    );
+    // Opening another folder ends the old one's terminals.
+    handlers::open_picked(&fx.state, &folder("beta")).unwrap();
+    let ended = fx
+        .terminals
+        .log
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|line| line.starts_with("end"))
+        .count();
+    assert_eq!(ended, MAX_TERMINALS);
+    // And the page starting again ends them too.
+    let ws = handlers::current_workspace(&fx.state).unwrap().unwrap();
+    handlers::terminal_open(&fx.state, &ws.id, 80, 24, collect().0).unwrap();
+    fx.state.close_terminals();
+    assert_eq!(
+        fx.terminals.log.lock().unwrap().last().map(String::as_str),
+        Some("end 11")
+    );
 }

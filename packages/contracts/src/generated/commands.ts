@@ -19,6 +19,11 @@ import type { SearchTextArgs } from "./SearchTextArgs";
 import type { SettingsDto } from "./SettingsDto";
 import type { SettingsPatchDto } from "./SettingsPatchDto";
 import type { SubscribeEventsArgs } from "./SubscribeEventsArgs";
+import type { TerminalDto } from "./TerminalDto";
+import type { TerminalIdArgs } from "./TerminalIdArgs";
+import type { TerminalOpenArgs } from "./TerminalOpenArgs";
+import type { TerminalResizeArgs } from "./TerminalResizeArgs";
+import type { TerminalWriteArgs } from "./TerminalWriteArgs";
 import type { TextSearchDto } from "./TextSearchDto";
 import type { WorkspaceArgs } from "./WorkspaceArgs";
 import type { WorkspaceDto } from "./WorkspaceDto";
@@ -47,10 +52,14 @@ export interface CommandMap {
   git_branches: { args: WorkspaceArgs; output: Array<GitBranchDto> };
   git_switch_branch: { args: GitSwitchArgs; output: null };
   git_init: { args: WorkspaceArgs; output: null };
+  terminal_write: { args: TerminalWriteArgs; output: null };
+  terminal_resize: { args: TerminalResizeArgs; output: null };
+  terminal_close: { args: TerminalIdArgs; output: null };
   pick_workspace: { args: null; output: WorkspaceDto | null };
   subscribe_events: { args: SubscribeEventsArgs; output: null };
   set_close_guard: { args: CloseGuardArgs; output: null };
   close_window: { args: null; output: null };
+  terminal_open: { args: TerminalOpenArgs; output: TerminalDto };
 }
 
 export type CommandName = keyof CommandMap;

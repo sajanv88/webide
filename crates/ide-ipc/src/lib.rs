@@ -64,6 +64,12 @@ where
             {
                 hub.reset();
             }
+            // Its terminals were the old page's: end them.
+            if payload.event() == PageLoadEvent::Started
+                && let Some(state) = webview.try_state::<Arc<IpcState>>()
+            {
+                state.close_terminals();
+            }
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event

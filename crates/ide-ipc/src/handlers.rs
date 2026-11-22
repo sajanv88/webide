@@ -1,21 +1,25 @@
 //! What each command does, as plain functions over [`IpcState`].
 //! No Tauri here, so they're tested with fake ports.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
+use ide_core::terminal::{MAX_TERMINALS, MAX_WRITE_BYTES};
 use ide_core::workspace::display_path;
 use ide_core::{
-    CancelFlag, FsWatcher, GitClient, IdeError, RelPath, TextQuery, WatchEvent, WatchGuard,
-    WatchSink, WorkspaceFs, WorkspaceRoot, WorkspaceSearch, WorkspaceStore,
+    CancelFlag, FsWatcher, GitClient, IdeError, RelPath, TerminalHost, TerminalSession,
+    TerminalSink, TerminalSize, TextQuery, WatchEvent, WatchGuard, WatchSink, WorkspaceFs,
+    WorkspaceRoot, WorkspaceSearch, WorkspaceStore,
 };
 
 use crate::dto::{
     AppInfoDto, BackendEventDto, DirListingDto, FileListDto, FileStampDto, GitBranchDto,
     GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs,
     OpenRecentArgs, ReadFileDto, RecentWorkspaceDto, SearchTextArgs, SettingsDto, SettingsPatchDto,
-    TextSearchDto, WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
+    TerminalDto, TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs, TextSearchDto,
+    WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::IpcError;
 
@@ -27,6 +31,7 @@ pub struct Services {
     pub watcher: Arc<dyn FsWatcher>,
     pub search: Arc<dyn WorkspaceSearch>,
     pub git: Arc<dyn GitClient>,
+    pub terminals: Arc<dyn TerminalHost>,
 }
 
 impl std::fmt::Debug for Services {
@@ -55,6 +60,9 @@ pub struct IpcState {
     watch: Mutex<Option<WatchGuard>>,
     /// The text search running now, if any. A new one, or a new workspace, cancels it.
     search: Mutex<Option<CancelFlag>>,
+    /// Open terminals by id. Dropping one ends its shell.
+    terminals: Mutex<HashMap<u32, Box<dyn TerminalSession>>>,
+    next_terminal: AtomicU64,
 }
 
 impl std::fmt::Debug for IpcState {
@@ -75,7 +83,21 @@ impl IpcState {
             emit,
             watch: Mutex::new(None),
             search: Mutex::new(None),
+            terminals: Mutex::new(HashMap::new()),
+            next_terminal: AtomicU64::new(1),
         }
+    }
+
+    /// Ends every terminal: another workspace opened, or the page started again.
+    pub fn close_terminals(&self) {
+        let closing: Vec<_> = self
+            .terminals
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .drain()
+            .collect();
+        // Dropped outside the lock: ending a shell can take a moment.
+        drop(closing);
     }
 
     /// Cancels the running search, if any, and returns the flag for a new one.
@@ -100,6 +122,8 @@ impl IpcState {
         let mut watch = self.watch.lock().unwrap_or_else(PoisonError::into_inner);
         // Stop the old watch first, so its last events can't follow the new id.
         watch.take();
+        // Its terminals were in its folder.
+        self.close_terminals();
         if let Some(search) = self
             .search
             .lock()
@@ -345,4 +369,82 @@ pub fn git_switch_branch(state: &IpcState, args: GitSwitchArgs) -> Result<(), Ip
 pub fn git_init(state: &IpcState, args: WorkspaceArgs) -> Result<(), IpcError> {
     let root = state.root_for(&args.workspace_id)?;
     Ok(state.services.git.init(&root)?)
+}
+
+/// Starts the person's shell in the open workspace's folder; its output and
+/// its exit go to `sink`.
+pub fn terminal_open(
+    state: &IpcState,
+    workspace_id: &str,
+    cols: u16,
+    rows: u16,
+    sink: TerminalSink,
+) -> Result<TerminalDto, IpcError> {
+    let root = state.root_for(workspace_id)?;
+    let size = TerminalSize::new(cols, rows)?;
+    if state
+        .terminals
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .len()
+        >= MAX_TERMINALS
+    {
+        return Err(IdeError::InvalidArgument(format!(
+            "at most {MAX_TERMINALS} terminals can be open at once"
+        ))
+        .into());
+    }
+    // The folder as people write it: shells don't take Windows' `\\?\` paths.
+    let cwd = std::path::PathBuf::from(root.display_path());
+    let session = state.services.terminals.spawn(&cwd, size, sink)?;
+    let id = u32::try_from(state.next_terminal.fetch_add(1, Ordering::Relaxed)).unwrap_or(u32::MAX);
+    let shell = session.shell().to_owned();
+    state
+        .terminals
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(id, session);
+    Ok(TerminalDto { id, shell })
+}
+
+fn with_terminal<T>(
+    state: &IpcState,
+    id: u32,
+    work: impl FnOnce(&dyn TerminalSession) -> Result<T, IdeError>,
+) -> Result<T, IpcError> {
+    let terminals = state
+        .terminals
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let session = terminals.get(&id).ok_or(IdeError::NotFound)?;
+    Ok(work(session.as_ref())?)
+}
+
+pub fn terminal_write(state: &IpcState, args: TerminalWriteArgs) -> Result<(), IpcError> {
+    if args.data.len() > MAX_WRITE_BYTES {
+        return Err(IdeError::InvalidArgument(format!(
+            "at most {MAX_WRITE_BYTES} bytes can be sent to a terminal at once"
+        ))
+        .into());
+    }
+    with_terminal(state, args.id, |session| {
+        session.write(args.data.as_bytes())
+    })
+}
+
+pub fn terminal_resize(state: &IpcState, args: TerminalResizeArgs) -> Result<(), IpcError> {
+    let size = TerminalSize::new(args.cols, args.rows)?;
+    with_terminal(state, args.id, |session| session.resize(size))
+}
+
+/// Ends a terminal's shell, and forgets it.
+pub fn terminal_close(state: &IpcState, args: TerminalIdArgs) -> Result<(), IpcError> {
+    let session = state
+        .terminals
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .remove(&args.id)
+        .ok_or(IdeError::NotFound)?;
+    drop(session);
+    Ok(())
 }

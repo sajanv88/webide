@@ -18,6 +18,7 @@ ide-fs = { path = "crates/ide-fs" }
 ide-git = { path = "crates/ide-git" }
 ide-ipc = { path = "crates/ide-ipc" }
 ide-search = { path = "crates/ide-search" }
+ide-terminal = { path = "crates/ide-terminal" }
 ide-watcher = { path = "crates/ide-watcher" }
 ide-workspace = { path = "crates/ide-workspace" }
 
@@ -27,6 +28,8 @@ grep-matcher = "0.1.9"
 grep-regex = "0.1.14"
 grep-searcher = "0.1.17"
 ignore = "0.4.34"
+# Pseudo-terminals (ConPTY, pty), for ide-terminal: wezterm's.
+portable-pty = "0.9.0"
 # notify 8.2 underneath. (notify 9.0 and debouncer 0.8 were released on
 # 2026-11-21, under a day before this was added; same rule as pnpm's release-age gate.)
 notify-debouncer-full = { version = "0.7.0", default-features = false, features = ["macos_fsevent"] }
