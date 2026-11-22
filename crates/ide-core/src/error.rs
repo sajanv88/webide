@@ -28,6 +28,8 @@ pub enum IdeError {
     NotARecentWorkspace,
     #[error("invalid settings: {0}")]
     InvalidSettings(String),
+    #[error("invalid search: {0}")]
+    InvalidQuery(String),
     #[error("{0}")]
     Io(String),
 }

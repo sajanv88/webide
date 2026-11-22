@@ -11,9 +11,10 @@ use tauri::{AppHandle, State, Webview, WebviewWindow, Wry};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::dto::{
-    AppInfoDto, CloseGuardArgs, DirListingDto, FileStampDto, OpenRecentArgs, ReadFileDto,
-    RecentWorkspaceDto, SettingsDto, SettingsPatchDto, SubscribeEventsArgs, WorkspaceDto,
-    WorkspacePathArgs, WriteFileArgs,
+    AppInfoDto, CloseGuardArgs, DirListingDto, FileListDto, FileStampDto, OpenRecentArgs,
+    ReadFileDto, RecentWorkspaceDto, SearchTextArgs, SettingsDto, SettingsPatchDto,
+    SubscribeEventsArgs, TextSearchDto, WorkspaceArgs, WorkspaceDto, WorkspacePathArgs,
+    WriteFileArgs,
 };
 use crate::error::IpcError;
 use crate::events::EventHub;
@@ -69,6 +70,8 @@ ipc_commands! {
         write_file(WriteFileArgs) -> FileStampDto;
         get_settings() -> SettingsDto;
         update_settings(SettingsPatchDto) -> SettingsDto;
+        search_text(SearchTextArgs) -> TextSearchDto;
+        list_files(WorkspaceArgs) -> FileListDto;
     }
     custom {
         pick_workspace() -> Option<WorkspaceDto>;
@@ -179,6 +182,19 @@ pub async fn update_settings(
     args: SettingsPatchDto,
 ) -> Result<SettingsDto, IpcError> {
     run_blocking(&state, move |state| handlers::update_settings(state, args)).await
+}
+
+#[tauri::command]
+pub async fn search_text(
+    state: Shared<'_>,
+    args: SearchTextArgs,
+) -> Result<TextSearchDto, IpcError> {
+    run_blocking(&state, move |state| handlers::search_text(state, args)).await
+}
+
+#[tauri::command]
+pub async fn list_files(state: Shared<'_>, args: WorkspaceArgs) -> Result<FileListDto, IpcError> {
+    run_blocking(&state, move |state| handlers::list_files(state, args)).await
 }
 
 /// Sends backend events (file changes, the close request) to the calling page,

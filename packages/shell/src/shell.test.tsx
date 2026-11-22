@@ -27,7 +27,16 @@ function renderShell() {
       title="Test IDE"
       registry={registry}
       menus={menus}
-      sidebar={<p>sidebar slot</p>}
+      views={[
+        {
+          id: "explorer",
+          title: "Explorer",
+          icon: <span>E</span>,
+          content: <p>explorer slot</p>,
+          command: "view.showExplorer",
+        },
+        { id: "search", title: "Search", icon: <span>S</span>, content: <p>search slot</p> },
+      ]}
       main={<p>main slot</p>}
       statusBar={<span>status slot</span>}
     />,
@@ -42,27 +51,64 @@ describe("Shell", () => {
     expect(screen.getByRole("main", { name: "Workspace" })).toBeTruthy();
     expect(screen.getByRole("contentinfo", { name: "Status bar" })).toBeTruthy();
     expect(screen.getByRole("menubar", { name: "Application" })).toBeTruthy();
-    expect(screen.getByRole("separator", { name: "Resize explorer" })).toBeTruthy();
+    expect(screen.getByRole("separator", { name: "Resize side bar" })).toBeTruthy();
     expect(screen.getByRole("heading", { level: 1, name: "Test IDE" })).toBeTruthy();
-    for (const slot of ["sidebar slot", "main slot", "status slot"]) {
+    for (const slot of ["explorer slot", "main slot", "status slot"]) {
       expect(screen.getByText(slot)).toBeTruthy();
     }
   });
 
-  it("without a sidebar, the work area fills the window and there's nothing to toggle", () => {
+  it("shows one view at a time, chosen in the activity bar, and keeps the others mounted", () => {
+    renderShell();
+    const bar = screen.getByRole("tablist", { name: "Views" });
+    expect(bar.getAttribute("aria-orientation")).toBe("vertical");
+    const explorer = within(bar).getByRole("tab", { name: "Explorer" });
+    const search = within(bar).getByRole("tab", { name: "Search" });
+    expect(explorer.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tabpanel", { name: "Explorer" })).toBeTruthy();
+
+    fireEvent.mouseDown(search);
+    expect(search.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tabpanel", { name: "Search" })).toBeTruthy();
+    // The explorer's panel is still there, so its state is kept; it isn't drawn.
+    expect(screen.getByText("explorer slot")).toBeTruthy();
+  });
+
+  it("registers a show command for views that name one, and view.showView for any", async () => {
+    const { registry } = renderShell();
+    expect(registry.get("view.showExplorer")?.title).toBe("Show Explorer");
+    expect(registry.get("view.showView")?.palette).toBe(false);
+
+    await act(() => registry.execute("view.showView", "search"));
+    expect(screen.getByRole("tab", { name: "Search" }).getAttribute("aria-selected")).toBe("true");
+    await act(() => registry.execute("view.showExplorer"));
+    expect(screen.getByRole("tab", { name: "Explorer" }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    // An unknown view changes nothing.
+    await act(() => registry.execute("view.showView", "nope"));
+    expect(screen.getByRole("tab", { name: "Explorer" }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
+  });
+
+  it("without views, the work area fills the window and there's nothing to toggle", () => {
     const registry = createCommandRegistry<AppCommandId>();
     render(<Shell title="Test IDE" registry={registry} menus={menus} main={<p>main slot</p>} />);
     expect(screen.getByRole("main", { name: "Workspace" })).toBeTruthy();
-    expect(screen.queryByRole("separator", { name: "Resize explorer" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Show explorer" })).toBeNull();
-    expect(registry.get("view.toggleExplorer")).toBeUndefined();
+    expect(screen.queryByRole("separator", { name: "Resize side bar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show side bar" })).toBeNull();
+    expect(screen.queryByRole("tablist", { name: "Views" })).toBeNull();
+    expect(registry.get("view.toggleSidebar")).toBeUndefined();
   });
 
-  it("registers the explorer toggle while mounted", () => {
+  it("registers the side bar commands while mounted", () => {
     const { registry, unmount } = renderShell();
-    expect(registry.get("view.toggleExplorer")?.title).toBe("Toggle Explorer");
+    expect(registry.get("view.toggleSidebar")?.title).toBe("Toggle Side Bar");
     unmount();
-    expect(registry.get("view.toggleExplorer")).toBeUndefined();
+    expect(registry.get("view.toggleSidebar")).toBeUndefined();
+    expect(registry.get("view.showView")).toBeUndefined();
+    expect(registry.get("view.showExplorer")).toBeUndefined();
   });
 
   it("builds menus from the registry: titles, enabled state and running", async () => {

@@ -292,6 +292,9 @@ importers:
       '@repo/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@repo/search':
+        specifier: workspace:*
+        version: link:../../packages/search
       '@repo/settings':
         specifier: workspace:*
         version: link:../../packages/settings
@@ -501,6 +504,52 @@ importers:
       '@repo/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.1.1(@types/node@24.19.2)(jsdom@31.0.1)(vite@8.3.8(@types/node@24.19.2)(sass@1.108.2))
+
+  packages/search:
+    dependencies:
+      '@nuvui/icons':
+        specifier: 'catalog:'
+        version: 0.1.0(react@19.3.1)
+      '@nuvui/react':
+        specifier: 'catalog:'
+        version: 0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@repo/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@repo/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      react:
+        specifier: 'catalog:'
+        version: 19.3.1
+    devDependencies:
+      '@repo/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@testing-library/dom':
+        specifier: 'catalog:'
+        version: 10.4.2
+      '@testing-library/react':
+        specifier: 'catalog:'
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.3.0(@types/react@19.3.0)
+      jsdom:
+        specifier: 'catalog:'
+        version: 31.0.1
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.3.1(react@19.3.1)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

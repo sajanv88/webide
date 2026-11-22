@@ -3,13 +3,17 @@
 import type { AppInfoDto } from "./AppInfoDto";
 import type { CloseGuardArgs } from "./CloseGuardArgs";
 import type { DirListingDto } from "./DirListingDto";
+import type { FileListDto } from "./FileListDto";
 import type { FileStampDto } from "./FileStampDto";
 import type { OpenRecentArgs } from "./OpenRecentArgs";
 import type { ReadFileDto } from "./ReadFileDto";
 import type { RecentWorkspaceDto } from "./RecentWorkspaceDto";
+import type { SearchTextArgs } from "./SearchTextArgs";
 import type { SettingsDto } from "./SettingsDto";
 import type { SettingsPatchDto } from "./SettingsPatchDto";
 import type { SubscribeEventsArgs } from "./SubscribeEventsArgs";
+import type { TextSearchDto } from "./TextSearchDto";
+import type { WorkspaceArgs } from "./WorkspaceArgs";
 import type { WorkspaceDto } from "./WorkspaceDto";
 import type { WorkspacePathArgs } from "./WorkspacePathArgs";
 import type { WriteFileArgs } from "./WriteFileArgs";
@@ -25,6 +29,8 @@ export interface CommandMap {
   write_file: { args: WriteFileArgs; output: FileStampDto };
   get_settings: { args: null; output: SettingsDto };
   update_settings: { args: SettingsPatchDto; output: SettingsDto };
+  search_text: { args: SearchTextArgs; output: TextSearchDto };
+  list_files: { args: WorkspaceArgs; output: FileListDto };
   pick_workspace: { args: null; output: WorkspaceDto | null };
   subscribe_events: { args: SubscribeEventsArgs; output: null };
   set_close_guard: { args: CloseGuardArgs; output: null };

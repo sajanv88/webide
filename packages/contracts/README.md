@@ -1,6 +1,6 @@
 # @repo/contracts
 
-**Status:** Phase 6: IPC types (generated), and the app's command ids, events and ports (hand-written).
+**Status:** Milestone 2: IPC types (generated), and the app's command ids, events and ports (hand-written).
 
 ## Purpose
 
@@ -22,13 +22,17 @@ Types only (`export type *`):
 - `IpcError`, `IpcErrorCode`: what a failing command rejects with.
 - The DTOs: `WorkspaceDto`, `RecentWorkspaceDto`, `DirListingDto`, `FileNodeDto`,
   `ReadFileDto` (switch on `kind`), `FileStampDto`, `SettingsDto`, `SettingsPatchDto`,
-  and the argument types `WorkspacePathArgs`, `WriteFileArgs`, `OpenRecentArgs`.
+  `TextSearchDto` (`FileMatchesDto`, `LineMatchDto`, `SpanDto`), `FileListDto`,
+  and the argument types `WorkspacePathArgs`, `WorkspaceArgs`, `WriteFileArgs`,
+  `OpenRecentArgs`, `SearchTextArgs`.
 - `IpcResult<T>`: `{ ok: true, value } | { ok: false, error: IpcError }`.
 - `AppCommandId`: every command id in the app's registry.
-- `AppEvents`: `workspace.opened`, `explorer.fileActivated`, `workspace.filesChanged`,
+- `AppEvents`: `workspace.opened`, `explorer.fileActivated`, `file.openRequested`
+  (a path, and optionally where to put the cursor), `workspace.filesChanged`,
   `settings.changed`.
 - `ExplorerPort`: `listDirectory(path)`, bound to the open workspace by the app.
 - `DocumentsPort`: `readFile(path)`, `writeFile(path, text)`, the same way, for `@repo/tabs`.
+- `SearchPort`: `searchText(query)`, `listFiles()`, the same way, for `@repo/search`.
 
 ## May depend on
 

@@ -49,7 +49,11 @@ export interface EditorSurfaceHandle {
   getValue(): string;
   /** Replaces the text, as a reload from disk would. Calls `onChange`, and can be undone. */
   setValue(value: string): void;
+  /** Focuses the editor; for one just shown, once it's drawn. */
   focus(): void;
-  /** Puts the cursor at a line and column, both from 1, and scrolls to it. */
+  /**
+   * Puts the cursor at a line and column, both from 1 (the column in UTF-16
+   * units), scrolls to it and focuses; for a document just shown, once it's drawn.
+   */
   revealPosition(line: number, column: number): void;
 }

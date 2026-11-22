@@ -13,6 +13,8 @@ permissions = [
   "allow-write-file",
   "allow-get-settings",
   "allow-update-settings",
+  "allow-search-text",
+  "allow-list-files",
   "allow-pick-workspace",
   "allow-subscribe-events",
   "allow-set-close-guard",

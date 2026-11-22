@@ -1,0 +1,20 @@
+[package]
+name = "ide-search"
+description = "Find in files and the file list for quick open, respecting .gitignore."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+grep-matcher = { workspace = true }
+grep-regex = { workspace = true }
+grep-searcher = { workspace = true }
+ide-core = { workspace = true }
+ignore = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

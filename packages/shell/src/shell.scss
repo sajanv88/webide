@@ -51,8 +51,35 @@
     min-block-size: 0;
   }
 
+  // The activity bar, then the panes: nuvui's vertical Tabs, laid out here.
+  &__body--views {
+    --nuv-tabs-gap: 0;
+
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  &__activity {
+    padding-block: calc(var(--spacing) * 2);
+    background-color: var(--color-surface);
+  }
+
+  &__activity-item {
+    justify-content: center;
+    padding-inline: calc(var(--spacing) * 3);
+  }
+
+  &__panes {
+    min-inline-size: 0;
+  }
+
   &__pane {
     block-size: 100%;
+  }
+
+  &__view {
+    block-size: 100%;
+    margin: 0;
   }
 
   &__main {
@@ -72,4 +99,9 @@
     font-size: var(--text-xs);
     line-height: var(--text-xs--line-height);
   }
+}
+
+// Views stay mounted (each keeps its state); only the chosen one is drawn.
+.app-shell__view[data-state="inactive"] {
+  display: none;
 }

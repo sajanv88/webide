@@ -1,13 +1,17 @@
 # @repo/shell
 
-**Status:** Phase 6.
+**Status:** Milestone 2.
 
 ## Purpose
 
 The window frame, after nuvui's `app-shell` block:
 
 - a top bar with the menubar, the title and tools;
-- a resizable, collapsible explorer pane, whose sizes are remembered in localStorage;
+- an activity bar (a vertical tab list named "Views") choosing which view
+  fills a resizable, collapsible side pane, whose sizes are remembered in
+  localStorage. Every view stays mounted, so each keeps its state while
+  another is shown. Clicking the view that's shown hides or shows the pane;
+  the arrow keys only move between views;
 - the work area;
 - a status bar.
 
@@ -19,21 +23,24 @@ command nobody has registered (Save while no folder is open, say) is left out,
 with the separators that would then lead, trail or double up; a menu left with
 nothing in it stays in its place, disabled. Each item shows the keys bound
 to its command (from `shortcutFor`), with `aria-keyshortcuts`.
-While there's a sidebar, the shell registers `view.toggleExplorer`, and the top
-bar shows a button for it with `aria-expanded`.
+While there are views, the shell registers `view.toggleSidebar` (the top bar
+shows a button for it, with `aria-expanded`), `view.showView` (args: a view's
+`id`; not in the palette), and each view's own `command`, which shows it.
 
 ## Public API
 
 - `Shell` with `ShellProps`:
   - `title`, `registry`, `menus`;
   - `shortcutFor?(command)` → `{ label, aria }`: the keys shown in the menus;
-  - `sidebar?`: without it, the work area fills the window;
+  - `views?`: `SidebarView`s (`id`, `title`, `icon`, `content`, `command?`),
+    the first shown first; without any, the work area fills the window;
   - `main`, `statusBar?`.
+- `SidebarView`.
 - `MenuSpec`, `MenuShortcut`, `MenuItemSpec`: `command` (with an optional `label` and `args`),
   `separator`, and `submenu` (shown disabled when empty).
 
 Landmarks: `banner` "Title bar", `menubar` "Application", `main` "Workspace",
-`contentinfo` "Status bar". The pane handle is a `separator` named "Resize explorer".
+`contentinfo` "Status bar". The pane handle is a `separator` named "Resize side bar".
 
 ## May depend on
 

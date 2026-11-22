@@ -38,6 +38,7 @@ const CODES: Readonly<Record<IpcErrorCode, true>> = {
   workspaceChanged: true,
   notARecentWorkspace: true,
   invalidSettings: true,
+  invalidQuery: true,
   io: true,
   internal: true,
 };

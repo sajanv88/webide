@@ -12,6 +12,9 @@ export const DEFAULT_KEYBINDINGS: readonly KeybindingSpec<AppCommandId>[] = [
   { key: "Mod+W", command: "tabs.close" },
   { key: "Ctrl+PageDown", command: "tabs.next" },
   { key: "Ctrl+PageUp", command: "tabs.previous" },
-  { key: "Mod+B", command: "view.toggleExplorer" },
+  { key: "Mod+B", command: "view.toggleSidebar" },
+  { key: "Mod+Shift+E", command: "view.showExplorer" },
+  { key: "Mod+Shift+F", command: "search.findInFiles" },
+  { key: "Mod+P", command: "search.goToFile" },
   { key: "Mod+,", command: "settings.open" },
 ];

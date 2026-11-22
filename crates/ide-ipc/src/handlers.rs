@@ -7,14 +7,14 @@ use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 use ide_core::workspace::display_path;
 use ide_core::{
-    FsWatcher, IdeError, RelPath, WatchEvent, WatchGuard, WatchSink, WorkspaceFs, WorkspaceRoot,
-    WorkspaceStore,
+    CancelFlag, FsWatcher, IdeError, RelPath, TextQuery, WatchEvent, WatchGuard, WatchSink,
+    WorkspaceFs, WorkspaceRoot, WorkspaceSearch, WorkspaceStore,
 };
 
 use crate::dto::{
-    AppInfoDto, BackendEventDto, DirListingDto, FileStampDto, OpenRecentArgs, ReadFileDto,
-    RecentWorkspaceDto, SettingsDto, SettingsPatchDto, WorkspaceDto, WorkspacePathArgs,
-    WriteFileArgs,
+    AppInfoDto, BackendEventDto, DirListingDto, FileListDto, FileStampDto, OpenRecentArgs,
+    ReadFileDto, RecentWorkspaceDto, SearchTextArgs, SettingsDto, SettingsPatchDto, TextSearchDto,
+    WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::IpcError;
 
@@ -24,6 +24,7 @@ pub struct Services {
     pub fs: Arc<dyn WorkspaceFs>,
     pub workspace: Arc<dyn WorkspaceStore>,
     pub watcher: Arc<dyn FsWatcher>,
+    pub search: Arc<dyn WorkspaceSearch>,
 }
 
 impl std::fmt::Debug for Services {
@@ -50,6 +51,8 @@ pub struct IpcState {
     emit: Emit,
     /// The watch on the open workspace; replacing it stops the old one.
     watch: Mutex<Option<WatchGuard>>,
+    /// The text search running now, if any. A new one, or a new workspace, cancels it.
+    search: Mutex<Option<CancelFlag>>,
 }
 
 impl std::fmt::Debug for IpcState {
@@ -69,7 +72,18 @@ impl IpcState {
             next_id: AtomicU64::new(1),
             emit,
             watch: Mutex::new(None),
+            search: Mutex::new(None),
         }
+    }
+
+    /// Cancels the running search, if any, and returns the flag for a new one.
+    fn replace_search(&self) -> CancelFlag {
+        let flag = CancelFlag::new();
+        let mut slot = self.search.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(previous) = slot.replace(flag.clone()) {
+            previous.cancel();
+        }
+        flag
     }
 
     /// Makes `root` the open workspace, under a new id, and watches it instead
@@ -84,6 +98,14 @@ impl IpcState {
         let mut watch = self.watch.lock().unwrap_or_else(PoisonError::into_inner);
         // Stop the old watch first, so its last events can't follow the new id.
         watch.take();
+        if let Some(search) = self
+            .search
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+        {
+            search.cancel();
+        }
         *watch = Some(self.services.watcher.watch(&root, self.sink(id.clone())));
         *self.open.write().unwrap_or_else(PoisonError::into_inner) =
             Some(OpenWorkspace { id, root });
@@ -207,5 +229,42 @@ pub fn update_settings(state: &IpcState, patch: SettingsPatchDto) -> Result<Sett
         .services
         .workspace
         .update_settings(&patch.into())?
+        .into())
+}
+
+/// Find in files. Files too large to open (over the don't-open size) aren't
+/// searched either.
+pub fn search_text(state: &IpcState, args: SearchTextArgs) -> Result<TextSearchDto, IpcError> {
+    let root = state.root_for(&args.workspace_id)?;
+    let max_file_bytes = state
+        .services
+        .workspace
+        .settings()?
+        .read_limits()
+        .refuse_above;
+    let query = TextQuery {
+        pattern: args.pattern,
+        is_regex: args.is_regex,
+        match_case: args.match_case,
+        whole_word: args.whole_word,
+        include: args.include,
+        exclude: args.exclude,
+        max_file_bytes,
+    };
+    let cancel = state.replace_search();
+    Ok(state
+        .services
+        .search
+        .search_text(&root, &query, &cancel)?
+        .into())
+}
+
+/// The workspace's files, for quick open.
+pub fn list_files(state: &IpcState, args: WorkspaceArgs) -> Result<FileListDto, IpcError> {
+    let root = state.root_for(&args.workspace_id)?;
+    Ok(state
+        .services
+        .search
+        .list_files(&root, &CancelFlag::new())?
         .into())
 }

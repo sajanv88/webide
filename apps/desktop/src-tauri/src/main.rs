@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use ide_fs::LocalFs;
 use ide_ipc::Services;
+use ide_search::LocalSearch;
 use ide_watcher::LocalWatcher;
 use ide_workspace::JsonWorkspaceStore;
 
@@ -16,6 +17,7 @@ fn main() -> ExitCode {
         fs: Arc::new(LocalFs::new()),
         workspace: Arc::new(JsonWorkspaceStore::new(paths.config_dir.clone())),
         watcher: Arc::new(LocalWatcher::new()),
+        search: Arc::new(LocalSearch::new()),
     });
     match result {
         Ok(()) => ExitCode::SUCCESS,

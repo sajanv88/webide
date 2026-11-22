@@ -16,6 +16,8 @@ pub enum IpcErrorCode {
     WorkspaceChanged,
     NotARecentWorkspace,
     InvalidSettings,
+    /// A search pattern or glob that doesn't parse. `message` says why.
+    InvalidQuery,
     Io,
     /// A bug or an unexpected failure. `message` says what.
     Internal,
@@ -54,6 +56,7 @@ impl From<IdeError> for IpcError {
             IdeError::WorkspaceChanged => IpcErrorCode::WorkspaceChanged,
             IdeError::NotARecentWorkspace => IpcErrorCode::NotARecentWorkspace,
             IdeError::InvalidSettings(_) => IpcErrorCode::InvalidSettings,
+            IdeError::InvalidQuery(_) => IpcErrorCode::InvalidQuery,
             IdeError::Io(_) => IpcErrorCode::Io,
         };
         Self {
