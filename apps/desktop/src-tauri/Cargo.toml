@@ -1,0 +1,21 @@
+[package]
+name = "ide-desktop"
+description = "Composition root: wires the ide-* crates into the Tauri app. No logic."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dependencies]
+ide-fs = { workspace = true }
+ide-ipc = { workspace = true }
+ide-watcher = { workspace = true }
+ide-workspace = { workspace = true }
+# Needed here because tauri::generate_context!() expands in this crate.
+tauri = { workspace = true }
+
+[lints]
+workspace = true

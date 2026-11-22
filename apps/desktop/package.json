@@ -1,0 +1,39 @@
+{
+  "name": "@repo/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:web": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@nuvui/backgrounds": "catalog:",
+    "@nuvui/icons": "catalog:",
+    "@nuvui/react": "catalog:",
+    "@repo/commands": "workspace:*",
+    "@repo/contracts": "workspace:*",
+    "@repo/editor-surface": "workspace:*",
+    "@repo/explorer": "workspace:*",
+    "@repo/ipc": "workspace:*",
+    "@repo/kernel": "workspace:*",
+    "@repo/settings": "workspace:*",
+    "@repo/shell": "workspace:*",
+    "@repo/tabs": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@repo/tsconfig": "workspace:*",
+    "@tauri-apps/cli": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "sass": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

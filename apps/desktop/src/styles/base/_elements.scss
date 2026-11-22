@@ -1,0 +1,16 @@
+// The app frame fills the window; the shell decides what scrolls.
+html,
+body {
+  block-size: 100%;
+  margin: 0;
+  overflow: hidden;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+
+  // On the body, not the shell: dialogs and menus are rendered at its end.
+  font-family: var(--font-sans);
+}
+
+.app-root {
+  block-size: 100%;
+}

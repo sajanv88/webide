@@ -1,0 +1,4 @@
+// Imported once by src/main.tsx, after @nuvui/react/styles.css.
+// Unlayered on purpose: these rules beat nuvui's `tokens`, `base` and `components` layers.
+// Component blocks aren't listed here; each component imports its own file.
+@use "base/elements";

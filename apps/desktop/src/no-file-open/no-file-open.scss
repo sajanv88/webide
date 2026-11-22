@@ -1,0 +1,42 @@
+// After the page area of nuvui's app-shell block: a dashed card with a hint.
+.no-file-open {
+  display: grid;
+  box-sizing: border-box;
+  min-block-size: 100%;
+  padding: calc(var(--spacing) * 4);
+
+  &__card {
+    display: grid;
+    gap: calc(var(--spacing) * 3);
+    place-content: center;
+    justify-items: center;
+    padding: calc(var(--spacing) * 6);
+    border: var(--nuv-border-width) dashed var(--color-border-strong);
+    border-radius: var(--radius-lg);
+    text-align: center;
+  }
+
+  &__icon {
+    display: grid;
+    place-items: center;
+    inline-size: calc(var(--spacing) * 12);
+    block-size: calc(var(--spacing) * 12);
+    border-radius: var(--radius-full);
+    background-color: var(--color-muted);
+    color: var(--color-muted-foreground);
+  }
+
+  &__heading {
+    margin: 0;
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  &__text {
+    max-inline-size: 40ch;
+    margin: 0;
+    color: var(--color-muted-foreground);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+  }
+}
