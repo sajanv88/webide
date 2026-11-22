@@ -1,0 +1,212 @@
+//! The Tauri commands: thin async wrappers that run a handler off the main
+//! thread. The list below is the single source for the invoke handler, the
+//! generated TypeScript `CommandMap`, and the generated permissions.
+//!
+//! Every command that takes input takes one parameter named `args`, so the
+//! frontend always calls `invoke(name, { args })`.
+
+use std::sync::Arc;
+
+use tauri::{AppHandle, State, Webview, WebviewWindow, Wry};
+use tauri_plugin_dialog::DialogExt;
+
+use crate::dto::{
+    AppInfoDto, CloseGuardArgs, DirListingDto, FileStampDto, OpenRecentArgs, ReadFileDto,
+    RecentWorkspaceDto, SettingsDto, SettingsPatchDto, SubscribeEventsArgs, WorkspaceDto,
+    WorkspacePathArgs, WriteFileArgs,
+};
+use crate::error::IpcError;
+use crate::events::EventHub;
+use crate::handlers::{self, IpcState};
+
+/// A command's argument type: `()` when it takes none.
+#[cfg(test)]
+macro_rules! args_type {
+    () => {
+        ()
+    };
+    ($args:ty) => {
+        $args
+    };
+}
+
+/// Declares the commands once. For each `handler` command it also checks, at
+/// compile time, that `handlers::<name>` has exactly the declared types.
+macro_rules! ipc_commands {
+    (
+        handler { $( $name:ident ( $($args:ty)? ) -> $output:ty; )+ }
+        custom { $( $custom:ident ( $($custom_args:ty)? ) -> $custom_output:ty; )+ }
+    ) => {
+        /// Every command, in registration order.
+        pub const COMMAND_NAMES: &[&str] = &[$(stringify!($name),)+ $(stringify!($custom),)+];
+
+        pub(crate) fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<Wry>) -> bool + Send + Sync + 'static {
+            tauri::generate_handler![$($name,)+ $($custom,)+]
+        }
+
+        $(
+            const _: fn(&IpcState $(, $args)?) -> Result<$output, IpcError> = handlers::$name;
+        )+
+
+        #[cfg(test)]
+        pub(crate) fn signatures() -> Vec<crate::export::Signature> {
+            vec![
+                $(crate::export::Signature::of::<args_type!($($args)?), $output>(stringify!($name)),)+
+                $(crate::export::Signature::of::<args_type!($($custom_args)?), $custom_output>(stringify!($custom)),)+
+            ]
+        }
+    };
+}
+
+ipc_commands! {
+    handler {
+        app_info() -> AppInfoDto;
+        open_recent_workspace(OpenRecentArgs) -> WorkspaceDto;
+        recent_workspaces() -> Vec<RecentWorkspaceDto>;
+        current_workspace() -> Option<WorkspaceDto>;
+        list_directory(WorkspacePathArgs) -> DirListingDto;
+        read_file(WorkspacePathArgs) -> ReadFileDto;
+        write_file(WriteFileArgs) -> FileStampDto;
+        get_settings() -> SettingsDto;
+        update_settings(SettingsPatchDto) -> SettingsDto;
+    }
+    custom {
+        pick_workspace() -> Option<WorkspaceDto>;
+        subscribe_events(SubscribeEventsArgs) -> ();
+        set_close_guard(CloseGuardArgs) -> ();
+        close_window() -> ();
+    }
+}
+
+type Shared<'a> = State<'a, Arc<IpcState>>;
+type Hub<'a> = State<'a, Arc<EventHub>>;
+
+/// Runs `job` on the blocking thread pool, so file IO never stalls the UI thread.
+async fn run_blocking<T, F>(state: &Shared<'_>, job: F) -> Result<T, IpcError>
+where
+    T: Send + 'static,
+    F: FnOnce(&IpcState) -> Result<T, IpcError> + Send + 'static,
+{
+    let state = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || job(&state))
+        .await
+        .map_err(|error| IpcError::internal(format!("command task failed: {error}")))?
+}
+
+#[tauri::command]
+pub async fn app_info(state: Shared<'_>) -> Result<AppInfoDto, IpcError> {
+    run_blocking(&state, handlers::app_info).await
+}
+
+/// Shows the native folder picker; `None` when the person cancels.
+#[tauri::command]
+pub async fn pick_workspace(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: Shared<'_>,
+) -> Result<Option<WorkspaceDto>, IpcError> {
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_title("Open folder")
+            .set_parent(&window)
+            .blocking_pick_folder()
+    })
+    .await
+    .map_err(|error| IpcError::internal(format!("folder picker failed: {error}")))?;
+    let Some(picked) = picked else {
+        return Ok(None);
+    };
+    let path = picked
+        .into_path()
+        .map_err(|error| IpcError::internal(format!("the picked folder has no path: {error}")))?;
+    run_blocking(&state, move |state| {
+        handlers::open_picked(state, &path).map(Some)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn open_recent_workspace(
+    state: Shared<'_>,
+    args: OpenRecentArgs,
+) -> Result<WorkspaceDto, IpcError> {
+    run_blocking(&state, move |state| {
+        handlers::open_recent_workspace(state, args)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn recent_workspaces(state: Shared<'_>) -> Result<Vec<RecentWorkspaceDto>, IpcError> {
+    run_blocking(&state, handlers::recent_workspaces).await
+}
+
+#[tauri::command]
+pub async fn current_workspace(state: Shared<'_>) -> Result<Option<WorkspaceDto>, IpcError> {
+    run_blocking(&state, handlers::current_workspace).await
+}
+
+#[tauri::command]
+pub async fn list_directory(
+    state: Shared<'_>,
+    args: WorkspacePathArgs,
+) -> Result<DirListingDto, IpcError> {
+    run_blocking(&state, move |state| handlers::list_directory(state, args)).await
+}
+
+#[tauri::command]
+pub async fn read_file(
+    state: Shared<'_>,
+    args: WorkspacePathArgs,
+) -> Result<ReadFileDto, IpcError> {
+    run_blocking(&state, move |state| handlers::read_file(state, args)).await
+}
+
+#[tauri::command]
+pub async fn write_file(state: Shared<'_>, args: WriteFileArgs) -> Result<FileStampDto, IpcError> {
+    run_blocking(&state, move |state| handlers::write_file(state, args)).await
+}
+
+#[tauri::command]
+pub async fn get_settings(state: Shared<'_>) -> Result<SettingsDto, IpcError> {
+    run_blocking(&state, handlers::get_settings).await
+}
+
+#[tauri::command]
+pub async fn update_settings(
+    state: Shared<'_>,
+    args: SettingsPatchDto,
+) -> Result<SettingsDto, IpcError> {
+    run_blocking(&state, move |state| handlers::update_settings(state, args)).await
+}
+
+/// Sends backend events (file changes, the close request) to the calling page,
+/// over the channel it passes. A later call, from a reloaded page, replaces it.
+#[tauri::command]
+pub fn subscribe_events(
+    webview: Webview,
+    hub: Hub<'_>,
+    args: SubscribeEventsArgs,
+) -> Result<(), IpcError> {
+    hub.subscribe(args.channel.channel_on(webview));
+    Ok(())
+}
+
+/// Whether closing the window now would lose unsaved changes. While it would,
+/// closing it sends `closeRequested` instead, and the window stays open.
+#[tauri::command]
+pub fn set_close_guard(hub: Hub<'_>, args: CloseGuardArgs) -> Result<(), IpcError> {
+    hub.set_unsaved(args.unsaved);
+    Ok(())
+}
+
+/// Closes the calling window without asking again: the page has dealt with
+/// its unsaved changes.
+#[tauri::command]
+pub fn close_window(window: WebviewWindow, hub: Hub<'_>) -> Result<(), IpcError> {
+    hub.release_close();
+    window
+        .destroy()
+        .map_err(|error| IpcError::internal(format!("couldn't close the window: {error}")))
+}

@@ -1,0 +1,21 @@
+[package]
+name = "ide-ipc"
+description = "The only crate that depends on Tauri: commands, events, and DTOs exported to TypeScript."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+ide-core = { workspace = true }
+serde = { workspace = true }
+tauri = { workspace = true }
+tauri-plugin-dialog = { workspace = true }
+thiserror = { workspace = true }
+ts-rs = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

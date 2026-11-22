@@ -1,0 +1,112 @@
+//! The only crate that depends on Tauri.
+//!
+//! It builds the Tauri app, registers commands, and maps domain types to DTOs
+//! (exported to `packages/contracts` with ts-rs: `pnpm contracts:generate`).
+//! Feature crates reach it only as `ide-core` ports, handed in by the
+//! composition root through [`Services`].
+
+mod commands;
+mod dto;
+mod error;
+mod events;
+mod handlers;
+
+#[cfg(test)]
+mod export;
+#[cfg(test)]
+mod tests;
+
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use tauri::webview::PageLoadEvent;
+use tauri::{Manager, RunEvent, Runtime, WindowEvent};
+
+pub use commands::COMMAND_NAMES;
+pub use error::{IpcError, IpcErrorCode};
+pub use handlers::Services;
+
+use crate::dto::AppInfoDto;
+use crate::events::EventHub;
+use crate::handlers::{Emit, IpcState};
+
+/// Label of the main window, as declared in `tauri.conf.json` and its capability.
+pub const MAIN_WINDOW: &str = "main";
+
+/// Where the app may keep its own files, resolved by Tauri for this OS and app identifier.
+#[derive(Debug, Clone)]
+pub struct AppPaths {
+    pub config_dir: PathBuf,
+}
+
+/// Builds and runs the app until the last window closes.
+///
+/// `context` comes from `tauri::generate_context!()`, which must be expanded in
+/// the crate that owns `tauri.conf.json`. `services` builds the port
+/// implementations once the app's paths are known.
+pub fn run<F>(context: tauri::Context<tauri::Wry>, services: F) -> Result<(), tauri::Error>
+where
+    F: FnOnce(&AppPaths) -> Services + Send + 'static,
+{
+    let hub = Arc::new(EventHub::default());
+    let emit_hub = Arc::clone(&hub);
+    let emit: Emit = Arc::new(move |event| {
+        emit_hub.send(event);
+    });
+    let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .manage(hub)
+        .invoke_handler(commands::invoke_handler())
+        .on_page_load(|webview, payload| {
+            // A reload drops the old page's channel and its unsaved changes.
+            if payload.event() == PageLoadEvent::Started
+                && let Some(hub) = webview.try_state::<Arc<EventHub>>()
+            {
+                hub.reset();
+            }
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event
+                && let Some(hub) = window.try_state::<Arc<EventHub>>()
+                && hub.hold_close()
+            {
+                api.prevent_close();
+            }
+        })
+        .setup(move |app| {
+            let paths = AppPaths {
+                config_dir: app.path().app_config_dir()?,
+            };
+            let info = AppInfoDto {
+                name: app.package_info().name.clone(),
+                version: app.package_info().version.to_string(),
+            };
+            app.manage(Arc::new(IpcState::new(services(&paths), info, emit)));
+            set_main_window_title(app)?;
+            Ok(())
+        })
+        .build(context)?;
+    app.run(|app, event| {
+        // Quitting the app (Cmd+Q on macOS) asks the page first too, while
+        // its window is still there to answer.
+        if let RunEvent::ExitRequested {
+            code: None, api, ..
+        } = &event
+            && app.get_webview_window(MAIN_WINDOW).is_some()
+            && let Some(hub) = app.try_state::<Arc<EventHub>>()
+            && hub.hold_close()
+        {
+            api.prevent_exit();
+        }
+    });
+    Ok(())
+}
+
+/// The window title comes from `productName`, so the name lives in one place.
+fn set_main_window_title<R: Runtime>(app: &tauri::App<R>) -> Result<(), tauri::Error> {
+    let name = app.package_info().name.clone();
+    match app.get_webview_window(MAIN_WINDOW) {
+        Some(window) => window.set_title(&name),
+        None => Ok(()),
+    }
+}
