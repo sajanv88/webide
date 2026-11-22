@@ -6,6 +6,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
+use ide_core::debug::{DebugAdapters, DebugEvent, DebugSession};
 use ide_core::language::{LanguageServer, LanguageServers, LanguageStatus, TextPosition};
 use ide_core::terminal::{MAX_TERMINALS, MAX_WRITE_BYTES};
 use ide_core::workspace::display_path;
@@ -16,11 +17,13 @@ use ide_core::{
 };
 
 use crate::dto::{
-    AppInfoDto, BackendEventDto, CompletionsDto, DefinitionDto, DirListingDto, FileListDto,
-    FileStampDto, GitBranchDto, GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto,
-    GitSwitchArgs, HoverDto, LanguageStatusDto, LspDocumentArgs, LspPositionArgs, OpenRecentArgs,
-    ProblemDto, ReadFileDto, RecentWorkspaceDto, SearchTextArgs, SettingsDto, SettingsPatchDto,
-    TerminalDto, TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs, TextSearchDto,
+    AppInfoDto, BackendEventDto, BreakpointDto, CompletionsDto, DebugBreakpointsArgs,
+    DebugEvaluateArgs, DebugEventDto, DebugReferenceArgs, DebugStartArgs, DebugThreadArgs,
+    DefinitionDto, DirListingDto, FileListDto, FileStampDto, GitBranchDto, GitCommitArgs,
+    GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs, HoverDto, LanguageStatusDto,
+    LspDocumentArgs, LspPositionArgs, OpenRecentArgs, ProblemDto, ReadFileDto, RecentWorkspaceDto,
+    ScopeDto, SearchTextArgs, SettingsDto, SettingsPatchDto, StackFrameDto, TerminalDto,
+    TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs, TextSearchDto, VariableDto,
     WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::IpcError;
@@ -35,6 +38,7 @@ pub struct Services {
     pub git: Arc<dyn GitClient>,
     pub terminals: Arc<dyn TerminalHost>,
     pub languages: Arc<dyn LanguageServers>,
+    pub debuggers: Arc<dyn DebugAdapters>,
 }
 
 impl std::fmt::Debug for Services {
@@ -76,6 +80,13 @@ pub struct IpcState {
     /// The open workspace's language server, started when a file it handles
     /// is first opened. Held while it starts, so it starts once.
     language: Mutex<Language>,
+    /// The program running under the debugger, if any: one at a time.
+    debug: Mutex<Option<DebugRun>>,
+}
+
+struct DebugRun {
+    workspace_id: String,
+    session: Arc<dyn DebugSession>,
 }
 
 /// The language server of one workspace.
@@ -113,6 +124,28 @@ impl IpcState {
             terminals: Mutex::new(HashMap::new()),
             next_terminal: AtomicU64::new(1),
             language: Mutex::new(Language::NotStarted),
+            debug: Mutex::new(None),
+        }
+    }
+
+    /// Ends the program running under the debugger, if any.
+    pub fn stop_debugging(&self) {
+        let old = self
+            .debug
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        // Ended outside the lock: it waits for the program and the debugger to go.
+        drop(old);
+    }
+
+    fn debugging(&self, workspace_id: &str) -> Result<Arc<dyn DebugSession>, IdeError> {
+        self.root_for(workspace_id)?;
+        match &*self.debug.lock().unwrap_or_else(PoisonError::into_inner) {
+            Some(run) if run.workspace_id == workspace_id => Ok(Arc::clone(&run.session)),
+            _ => Err(IdeError::InvalidArgument(
+                "nothing is being debugged".to_owned(),
+            )),
         }
     }
 
@@ -218,6 +251,7 @@ impl IpcState {
         // either closed here or refused when it's stored (`terminal_open`).
         self.close_terminals();
         self.stop_language();
+        self.stop_debugging();
         dto
     }
 
@@ -656,4 +690,125 @@ pub fn lsp_restart(state: &IpcState, args: WorkspaceArgs) -> Result<(), IpcError
     state.root_for(&args.workspace_id)?;
     state.stop_language();
     Ok(())
+}
+
+/// Runs a file under the debugger (ending one already running), with its
+/// breakpoints set before it starts. What it reports arrives as `debug` events.
+pub fn debug_start(state: &IpcState, args: DebugStartArgs) -> Result<(), IpcError> {
+    let path = RelPath::parse(&args.path)?;
+    let root = state.root_for(&args.workspace_id)?;
+    if !state.services.debuggers.handles(&path) {
+        return Err(
+            IdeError::InvalidArgument(format!("{path} can't be run under the debugger")).into(),
+        );
+    }
+    let breakpoints = args
+        .breakpoints
+        .iter()
+        .map(|file| Ok((RelPath::parse(&file.path)?, file.lines.clone())))
+        .collect::<Result<Vec<_>, IpcError>>()?;
+    state.stop_debugging();
+    let emit = Arc::clone(&state.emit);
+    let id = args.workspace_id.clone();
+    let sink: ide_core::debug::DebugSink = Arc::new(move |event: DebugEvent| {
+        emit(BackendEventDto::Debug {
+            workspace_id: id.clone(),
+            event: DebugEventDto::from(event),
+        });
+    });
+    let session: Arc<dyn DebugSession> = Arc::from(state.services.debuggers.launch(
+        &root,
+        &path,
+        &breakpoints,
+        sink,
+    )?);
+    // A workspace opened meanwhile: this program mustn't outlive it.
+    let mut debug = state.debug.lock().unwrap_or_else(PoisonError::into_inner);
+    if state
+        .current()
+        .is_none_or(|open| open.id != args.workspace_id)
+    {
+        drop(debug);
+        drop(session);
+        return Err(IdeError::WorkspaceChanged.into());
+    }
+    *debug = Some(DebugRun {
+        workspace_id: args.workspace_id,
+        session,
+    });
+    Ok(())
+}
+
+/// Ends the program and the debugger.
+pub fn debug_stop(state: &IpcState, args: WorkspaceArgs) -> Result<(), IpcError> {
+    state.root_for(&args.workspace_id)?;
+    state.stop_debugging();
+    Ok(())
+}
+
+pub fn debug_breakpoints(
+    state: &IpcState,
+    args: DebugBreakpointsArgs,
+) -> Result<Vec<BreakpointDto>, IpcError> {
+    let path = RelPath::parse(&args.path)?;
+    let session = state.debugging(&args.workspace_id)?;
+    Ok(session
+        .set_breakpoints(&path, &args.lines)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+/// Continues, or steps when `step` says how.
+pub fn debug_resume(state: &IpcState, args: DebugThreadArgs) -> Result<(), IpcError> {
+    let session = state.debugging(&args.workspace_id)?;
+    match args.step {
+        Some(step) => session.step(args.thread_id, step.into())?,
+        None => session.resume(args.thread_id)?,
+    }
+    Ok(())
+}
+
+pub fn debug_pause(state: &IpcState, args: DebugThreadArgs) -> Result<(), IpcError> {
+    Ok(state.debugging(&args.workspace_id)?.pause(args.thread_id)?)
+}
+
+pub fn debug_stack(
+    state: &IpcState,
+    args: DebugThreadArgs,
+) -> Result<Vec<StackFrameDto>, IpcError> {
+    Ok(state
+        .debugging(&args.workspace_id)?
+        .stack(args.thread_id)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+/// The scopes of the frame `reference`.
+pub fn debug_scopes(state: &IpcState, args: DebugReferenceArgs) -> Result<Vec<ScopeDto>, IpcError> {
+    Ok(state
+        .debugging(&args.workspace_id)?
+        .scopes(args.reference)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+pub fn debug_variables(
+    state: &IpcState,
+    args: DebugReferenceArgs,
+) -> Result<Vec<VariableDto>, IpcError> {
+    Ok(state
+        .debugging(&args.workspace_id)?
+        .variables(args.reference)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+pub fn debug_evaluate(state: &IpcState, args: DebugEvaluateArgs) -> Result<String, IpcError> {
+    Ok(state
+        .debugging(&args.workspace_id)?
+        .evaluate(&args.expression, args.frame_id)?)
 }

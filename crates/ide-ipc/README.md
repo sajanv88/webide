@@ -1,6 +1,6 @@
 # ide-ipc
 
-**Status:** Milestone 5.
+**Status:** Milestone 6.
 
 ## Purpose
 
@@ -56,6 +56,15 @@ ts-rs.
 | `lsp_hover`              | `{ workspaceId, path, line, character }` | `HoverDto \| null`                                     |
 | `lsp_definition`         | `{ workspaceId, path, line, character }` | `DefinitionDto[]` (switch on `kind`)                   |
 | `lsp_restart`            | `{ workspaceId }`                        | nothing; it starts again when next needed              |
+| `debug_start`            | `{ workspaceId, path, breakpoints }`     | nothing; ends the program already running, if any      |
+| `debug_stop`             | `{ workspaceId }`                        | nothing; ends the program                              |
+| `debug_breakpoints`      | `{ workspaceId, path, lines }`           | `BreakpointDto[]`, as the debugger placed them         |
+| `debug_resume`           | `{ workspaceId, threadId, step? }`       | nothing; continues, or steps `over`, `into` or `out`   |
+| `debug_pause`            | `{ workspaceId, threadId }`              | nothing                                                |
+| `debug_stack`            | `{ workspaceId, threadId }`              | `StackFrameDto[]`                                      |
+| `debug_scopes`           | `{ workspaceId, reference }` (a frame)   | `ScopeDto[]`                                           |
+| `debug_variables`        | `{ workspaceId, reference }`             | `VariableDto[]`                                        |
+| `debug_evaluate`         | `{ workspaceId, expression, frameId? }`  | the value, as text                                     |
 | `subscribe_events`       | `{ channel }` (a Tauri `Channel`)        | nothing; `BackendEventDto`s arrive on the channel      |
 | `set_close_guard`        | `{ unsaved }`                            | nothing                                                |
 | `close_window`           | none                                     | nothing; closes the calling window without asking      |
@@ -73,6 +82,9 @@ loading drops the old one.
 - `watchFailed { workspaceId, message }`.
 - `languageStatus { workspaceId, status }`: the workspace's language server is
   `starting`, `ready`, or `failed` (with why).
+- `debug { workspaceId, event }`: the program printed, stopped, continued or
+  ended (`DebugEventDto`, switch on `kind`). The program is ended when another
+  workspace opens and when the page reloads.
 - `closeRequested`: the window (or, on macOS, the app) is closing while the
   page has said `set_close_guard({ unsaved: true })`. The close is held; the
   page asks the person, then calls `close_window`. With nothing unsaved, or no

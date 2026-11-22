@@ -1,6 +1,6 @@
 # @repo/editor-surface
 
-**Status:** Milestone 5.
+**Status:** Milestone 6.
 
 ## Purpose
 
@@ -33,6 +33,11 @@ change the editor, change this package only.
   macOS), which then doesn't add a cursor. These are CodeMirror extensions
   (`@codemirror/state`, `view`, `autocomplete`, the versions nuvui uses), made
   once; they ask the `language` of the document shown.
+- **Breakpoints** (`breakpoints`, `onToggleBreakpoint`): a gutter beside the
+  line numbers, where a press (or F9, on the cursor's line) toggles a line's
+  breakpoint, drawn as a dot. Without `onToggleBreakpoint` the gutter does
+  nothing. **The paused line** (`executionLine`) is tinted, and outlined in
+  forced colors.
 - `DiffSurface`: read only (a review), side by side or in one column when
   narrow, unchanged lines folded away; the language from the extension, for
   the ones the editor colors. Loaded lazily too.
@@ -48,7 +53,8 @@ nuvui (a way to drop a path).
 
 - `EditorSurface` with `EditorSurfaceProps`: `documentId`, `path`,
   `languageId?`, `initialValue`, `readOnly`, `onChange(value)`, `onSave()`,
-  `diagnostics?`, `language?`, `aria-label` (required), `styleNonce?`, `ref`.
+  `diagnostics?`, `language?`, `breakpoints?`, `onToggleBreakpoint?`,
+  `executionLine?`, `aria-label` (required), `styleNonce?`, `ref`.
 - `SurfaceLanguage` (`completions`, `hover`, `goToDefinition`), `SurfacePosition`,
   `SurfaceCompletion`.
 - `EditorSurfaceHandle` (through `ref`): `getValue()`, `setValue(value)` (calls

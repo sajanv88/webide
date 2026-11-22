@@ -14,6 +14,7 @@ publish = false
 
 # Workspace crates
 ide-core = { path = "crates/ide-core" }
+ide-debug = { path = "crates/ide-debug" }
 ide-fs = { path = "crates/ide-fs" }
 ide-git = { path = "crates/ide-git" }
 ide-ipc = { path = "crates/ide-ipc" }

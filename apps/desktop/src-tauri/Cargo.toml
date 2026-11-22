@@ -10,6 +10,7 @@ publish.workspace = true
 tauri-build = { workspace = true }
 
 [dependencies]
+ide-debug = { workspace = true }
 ide-fs = { workspace = true }
 ide-git = { workspace = true }
 ide-ipc = { workspace = true }

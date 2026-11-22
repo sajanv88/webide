@@ -1,6 +1,10 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use ide_core::debug::{
+    Breakpoint, DebugAdapters, DebugEvent, DebugSession, DebugSink, Scope, StackFrame, Step,
+    Variable,
+};
 use ide_core::fs::{
     DirListing, FileNode, FileStamp, LineEnding, NodeKind, ReadLimits, ReadOutcome,
 };
@@ -22,10 +26,11 @@ use ide_core::{
 use serde_json::json;
 
 use crate::dto::{
-    AppInfoDto, BackendEventDto, CloseGuardArgs, DiffSideDto, GitCommitArgs, GitDiffArgs,
-    GitPathsArgs, GitSwitchArgs, LspDocumentArgs, LspPositionArgs, OpenRecentArgs, ReadFileDto,
-    SearchTextArgs, SettingsPatchDto, TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs,
-    WorkspaceArgs, WorkspacePathArgs, WriteFileArgs,
+    AppInfoDto, BackendEventDto, CloseGuardArgs, DebugStartArgs, DebugThreadArgs, DiffSideDto,
+    FileBreakpoints, GitCommitArgs, GitDiffArgs, GitPathsArgs, GitSwitchArgs, LspDocumentArgs,
+    LspPositionArgs, OpenRecentArgs, ReadFileDto, SearchTextArgs, SettingsPatchDto, StepDto,
+    TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs, WorkspaceArgs, WorkspacePathArgs,
+    WriteFileArgs,
 };
 use crate::error::{IpcError, IpcErrorCode};
 use crate::handlers::{self, IpcState, Services};
@@ -436,6 +441,92 @@ impl Drop for FakeServer {
     }
 }
 
+/// Logs what each debug session is told; reports a stop when launched.
+#[derive(Default)]
+struct FakeDebuggers {
+    log: Arc<Mutex<Vec<String>>>,
+}
+
+struct FakeDebugSession {
+    log: Arc<Mutex<Vec<String>>>,
+}
+
+impl DebugAdapters for FakeDebuggers {
+    fn handles(&self, path: &RelPath) -> bool {
+        path.as_str().ends_with(".js")
+    }
+    fn launch(
+        &self,
+        root: &WorkspaceRoot,
+        program: &RelPath,
+        breakpoints: &[(RelPath, Vec<u32>)],
+        sink: DebugSink,
+    ) -> Result<Box<dyn DebugSession>, IdeError> {
+        self.log.lock().unwrap().push(format!(
+            "launch {program} in {} with {breakpoints:?}",
+            root.name()
+        ));
+        sink(DebugEvent::Stopped {
+            thread_id: 7,
+            reason: "breakpoint".into(),
+            description: None,
+        });
+        Ok(Box::new(FakeDebugSession {
+            log: Arc::clone(&self.log),
+        }))
+    }
+}
+
+impl FakeDebugSession {
+    fn note(&self, what: String) {
+        self.log.lock().unwrap().push(what);
+    }
+}
+
+impl DebugSession for FakeDebugSession {
+    fn set_breakpoints(&self, path: &RelPath, lines: &[u32]) -> Result<Vec<Breakpoint>, IdeError> {
+        self.note(format!("breakpoints {path} {lines:?}"));
+        Ok(lines
+            .iter()
+            .map(|&line| Breakpoint {
+                line,
+                verified: true,
+                actual_line: None,
+            })
+            .collect())
+    }
+    fn resume(&self, thread_id: i64) -> Result<(), IdeError> {
+        self.note(format!("resume {thread_id}"));
+        Ok(())
+    }
+    fn step(&self, thread_id: i64, step: Step) -> Result<(), IdeError> {
+        self.note(format!("step {thread_id} {step:?}"));
+        Ok(())
+    }
+    fn pause(&self, thread_id: i64) -> Result<(), IdeError> {
+        self.note(format!("pause {thread_id}"));
+        Ok(())
+    }
+    fn stack(&self, _thread_id: i64) -> Result<Vec<StackFrame>, IdeError> {
+        Ok(Vec::new())
+    }
+    fn scopes(&self, _frame_id: i64) -> Result<Vec<Scope>, IdeError> {
+        Ok(Vec::new())
+    }
+    fn variables(&self, _reference: i64) -> Result<Vec<Variable>, IdeError> {
+        Ok(Vec::new())
+    }
+    fn evaluate(&self, expression: &str, _frame_id: Option<i64>) -> Result<String, IdeError> {
+        Ok(format!("= {expression}"))
+    }
+}
+
+impl Drop for FakeDebugSession {
+    fn drop(&mut self) {
+        self.note("end".into());
+    }
+}
+
 fn folder(name: &str) -> PathBuf {
     std::env::temp_dir().join(name)
 }
@@ -449,6 +540,7 @@ struct Fixture {
     git: Arc<FakeGit>,
     terminals: Arc<FakeTerminals>,
     languages: Arc<FakeLanguages>,
+    debuggers: Arc<FakeDebuggers>,
     /// What was sent to the webview.
     emitted: Arc<Mutex<Vec<BackendEventDto>>>,
 }
@@ -475,6 +567,7 @@ fn fixture() -> Fixture {
     let git = Arc::new(FakeGit::default());
     let terminals = Arc::new(FakeTerminals::default());
     let languages = Arc::new(FakeLanguages::default());
+    let debuggers = Arc::new(FakeDebuggers::default());
     let services = Services {
         fs: fs.clone(),
         workspace: store.clone(),
@@ -483,6 +576,7 @@ fn fixture() -> Fixture {
         git: git.clone(),
         terminals: terminals.clone(),
         languages: languages.clone(),
+        debuggers: debuggers.clone(),
     };
     let info = AppInfoDto {
         name: "test".to_owned(),
@@ -500,6 +594,7 @@ fn fixture() -> Fixture {
         git,
         terminals,
         languages,
+        debuggers,
         emitted,
     }
 }
@@ -1212,4 +1307,75 @@ fn a_server_that_cant_start_isnt_tried_again_until_asked() {
     .unwrap();
     handlers::lsp_open(&fx.state, doc(&ws.id, "a.ts", "x")).unwrap();
     assert_eq!(starts(), 2);
+}
+
+fn start(workspace_id: &str, path: &str) -> DebugStartArgs {
+    DebugStartArgs {
+        workspace_id: workspace_id.to_owned(),
+        path: path.to_owned(),
+        breakpoints: vec![FileBreakpoints {
+            path: "app.js".into(),
+            lines: vec![2],
+        }],
+    }
+}
+
+fn thread(workspace_id: &str, step: Option<StepDto>) -> DebugThreadArgs {
+    DebugThreadArgs {
+        workspace_id: workspace_id.to_owned(),
+        thread_id: 7,
+        step,
+    }
+}
+
+#[test]
+fn a_program_runs_under_the_debugger_until_stopped_or_the_workspace_changes() {
+    let fx = fixture();
+    let ws = handlers::open_picked(&fx.state, &folder("alpha")).unwrap();
+    // Nothing running yet.
+    assert_eq!(
+        code(handlers::debug_resume(&fx.state, thread(&ws.id, None))),
+        IpcErrorCode::InvalidArgument
+    );
+    // Not a file it can run.
+    assert_eq!(
+        code(handlers::debug_start(&fx.state, start(&ws.id, "notes.md"))),
+        IpcErrorCode::InvalidArgument
+    );
+
+    handlers::debug_start(&fx.state, start(&ws.id, "app.js")).unwrap();
+    let stopped = fx.emitted.lock().unwrap().iter().any(|event| {
+        matches!(event, BackendEventDto::Debug { workspace_id, .. } if *workspace_id == ws.id)
+    });
+    assert!(stopped, "the debugger's events reach the page, tagged");
+
+    handlers::debug_resume(&fx.state, thread(&ws.id, Some(StepDto::Over))).unwrap();
+    handlers::debug_resume(&fx.state, thread(&ws.id, None)).unwrap();
+    assert_eq!(
+        handlers::debug_evaluate(
+            &fx.state,
+            crate::dto::DebugEvaluateArgs {
+                workspace_id: ws.id.clone(),
+                expression: "1 + 1".into(),
+                frame_id: None,
+            },
+        )
+        .unwrap(),
+        "= 1 + 1"
+    );
+    // Starting again ends the one running.
+    handlers::debug_start(&fx.state, start(&ws.id, "app.js")).unwrap();
+    // Another workspace ends it too.
+    handlers::open_picked(&fx.state, &folder("beta")).unwrap();
+    assert_eq!(
+        *fx.debuggers.log.lock().unwrap(),
+        [
+            r#"launch app.js in alpha with [(RelPath("app.js"), [2])]"#,
+            "step 7 Over",
+            "resume 7",
+            "end",
+            r#"launch app.js in alpha with [(RelPath("app.js"), [2])]"#,
+            "end",
+        ]
+    );
 }

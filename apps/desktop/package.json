@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:web": "node scripts/stage-typescript.mjs && vite",
-    "build": "node scripts/stage-typescript.mjs && vite build",
+    "dev:web": "node scripts/stage-typescript.mjs && node scripts/stage-js-debug.mjs && vite",
+    "build": "node scripts/stage-typescript.mjs && node scripts/stage-js-debug.mjs && vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "tauri": "tauri",
-    "stage:typescript": "node scripts/stage-typescript.mjs"
+    "stage:typescript": "node scripts/stage-typescript.mjs",
+    "stage:js-debug": "node scripts/stage-js-debug.mjs"
   },
   "dependencies": {
     "@nuvui/backgrounds": "catalog:",
@@ -16,6 +17,7 @@
     "@nuvui/react": "catalog:",
     "@repo/commands": "workspace:*",
     "@repo/contracts": "workspace:*",
+    "@repo/debug": "workspace:*",
     "@repo/editor-surface": "workspace:*",
     "@repo/explorer": "workspace:*",
     "@repo/git": "workspace:*",

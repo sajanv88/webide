@@ -6,6 +6,7 @@
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use ide_debug::NodeDebugger;
 use ide_fs::LocalFs;
 use ide_git::LocalGit;
 use ide_ipc::Services;
@@ -24,6 +25,14 @@ fn main() -> ExitCode {
         git: Arc::new(LocalGit::new()),
         terminals: Arc::new(LocalTerminals::new()),
         // Staged into the bundle by scripts/stage-typescript.mjs.
+        // Staged into the bundle by scripts/stage-js-debug.mjs; runs on the person's `node`.
+        debuggers: Arc::new(NodeDebugger::new(
+            paths
+                .resource_dir
+                .join("js-debug")
+                .join("src")
+                .join("dapDebugServer.js"),
+        )),
         languages: Arc::new(TypeScriptServers::new(
             paths
                 .resource_dir

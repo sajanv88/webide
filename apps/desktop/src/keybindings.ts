@@ -20,6 +20,12 @@ export const DEFAULT_KEYBINDINGS: readonly KeybindingSpec<AppCommandId>[] = [
   { key: "Mod+P", command: "search.goToFile" },
   { key: "Ctrl+`", command: "terminal.focus" },
   { key: "Ctrl+Shift+`", command: "terminal.new" },
+  { key: "Mod+Shift+D", command: "view.showDebug" },
+  { key: "F5", command: "debug.start" },
+  { key: "Shift+F5", command: "debug.stop" },
+  { key: "F10", command: "debug.stepOver" },
+  { key: "F11", command: "debug.stepInto" },
+  { key: "Shift+F11", command: "debug.stepOut" },
   { key: "Mod+,", command: "settings.open" },
 ];
 
@@ -40,6 +46,12 @@ const TERMINAL_PASSES: ReadonlySet<AppCommandId> = new Set<AppCommandId>([
   "tabs.next",
   "tabs.previous",
   "settings.open",
+  "view.showDebug",
+  "debug.start",
+  "debug.stop",
+  "debug.stepOver",
+  "debug.stepInto",
+  "debug.stepOut",
 ]);
 
 /** Whether a key pressed in a terminal is the app's. */

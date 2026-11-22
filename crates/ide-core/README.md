@@ -1,6 +1,6 @@
 # ide-core
 
-**Status:** Milestone 5.
+**Status:** Milestone 6.
 
 ## Purpose
 
@@ -46,6 +46,10 @@ runtime: everything here is data and pure functions.
   it), `LanguageStatus`, `LanguageSink`, `script_language` (a JavaScript or
   TypeScript file's LSP language id), and the ports `LanguageServers` and
   `LanguageServer`.
+- `debug`: `StackFrame` (its `FrameSource`: in the workspace, or outside it),
+  `Scope`, `Variable`, `Breakpoint`, `DebugEvent` (output, stopped,
+  continued, terminated), `DebugSink`, `Step` (over, into, out), and the ports
+  `DebugAdapters` and `DebugSession`.
 - Ports: `WorkspaceFs`, `WorkspaceStore`, `FsWatcher`, `WorkspaceSearch`,
   `GitClient`.
 

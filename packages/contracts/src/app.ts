@@ -1,7 +1,9 @@
 // Hand-written, frontend-only contracts: how modules talk to each other.
 // (The IPC types are generated from Rust, in ./generated.)
 import type {
+  BreakpointDto,
   CompletionsDto,
+  DebugEventDto,
   DefinitionDto,
   DirListingDto,
   FileChangeDto,
@@ -15,12 +17,15 @@ import type {
   LanguageStatusDto,
   ProblemDto,
   ReadFileDto,
+  ScopeDto,
   SearchTextArgs,
   SettingsDto,
   SettingsPatchDto,
+  StackFrameDto,
   TerminalDto,
   TerminalEventDto,
   TextSearchDto,
+  VariableDto,
   WorkspaceDto,
 } from "./generated/index";
 
@@ -57,6 +62,14 @@ export type AppCommandId =
   | "terminal.focus"
   | "terminal.screenReader"
   | "language.restart"
+  | "view.showDebug"
+  | "debug.start"
+  | "debug.stop"
+  | "debug.continue"
+  | "debug.pause"
+  | "debug.stepOver"
+  | "debug.stepInto"
+  | "debug.stepOut"
   | "file.save"
   | "file.saveAll"
   | "tabs.close"
@@ -104,6 +117,8 @@ export interface AppEvents {
   "language.problems": { readonly path: string; readonly problems: readonly EditorProblem[] };
   /** How the open workspace's language server is doing. */
   "language.status": LanguageStatusDto;
+  /** What the program running under the debugger reports. */
+  "debug.event": DebugEventDto;
 }
 
 /** What the explorer needs from the outside: one level of a folder in the open workspace. */
@@ -207,4 +222,22 @@ export interface LanguagePort {
   definition(path: string, line: number, character: number): Promise<IpcResult<DefinitionDto[]>>;
   /** Stops the server; it starts again when it's next needed. */
   restart(): Promise<IpcResult<null>>;
+}
+
+/** What debugging needs: one program at a time, under the debugger, in the open workspace. */
+export interface DebugPort {
+  /** Runs `path`, with breakpoints set first (1-based lines). */
+  start(
+    path: string,
+    breakpoints: readonly { path: string; lines: readonly number[] }[],
+  ): Promise<IpcResult<null>>;
+  stop(): Promise<IpcResult<null>>;
+  setBreakpoints(path: string, lines: readonly number[]): Promise<IpcResult<BreakpointDto[]>>;
+  /** Continues, or steps when `step` says how. */
+  resume(threadId: number, step?: "over" | "into" | "out"): Promise<IpcResult<null>>;
+  pause(threadId: number): Promise<IpcResult<null>>;
+  stack(threadId: number): Promise<IpcResult<StackFrameDto[]>>;
+  scopes(frameId: number): Promise<IpcResult<ScopeDto[]>>;
+  variables(reference: number): Promise<IpcResult<VariableDto[]>>;
+  evaluate(expression: string, frameId?: number): Promise<IpcResult<string>>;
 }

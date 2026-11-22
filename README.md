@@ -19,6 +19,11 @@ Status and plan: [checklist.md](checklist.md), from [plan.md](plan.md).
 | Ctrl+Shift+F                | Find in files             |
 | Ctrl+Shift+E                | Show the explorer         |
 | Ctrl+Shift+G                | Show source control       |
+| Ctrl+Shift+D                | Show Run and Debug        |
+| F5                          | Start debugging, continue |
+| Shift+F5                    | Stop debugging            |
+| F9                          | Toggle a breakpoint       |
+| F10 / F11 / Shift+F11       | Step over / into / out    |
 | Ctrl+`                      | Toggle the terminal       |
 | Ctrl+Shift+`                | New terminal              |
 | F12, Ctrl+click             | Go to definition          |
@@ -38,8 +43,10 @@ the menus and the palette show them from there.
 - The [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS
 
 `pnpm build` (and `pnpm dev`) first copies the TypeScript language server for
-your platform, from the app's own `typescript` dependency, into
-`apps/desktop/src-tauri/resources/`, which the app bundles. Run `pnpm build`
+your platform, from the app's own `typescript` dependency, and the
+vscode-js-debug DAP server (downloaded from its GitHub release once, checked
+by its SHA-256, then cached), into `apps/desktop/src-tauri/resources/`, which
+the app bundles. The debugger runs programs on your own `node`. Run `pnpm build`
 once before `cargo` builds the app on its own (Tauri checks the resources
 exist).
 
@@ -59,11 +66,11 @@ exist).
 
 ```
 crates/            Rust: ide-core, ide-fs, ide-watcher, ide-workspace, ide-search, ide-git,
-                   ide-terminal, ide-lsp, ide-ipc
+                   ide-terminal, ide-lsp, ide-debug, ide-ipc
 apps/desktop/      The Vite frontend (src/) and the Tauri composition root (src-tauri/)
 packages/          Frontend modules: contracts, kernel, ipc, shell, explorer, tabs,
-                   editor-surface, commands, settings, search, git, terminal, lsp, and
-                   the shared tsconfig
+                   editor-surface, commands, settings, search, git, terminal, lsp, debug,
+                   and the shared tsconfig
 xtask/             cargo xtask check-boundaries, check-csp, check-contracts
 ```
 
@@ -75,11 +82,10 @@ Each module has a README with its purpose, public API and allowed dependencies.
   crates depend on `ide-core` only. `ide-core` has no IO and no async runtime.
 - Frontend: only `@repo/ipc` imports `@tauri-apps/*`. A feature package never
   imports another feature package or `@repo/ipc`. Every package is imported
-  through its public entry. No code editor library anywhere.
+  through its public entry. CodeMirror only in `@repo/editor-surface`,
+  xterm only in `@repo/terminal`.
 
 ## Reserved names
 
-Not built in this milestone: `ide-lsp`, `ide-terminal`, `ide-git`, `ide-debug`,
-`ide-mcp`, `ide-search`, and `@repo/lsp`, `@repo/terminal`, `@repo/git`,
-`@repo/debug`, `@repo/mcp`, `@repo/search`. The boundary rules already treat
+Not built yet: `ide-mcp` and `@repo/mcp`. The boundary rules already treat
 them as feature modules.
