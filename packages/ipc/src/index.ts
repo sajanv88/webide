@@ -28,6 +28,7 @@ import { call, type IpcResult } from "./call";
 export { call, type IpcResult, toIpcError } from "./call";
 export { closeWindow, setCloseGuard, subscribeEvents } from "./events";
 export { getStyleNonce } from "./nonce";
+export { closeTerminal, openTerminal, resizeTerminal, writeTerminal } from "./terminal";
 
 /** The app's name and version, from tauri.conf.json (the one place the name lives). */
 export const appInfo = (): Promise<IpcResult<AppInfoDto>> => call("app_info");

@@ -13,6 +13,8 @@ import type {
   SearchTextArgs,
   SettingsDto,
   SettingsPatchDto,
+  TerminalDto,
+  TerminalEventDto,
   TextSearchDto,
   WorkspaceDto,
 } from "./generated/index";
@@ -43,6 +45,12 @@ export type AppCommandId =
   | "git.unstageAll"
   | "git.switchBranch"
   | "git.init"
+  | "view.togglePanel"
+  | "view.showPanel"
+  | "terminal.new"
+  | "terminal.kill"
+  | "terminal.focus"
+  | "terminal.screenReader"
   | "file.save"
   | "file.saveAll"
   | "tabs.close"
@@ -129,4 +137,29 @@ export interface GitPort {
   branches(): Promise<IpcResult<GitBranchDto[]>>;
   switchBranch(name: string, create: boolean): Promise<IpcResult<null>>;
   init(): Promise<IpcResult<null>>;
+}
+
+/** A terminal the app started, and how to stop hearing from it. */
+export interface OpenTerminal {
+  readonly terminal: TerminalDto;
+  /** Stops events from reaching `onEvent`. (Closing the terminal is `close`.) */
+  readonly stop: () => void;
+}
+
+/**
+ * What terminals need: the person's shell in the open workspace's folder.
+ * The program, its arguments and its folder are the backend's to choose.
+ */
+export interface TerminalPort {
+  /** Starts a shell `cols` × `rows` cells; its output and its exit go to `onEvent`. */
+  open(
+    cols: number,
+    rows: number,
+    onEvent: (event: TerminalEventDto) => void,
+  ): Promise<IpcResult<OpenTerminal>>;
+  /** Keystrokes or pasted text. */
+  write(id: number, data: string): Promise<IpcResult<null>>;
+  resize(id: number, cols: number, rows: number): Promise<IpcResult<null>>;
+  /** Ends the shell. */
+  close(id: number): Promise<IpcResult<null>>;
 }

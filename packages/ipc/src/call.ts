@@ -40,6 +40,7 @@ const CODES: Readonly<Record<IpcErrorCode, true>> = {
   invalidSettings: true,
   invalidQuery: true,
   git: true,
+  invalidArgument: true,
   io: true,
   internal: true,
 };
