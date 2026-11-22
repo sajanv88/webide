@@ -1,4 +1,5 @@
 // The composition root: the only place that wires modules together.
+import { FolderIcon, SearchIcon } from "@nuvui/icons";
 import { Toaster, toast } from "@nuvui/react";
 import {
   attachKeybindings,
@@ -12,6 +13,7 @@ import type {
   AppInfoDto,
   IpcError,
   RecentWorkspaceDto,
+  SearchPort,
   WorkspaceDto,
 } from "@repo/contracts";
 import { EditorSurface } from "@repo/editor-surface";
@@ -23,18 +25,21 @@ import {
   getSettings,
   getStyleNonce,
   listDirectory,
+  listFiles,
   openRecentWorkspace,
   pickWorkspace,
   readFile,
   recentWorkspaces,
+  searchText,
   setCloseGuard,
   subscribeEvents,
   updateSettings,
   writeFile,
 } from "@repo/ipc";
 import { createCommandRegistry, createEventBus } from "@repo/kernel";
+import { QuickOpen, SearchView } from "@repo/search";
 import { SettingsDialog } from "@repo/settings";
-import { type MenuSpec, Shell } from "@repo/shell";
+import { type MenuSpec, Shell, type SidebarView } from "@repo/shell";
 import { createDocuments, type Documents, DocumentTabs } from "@repo/tabs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AboutDialog } from "./about/about-dialog";
@@ -253,6 +258,48 @@ export function App() {
     [workspace],
   );
 
+  const searchPort = useMemo<SearchPort | null>(
+    () =>
+      workspace && {
+        searchText: (query) => searchText({ workspaceId: workspace.id, ...query }),
+        listFiles: () => listFiles({ workspaceId: workspace.id }),
+      },
+    [workspace],
+  );
+
+  const views = useMemo<SidebarView[]>(
+    () =>
+      source && searchPort && workspace
+        ? [
+            {
+              id: "explorer",
+              title: "Explorer",
+              icon: <FolderIcon size={20} />,
+              command: "view.showExplorer",
+              content: (
+                <Explorer source={source} registry={registry} bus={bus} styleNonce={styleNonce} />
+              ),
+            },
+            {
+              id: "search",
+              title: "Search",
+              icon: <SearchIcon size={20} />,
+              content: (
+                <SearchView
+                  key={workspace.id}
+                  port={searchPort}
+                  registry={registry}
+                  bus={bus}
+                  viewId="search"
+                  styleNonce={styleNonce}
+                />
+              ),
+            },
+          ]
+        : [],
+    [source, searchPort, workspace],
+  );
+
   const menus = useMemo<MenuSpec[]>(
     () => [
       {
@@ -287,8 +334,17 @@ export function App() {
         items: [
           { kind: "command", command: "commands.showPalette" },
           { kind: "separator" },
-          { kind: "command", command: "view.toggleExplorer" },
+          { kind: "command", command: "view.showExplorer" },
+          { kind: "command", command: "search.findInFiles" },
+          { kind: "command", command: "view.toggleSidebar" },
+          { kind: "separator" },
           { kind: "command", command: "explorer.collapseAll" },
+        ],
+      },
+      {
+        label: "Go",
+        items: [
+          { kind: "command", command: "search.goToFile" },
           { kind: "separator" },
           { kind: "command", command: "tabs.next" },
           { kind: "command", command: "tabs.previous" },
@@ -312,13 +368,7 @@ export function App() {
         registry={registry}
         menus={menus}
         shortcutFor={keybindings.forCommand}
-        {...(source
-          ? {
-              sidebar: (
-                <Explorer source={source} registry={registry} bus={bus} styleNonce={styleNonce} />
-              ),
-            }
-          : {})}
+        views={views}
         main={
           workspace && documents ? (
             <DocumentTabs
@@ -348,6 +398,9 @@ export function App() {
       />
       <AboutDialog info={info} open={aboutOpen} onOpenChange={setAboutOpen} />
       <CommandPalette registry={registry} keybindings={keybindings} />
+      {workspace && searchPort ? (
+        <QuickOpen key={workspace.id} port={searchPort} registry={registry} bus={bus} />
+      ) : null}
       <SettingsDialog port={settingsPort} registry={registry} bus={bus} />
       <Toaster />
     </>

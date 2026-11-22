@@ -19,6 +19,7 @@
     "@repo/explorer": "workspace:*",
     "@repo/ipc": "workspace:*",
     "@repo/kernel": "workspace:*",
+    "@repo/search": "workspace:*",
     "@repo/settings": "workspace:*",
     "@repo/shell": "workspace:*",
     "@repo/tabs": "workspace:*",
