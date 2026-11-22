@@ -1,7 +1,13 @@
 // Public entry of @repo/ipc: the only package that imports @tauri-apps/api.
 import type {
   AppInfoDto,
+  BreakpointDto,
   CompletionsDto,
+  DebugBreakpointsArgs,
+  DebugEvaluateArgs,
+  DebugReferenceArgs,
+  DebugStartArgs,
+  DebugThreadArgs,
   DefinitionDto,
   DirListingDto,
   FileListDto,
@@ -20,10 +26,13 @@ import type {
   ProblemDto,
   ReadFileDto,
   RecentWorkspaceDto,
+  ScopeDto,
   SearchTextArgs,
   SettingsDto,
   SettingsPatchDto,
+  StackFrameDto,
   TextSearchDto,
+  VariableDto,
   WorkspaceArgs,
   WorkspaceDto,
   WorkspacePathArgs,
@@ -123,3 +132,30 @@ export const lspDefinition = (args: LspPositionArgs): Promise<IpcResult<Definiti
 
 export const lspRestart = (args: WorkspaceArgs): Promise<IpcResult<null>> =>
   call("lsp_restart", args);
+
+export const debugStart = (args: DebugStartArgs): Promise<IpcResult<null>> =>
+  call("debug_start", args);
+
+export const debugStop = (args: WorkspaceArgs): Promise<IpcResult<null>> =>
+  call("debug_stop", args);
+
+export const debugBreakpoints = (args: DebugBreakpointsArgs): Promise<IpcResult<BreakpointDto[]>> =>
+  call("debug_breakpoints", args);
+
+export const debugResume = (args: DebugThreadArgs): Promise<IpcResult<null>> =>
+  call("debug_resume", args);
+
+export const debugPause = (args: DebugThreadArgs): Promise<IpcResult<null>> =>
+  call("debug_pause", args);
+
+export const debugStack = (args: DebugThreadArgs): Promise<IpcResult<StackFrameDto[]>> =>
+  call("debug_stack", args);
+
+export const debugScopes = (args: DebugReferenceArgs): Promise<IpcResult<ScopeDto[]>> =>
+  call("debug_scopes", args);
+
+export const debugVariables = (args: DebugReferenceArgs): Promise<IpcResult<VariableDto[]>> =>
+  call("debug_variables", args);
+
+export const debugEvaluate = (args: DebugEvaluateArgs): Promise<IpcResult<string>> =>
+  call("debug_evaluate", args);

@@ -1,6 +1,6 @@
 # @repo/contracts
 
-**Status:** Milestone 5: IPC types (generated), and the app's command ids, events and ports (hand-written).
+**Status:** Milestone 6: IPC types (generated), and the app's command ids, events and ports (hand-written).
 
 ## Purpose
 
@@ -28,7 +28,10 @@ Types only (`export type *`):
   `GitCommitArgs`, `GitSwitchArgs`, `TerminalDto`, `TerminalEventDto`,
   `TerminalOpenArgs`, `TerminalWriteArgs`, `TerminalResizeArgs`, `TerminalIdArgs`,
   `ProblemDto`, `CompletionsDto`, `HoverDto`, `DefinitionDto`, `LanguageStatusDto`,
-  `LspDocumentArgs`, `LspPositionArgs`,
+  `LspDocumentArgs`, `LspPositionArgs`, `DebugEventDto`, `StackFrameDto`,
+  `FrameSourceDto`, `ScopeDto`, `VariableDto`, `BreakpointDto`, `StepDto`,
+  `DebugStartArgs`, `DebugBreakpointsArgs`, `DebugThreadArgs`,
+  `DebugReferenceArgs`, `DebugEvaluateArgs`,
   and the argument types `WorkspacePathArgs`, `WorkspaceArgs`, `WriteFileArgs`,
   `OpenRecentArgs`, `SearchTextArgs`.
 - `IpcResult<T>`: `{ ok: true, value } | { ok: false, error: IpcError }`.
@@ -36,7 +39,7 @@ Types only (`export type *`):
 - `AppEvents`: `workspace.opened`, `explorer.fileActivated`, `file.openRequested`
   (a path, and optionally where to put the cursor), `workspace.filesChanged`,
   `settings.changed`, `document.opened` / `document.changed` / `document.closed`
-  (an open file's text), `language.problems`, `language.status`.
+  (an open file's text), `language.problems`, `language.status`, `debug.event`.
 - `EditorProblem`: a problem placed by character offset, and by line.
 - `ExplorerPort`: `listDirectory(path)`, bound to the open workspace by the app.
 - `DocumentsPort`: `readFile(path)`, `writeFile(path, text)`, the same way, for `@repo/tabs`.
@@ -47,6 +50,9 @@ Types only (`export type *`):
   for `@repo/terminal`.
 - `LanguagePort`: `open`, `change`, `close`, `problems`, `completions`, `hover`,
   `definition`, `restart`, for `@repo/lsp`.
+- `DebugPort`: `start(path, breakpoints)`, `stop`, `setBreakpoints`,
+  `resume(threadId, step?)`, `pause`, `stack`, `scopes`, `variables`, `evaluate`,
+  for `@repo/debug`.
 
 ## May depend on
 

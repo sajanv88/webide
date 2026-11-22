@@ -1,6 +1,6 @@
 # @repo/ipc
 
-**Status:** Milestone 5: every command, typed, and the backend's events.
+**Status:** Milestone 6: every command, typed, and the backend's events.
 
 ## Purpose
 
@@ -21,8 +21,10 @@ The only package that imports `@tauri-apps/api`. It turns the commands in
   Tauri `Channel` of its own. `writeTerminal`, `resizeTerminal`, `closeTerminal`.
 - `lspOpen`, `lspChange`, `lspClose`, `lspProblems`, `lspCompletions`, `lspHover`,
   `lspDefinition`, `lspRestart`.
+- `debugStart`, `debugStop`, `debugBreakpoints`, `debugResume`, `debugPause`,
+  `debugStack`, `debugScopes`, `debugVariables`, `debugEvaluate`.
 - `subscribeEvents(onEvent)`: hears `BackendEventDto`s (file changes, the
-  window closing) over a Tauri `Channel`; resolves to the function that stops.
+  window closing, the debugger) over a Tauri `Channel`; resolves to the function that stops.
 - `setCloseGuard(unsaved)`, `closeWindow()`: the window asks before closing
   while there are unsaved changes.
 - `IpcResult<T>`: `{ ok: true, value }` or `{ ok: false, error: IpcError }`. Calls
