@@ -163,4 +163,23 @@ describe("Shell", () => {
     expect(item.getAttribute("aria-keyshortcuts")).toBe("Control+O");
     expect(item.textContent).toBe("Open Folder…Ctrl+O");
   });
+
+  it("puts the panel under the work area, named, with its commands", () => {
+    const registry = createCommandRegistry<AppCommandId>();
+    const { unmount } = render(
+      <Shell
+        title="Test IDE"
+        registry={registry}
+        menus={menus}
+        main={<p>main slot</p>}
+        panel={{ title: "Terminal", content: <p>panel slot</p> }}
+      />,
+    );
+    expect(screen.getByRole("region", { name: "Terminal" }).textContent).toBe("panel slot");
+    expect(screen.getByRole("separator", { name: "Resize panel" })).toBeTruthy();
+    expect(registry.get("view.togglePanel")?.title).toBe("Toggle Panel");
+    expect(registry.get("view.showPanel")?.palette).toBe(false);
+    unmount();
+    expect(registry.get("view.togglePanel")).toBeUndefined();
+  });
 });

@@ -24,6 +24,7 @@
     "@repo/settings": "workspace:*",
     "@repo/shell": "workspace:*",
     "@repo/tabs": "workspace:*",
+    "@repo/terminal": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

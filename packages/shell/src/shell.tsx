@@ -47,6 +47,11 @@ export interface ShellProps {
   readonly views?: readonly SidebarView[];
   /** Slot: the main work area. */
   readonly main: ReactNode;
+  /**
+   * Slot: a pane under the work area (the terminals), hidden until shown,
+   * resizable, named `title`. It stays mounted while it's hidden.
+   */
+  readonly panel?: { readonly title: string; readonly content: ReactNode };
   /** Slot: items in the status bar. */
   readonly statusBar?: ReactNode;
 }
@@ -64,6 +69,7 @@ export function Shell({
   shortcutFor,
   views = [],
   main,
+  panel,
   statusBar,
 }: ShellProps) {
   const first = views[0];
@@ -76,6 +82,74 @@ export function Shell({
   const { defaultLayout, onLayoutChanged } = useResizableLayout({ id: "shell" });
   // Whether the view under the pointer was already shown when it was pressed.
   const pressedActive = useRef(false);
+  const bottomPanel = useResizablePanelRef();
+  const panelSection = useRef<HTMLElement>(null);
+  // Where focus was before it went into the panel, to give back when it's hidden.
+  const beforePanel = useRef<HTMLElement | null>(null);
+  const panelLayout = useResizableLayout({ id: "shell-panel" });
+  const hasPanel = panel !== undefined;
+
+  // Remember where focus came from when it enters the panel.
+  useEffect(() => {
+    const section = panelSection.current;
+    if (!hasPanel || !section) return;
+    const entered = (event: FocusEvent) => {
+      const from = event.relatedTarget;
+      if (from instanceof HTMLElement && !section.contains(from)) beforePanel.current = from;
+    };
+    section.addEventListener("focusin", entered);
+    return () => section.removeEventListener("focusin", entered);
+  }, [hasPanel]);
+
+  // The panel starts hidden, unless its size was kept from before.
+  const panelStart = useRef(panelLayout.defaultLayout);
+  useEffect(() => {
+    if (hasPanel && !panelStart.current) bottomPanel.current?.collapse();
+  }, [hasPanel, bottomPanel]);
+
+  useEffect(() => {
+    if (!hasPanel) return;
+    // Opened at its last size, or at 30% when that was barely there.
+    const open = () => {
+      const now = bottomPanel.current;
+      if (!now?.isCollapsed()) return;
+      now.expand();
+      if (now.getSize().asPercentage < 15) now.resize("30%");
+    };
+    const disposers = [
+      registry.register({
+        id: "view.togglePanel",
+        title: "Toggle Panel",
+        category: "View",
+        run: () => {
+          const now = bottomPanel.current;
+          if (!now) return;
+          if (now.isCollapsed()) {
+            open();
+            return;
+          }
+          const hadFocus = panelSection.current?.contains(document.activeElement) ?? false;
+          now.collapse();
+          // Focus mustn't stay in a hidden panel: back where it was before.
+          if (hadFocus) {
+            const back = beforePanel.current;
+            if (back?.isConnected) back.focus();
+            else (document.activeElement as HTMLElement | null)?.blur();
+          }
+        },
+      }),
+      registry.register({
+        id: "view.showPanel",
+        title: "Show Panel",
+        category: "View",
+        palette: false,
+        run: open,
+      }),
+    ];
+    return () => {
+      for (const dispose of disposers) dispose();
+    };
+  }, [registry, bottomPanel, hasPanel]);
 
   const viewIds = views.map((view) => `${view.id}:${view.command ?? ""}`).join(" ");
   // biome-ignore lint/correctness/useExhaustiveDependencies: `viewIds` stands for `views`, which is a new array on each render
@@ -125,10 +199,38 @@ export function Shell({
     };
   }, [registry, sidebarPanel, viewIds]);
 
-  const mainArea = (
+  const workArea = (
     <main className="app-shell__main" aria-label="Workspace">
       {main}
     </main>
+  );
+  const mainArea = panel ? (
+    <Resizable
+      orientation="vertical"
+      className="app-shell__column"
+      {...(panelLayout.defaultLayout ? { defaultLayout: panelLayout.defaultLayout } : {})}
+      onLayoutChanged={panelLayout.onLayoutChanged}
+    >
+      <ResizablePanel id="app-shell-work" minSize="20%" className="app-shell__pane">
+        {workArea}
+      </ResizablePanel>
+      <ResizableHandle aria-label="Resize panel" />
+      <ResizablePanel
+        id="app-shell-panel"
+        panelRef={bottomPanel}
+        collapsible
+        defaultSize="30%"
+        minSize="6rem"
+        maxSize="80%"
+        className="app-shell__pane"
+      >
+        <section ref={panelSection} className="app-shell__panel" aria-label={panel.title}>
+          {panel.content}
+        </section>
+      </ResizablePanel>
+    </Resizable>
+  ) : (
+    workArea
   );
 
   return (

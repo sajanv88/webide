@@ -22,8 +22,12 @@ const IPC_COMMANDS: &[&str] = &[
     "git_branches",
     "git_switch_branch",
     "git_init",
+    "terminal_write",
+    "terminal_resize",
+    "terminal_close",
     "pick_workspace",
     "subscribe_events",
     "set_close_guard",
     "close_window",
+    "terminal_open",
 ];

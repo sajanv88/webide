@@ -1,6 +1,6 @@
 # ide-core
 
-**Status:** Milestone 3.
+**Status:** Milestone 4.
 
 ## Purpose
 
@@ -13,7 +13,8 @@ runtime: everything here is data and pure functions.
   absolute or drive prefix, valid names for the OS via `NameRules`). It's the
   first path guard, applied before any IO.
 - `PathError`, `IdeError` (`IdeError::from_io` maps `std::io::Error` kinds;
-  `InvalidQuery` for a search that doesn't parse; `Git` for git's refusals).
+  `InvalidQuery` for a search that doesn't parse; `Git` for git's refusals;
+  `InvalidArgument`).
 - `WorkspaceRoot`, `RecentWorkspace`, `workspace::display_path` (drops the `\\?\` prefix).
 - `fs`: `FileNode`, `DirListing`, `ReadOutcome`, `ReadLimits`, `FileStamp`,
   `LineEnding`, `ReadOnlyReason`, `sort_nodes`, `detect_line_ending`,
@@ -35,6 +36,10 @@ runtime: everything here is data and pure functions.
   `GitBranch`, `valid_branch_name`, `MAX_STATUS_FILES` (5,000).
 - `fs::is_git_internal` (a path in a `.git` folder) and
   `ReadOnlyReason::GitInternal`.
+- `terminal`: `TerminalSize` (2–1,000 columns, 1–500 rows), `TerminalEvent`
+  (output as text, or the exit), `TerminalSink`, `Utf8Stream` (bytes to text
+  without splitting a character), `MAX_TERMINALS` (10), `MAX_WRITE_BYTES`
+  (1 MiB), and the ports `TerminalHost` and `TerminalSession`.
 - Ports: `WorkspaceFs`, `WorkspaceStore`, `FsWatcher`, `WorkspaceSearch`,
   `GitClient`.
 

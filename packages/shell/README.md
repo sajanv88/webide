@@ -1,6 +1,6 @@
 # @repo/shell
 
-**Status:** Milestone 2.
+**Status:** Milestone 4.
 
 ## Purpose
 
@@ -12,7 +12,8 @@ The window frame, after nuvui's `app-shell` block:
   localStorage. Every view stays mounted, so each keeps its state while
   another is shown. Clicking the view that's shown hides or shows the pane;
   the arrow keys only move between views;
-- the work area;
+- the work area, and under it a resizable, collapsible panel (the terminals),
+  hidden until shown, its size remembered;
 - a status bar.
 
 It fills named slots and doesn't know what's in them.
@@ -26,6 +27,9 @@ to its command (from `shortcutFor`), with `aria-keyshortcuts`.
 While there are views, the shell registers `view.toggleSidebar` (the top bar
 shows a button for it, with `aria-expanded`), `view.showView` (args: a view's
 `id`; not in the palette), and each view's own `command`, which shows it.
+With a panel, it registers `view.togglePanel` and `view.showPanel` (not in the
+palette). Hiding the panel while focus is in it gives focus back to where it
+was before.
 
 ## Public API
 
@@ -34,7 +38,7 @@ shows a button for it, with `aria-expanded`), `view.showView` (args: a view's
   - `shortcutFor?(command)` → `{ label, aria }`: the keys shown in the menus;
   - `views?`: `SidebarView`s (`id`, `title`, `icon`, `content`, `command?`),
     the first shown first; without any, the work area fills the window;
-  - `main`, `statusBar?`.
+  - `main`, `panel?` (`{ title, content }`: a region named `title`), `statusBar?`.
 - `SidebarView`.
 - `MenuSpec`, `MenuShortcut`, `MenuItemSpec`: `command` (with an optional `label` and `args`),
   `separator`, and `submenu` (shown disabled when empty).

@@ -10,6 +10,7 @@ use ide_fs::LocalFs;
 use ide_git::LocalGit;
 use ide_ipc::Services;
 use ide_search::LocalSearch;
+use ide_terminal::LocalTerminals;
 use ide_watcher::LocalWatcher;
 use ide_workspace::JsonWorkspaceStore;
 
@@ -20,6 +21,7 @@ fn main() -> ExitCode {
         watcher: Arc::new(LocalWatcher::new()),
         search: Arc::new(LocalSearch::new()),
         git: Arc::new(LocalGit::new()),
+        terminals: Arc::new(LocalTerminals::new()),
     });
     match result {
         Ok(()) => ExitCode::SUCCESS,

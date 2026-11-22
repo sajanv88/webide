@@ -1,0 +1,9 @@
+// One terminal: xterm fills it.
+.terminal-view {
+  box-sizing: border-box;
+  block-size: 100%;
+  min-block-size: 0;
+  padding-block: var(--spacing);
+  padding-inline: calc(var(--spacing) * 3) 0;
+  overflow: hidden;
+}

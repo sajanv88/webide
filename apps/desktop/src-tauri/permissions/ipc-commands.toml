@@ -24,8 +24,12 @@ permissions = [
   "allow-git-branches",
   "allow-git-switch-branch",
   "allow-git-init",
+  "allow-terminal-write",
+  "allow-terminal-resize",
+  "allow-terminal-close",
   "allow-pick-workspace",
   "allow-subscribe-events",
   "allow-set-close-guard",
   "allow-close-window",
+  "allow-terminal-open",
 ]

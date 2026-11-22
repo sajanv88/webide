@@ -17,6 +17,8 @@ catalog:
   "@types/react": 19.3.0
   "@types/react-dom": 19.3.0
   "@vitejs/plugin-react": 6.3.0
+  # The terminal's renderer (no nuvui terminal exists): @repo/terminal only.
+  "@xterm/xterm": 6.0.0
   jsdom: 31.0.1
   postcss: 8.5.33
   react: 19.3.1

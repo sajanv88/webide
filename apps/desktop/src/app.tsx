@@ -15,6 +15,7 @@ import type {
   IpcError,
   RecentWorkspaceDto,
   SearchPort,
+  TerminalPort,
   WorkspaceDto,
 } from "@repo/contracts";
 import { DiffSurface, EditorSurface } from "@repo/editor-surface";
@@ -22,6 +23,7 @@ import { Explorer, type ExplorerSource } from "@repo/explorer";
 import { BranchPicker, BranchStatus, createGitStore, SourceControlView } from "@repo/git";
 import {
   appInfo,
+  closeTerminal,
   closeWindow,
   currentWorkspace,
   getSettings,
@@ -38,23 +40,27 @@ import {
   listDirectory,
   listFiles,
   openRecentWorkspace,
+  openTerminal,
   pickWorkspace,
   readFile,
   recentWorkspaces,
+  resizeTerminal,
   searchText,
   setCloseGuard,
   subscribeEvents,
   updateSettings,
   writeFile,
+  writeTerminal,
 } from "@repo/ipc";
 import { createCommandRegistry, createEventBus } from "@repo/kernel";
 import { QuickOpen, SearchView } from "@repo/search";
 import { SettingsDialog } from "@repo/settings";
 import { type MenuSpec, Shell, type SidebarView } from "@repo/shell";
 import { createDocuments, type Documents, DocumentTabs } from "@repo/tabs";
+import { TerminalPanel } from "@repo/terminal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AboutDialog } from "./about/about-dialog";
-import { DEFAULT_KEYBINDINGS } from "./keybindings";
+import { DEFAULT_KEYBINDINGS, terminalPassesKey } from "./keybindings";
 import { NoFileOpen } from "./no-file-open/no-file-open";
 import { Welcome } from "./welcome/welcome";
 
@@ -70,6 +76,8 @@ const bus = createEventBus<AppEvents>();
 
 const keybindings = createKeybindings(DEFAULT_KEYBINDINGS, detectPlatform());
 for (const problem of keybindings.problems) console.warn("Keybinding problem", problem);
+
+const passKey = terminalPassesKey(keybindings);
 
 const settingsPort = { get: getSettings, update: updateSettings };
 
@@ -296,6 +304,17 @@ export function App() {
   }, [workspace]);
   const git = useMemo(() => gitPort && createGitStore(gitPort), [gitPort]);
 
+  const terminalPort = useMemo<TerminalPort | null>(() => {
+    if (!workspace) return null;
+    const workspaceId = workspace.id;
+    return {
+      open: (cols, rows, onEvent) => openTerminal({ workspaceId, cols, rows }, onEvent),
+      write: writeTerminal,
+      resize: resizeTerminal,
+      close: closeTerminal,
+    };
+  }, [workspace]);
+
   const views = useMemo<SidebarView[]>(
     () =>
       source && searchPort && workspace && git && gitPort
@@ -393,6 +412,10 @@ export function App() {
           { kind: "command", command: "search.findInFiles" },
           { kind: "command", command: "view.showSourceControl" },
           { kind: "command", command: "view.toggleSidebar" },
+          { kind: "command", command: "view.togglePanel" },
+          { kind: "separator" },
+          { kind: "command", command: "terminal.focus" },
+          { kind: "command", command: "terminal.new" },
           { kind: "separator" },
           { kind: "command", command: "explorer.collapseAll" },
         ],
@@ -425,6 +448,23 @@ export function App() {
         menus={menus}
         shortcutFor={keybindings.forCommand}
         views={views}
+        {...(workspace && terminalPort
+          ? {
+              panel: {
+                title: "Terminal",
+                content: (
+                  <TerminalPanel
+                    key={workspace.id}
+                    port={terminalPort}
+                    registry={registry}
+                    bus={bus}
+                    passKey={passKey}
+                    styleNonce={styleNonce}
+                  />
+                ),
+              },
+            }
+          : {})}
         main={
           workspace && documents ? (
             <DocumentTabs
