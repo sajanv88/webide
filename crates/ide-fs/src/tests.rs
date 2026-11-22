@@ -444,3 +444,18 @@ fn a_link_into_git_is_not_written_through() {
         "[core]\n"
     );
 }
+
+#[test]
+fn a_new_file_in_a_folder_linked_into_git_is_refused() {
+    let fx = Fixture::new();
+    fs::create_dir_all(fx.ws(".git/hooks")).unwrap();
+    if !try_symlink(&fx.ws(".git/hooks"), &fx.ws("hooks-link")) {
+        return;
+    }
+    let result = LocalFs::new().write_file(&fx.root, &rel("hooks-link/pre-commit"), "x");
+    assert!(
+        matches!(result, Err(IdeError::PermissionDenied)),
+        "{result:?}"
+    );
+    assert!(!fx.ws(".git/hooks/pre-commit").exists());
+}
