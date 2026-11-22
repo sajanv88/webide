@@ -7,8 +7,9 @@ import type {
 } from "@repo/contracts";
 import { createCommandRegistry, createEventBus } from "@repo/kernel";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useEffect } from "react";
 import { describe, expect, it } from "vitest";
-import { DocumentTabs } from "./document-tabs";
+import { DocumentTabs, type EditorSlotHandle } from "./document-tabs";
 import { createDocuments } from "./documents";
 
 const stamp = { size: 4, modifiedMs: 1 };
@@ -63,6 +64,29 @@ function setup(files: Record<string, ReadFileDto>) {
 
 const textFile = (path: string, text: string, extra: Partial<ReadFileDto> = {}): ReadFileDto =>
   ({ kind: "text", path, text, stamp, lineEnding: "lf", readOnly: null, ...extra }) as ReadFileDto;
+
+/** An editor whose handle comes a moment after it's drawn, as one that loads its code does. */
+function LateEditor({
+  calls,
+  onHandle,
+}: {
+  calls: string[];
+  onHandle: (handle: EditorSlotHandle) => void;
+}) {
+  useEffect(() => {
+    const timer = setTimeout(
+      () =>
+        onHandle({
+          setValue: () => {},
+          focus: () => calls.push("focus"),
+          revealPosition: (line, column) => calls.push(`reveal ${line}:${column}`),
+        }),
+      50,
+    );
+    return () => clearTimeout(timer);
+  }, [calls, onHandle]);
+  return <p>loading the editor</p>;
+}
 
 describe("DocumentTabs", () => {
   it("shows the empty slot until a file is chosen in the explorer, then a named tab list", async () => {
@@ -206,6 +230,8 @@ describe("DocumentTabs", () => {
                     setValues.push(value);
                     element.value = value;
                   },
+                  focus: () => element.focus(),
+                  revealPosition: () => element.focus(),
                 },
               )
             }
@@ -246,5 +272,85 @@ describe("DocumentTabs", () => {
     await waitFor(() => expect(editor.value).toBe("theirs"));
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByRole("tab", { name: "a.ts" })).toBeTruthy();
+  });
+
+  it("opens a file asked for elsewhere, then puts the cursor where it was asked", async () => {
+    const files: Record<string, ReadFileDto> = {
+      "a.ts": textFile("a.ts", "one"),
+      "b.ts": textFile("b.ts", "two"),
+    };
+    const port: DocumentsPort = {
+      readFile: async (path) =>
+        files[path] ? ok(files[path]) : { ok: false, error: { code: "notFound", message: "gone" } },
+      writeFile: async (_path, text) => ok({ size: text.length, modifiedMs: 2 }),
+    };
+    const documents = createDocuments(port);
+    const bus = createEventBus<AppEvents>();
+    const calls: string[] = [];
+    render(
+      <DocumentTabs
+        documents={documents}
+        registry={createCommandRegistry<AppCommandId>()}
+        bus={bus}
+        empty={<p>Nothing open</p>}
+        renderEditor={(props) => (
+          <textarea
+            aria-label={`Editor for ${props.path}`}
+            defaultValue={props.initialValue}
+            ref={(element) =>
+              props.ref(
+                element && {
+                  setValue: () => {},
+                  focus: () => calls.push(`focus ${props.path}`),
+                  revealPosition: (line, column) =>
+                    calls.push(`reveal ${props.path} ${line}:${column}`),
+                },
+              )
+            }
+          />
+        )}
+      />,
+    );
+
+    await act(async () => {
+      bus.emit("file.openRequested", { path: "a.ts", line: 3, column: 7 });
+    });
+    await waitFor(() => expect(calls).toEqual(["reveal a.ts 3:7"]));
+
+    // Without a position, the editor only takes focus.
+    await act(async () => {
+      bus.emit("file.openRequested", { path: "b.ts" });
+    });
+    await waitFor(() => expect(calls).toEqual(["reveal a.ts 3:7", "focus b.ts"]));
+
+    // A file already open is shown again, at the new position.
+    await act(async () => {
+      bus.emit("file.openRequested", { path: "a.ts", line: 1, column: 1 });
+    });
+    await waitFor(() => expect(calls.at(-1)).toBe("reveal a.ts 1:1"));
+    expect(documents.getState().tabs).toHaveLength(2);
+  });
+
+  it("waits for an editor whose handle comes late, as one that loads its code does", async () => {
+    const port: DocumentsPort = {
+      readFile: async (path) => ok(textFile(path, "text")),
+      writeFile: async (_path, text) => ok({ size: text.length, modifiedMs: 2 }),
+    };
+    const documents = createDocuments(port);
+    const bus = createEventBus<AppEvents>();
+    const calls: string[] = [];
+    render(
+      <DocumentTabs
+        documents={documents}
+        registry={createCommandRegistry<AppCommandId>()}
+        bus={bus}
+        empty={<p>Nothing open</p>}
+        renderEditor={(props) => <LateEditor calls={calls} onHandle={props.ref} />}
+      />,
+    );
+    await act(async () => {
+      bus.emit("file.openRequested", { path: "a.ts", line: 4, column: 2 });
+    });
+    await waitFor(() => expect(calls).toEqual(["reveal 4:2"]));
   });
 });

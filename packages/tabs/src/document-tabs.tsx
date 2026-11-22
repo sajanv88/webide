@@ -22,6 +22,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
 } from "react";
 import { CloseDialog } from "./close-dialog";
@@ -32,6 +33,16 @@ import type { DocumentId, Documents, DocumentView } from "./documents";
 export interface EditorSlotHandle {
   /** Replaces the text of the document the editor shows now. */
   setValue(value: string): void;
+  focus(): void;
+  /** Puts the cursor at `line` and `column` (1-based, UTF-16 units), scrolls to it, and focuses. */
+  revealPosition(line: number, column: number): void;
+}
+
+/** Where to put the cursor once a document requested by `file.openRequested` is shown. */
+interface Reveal {
+  readonly id: DocumentId;
+  readonly line?: number | undefined;
+  readonly column?: number | undefined;
 }
 
 /** What the app's editor is given for the document it shows. */
@@ -88,9 +99,28 @@ export function DocumentTabs({ documents, registry, bus, renderEditor, empty }: 
   // (A ref may be called with null and the handle again on any render, so
   // null doesn't mean a new editor. A new one reads each document's current
   // text anyway, so a revision it's told about again changes nothing.)
-  const editorRef = useCallback((handle: EditorSlotHandle | null) => {
-    editor.current = handle;
+  // Where to put the cursor once the editor shows a document asked for by
+  // `file.openRequested`, and the document the editor shows now.
+  const pendingReveal = useRef<Reveal | null>(null);
+  const shownId = useRef<DocumentId | undefined>(undefined);
+  // Puts the cursor there if the editor is drawn and shows that document. The
+  // editor's code loads the first time one is shown, so its handle can come
+  // after the document: then this runs again when it does.
+  const applyReveal = useCallback(() => {
+    const want = pendingReveal.current;
+    const handle = editor.current;
+    if (!want || !handle || want.id !== shownId.current) return;
+    pendingReveal.current = null;
+    if (want.line === undefined) handle.focus();
+    else handle.revealPosition(want.line, want.column ?? 1);
   }, []);
+  const editorRef = useCallback(
+    (handle: EditorSlotHandle | null) => {
+      editor.current = handle;
+      if (handle) applyReveal();
+    },
+    [applyReveal],
+  );
 
   // After a close, focus goes to the tab now active, or to the "nothing open"
   // slot when none is left, rather than falling back to the page.
@@ -209,6 +239,21 @@ export function DocumentTabs({ documents, registry, bus, renderEditor, empty }: 
     [bus, documents],
   );
 
+  // A file asked for elsewhere (a search result, Go to File) opens here too,
+  // and the editor takes focus, at the position given, once it shows it.
+  const [revealAsked, setRevealAsked] = useState(0);
+  useEffect(() => {
+    let latest = 0;
+    return bus.on("file.openRequested", ({ path, line, column }) => {
+      const request = ++latest;
+      void documents.open(path).then((id) => {
+        if (!id || request !== latest) return;
+        pendingReveal.current = { id, line, column };
+        setRevealAsked((count) => count + 1);
+      });
+    });
+  }, [bus, documents]);
+
   // Files changed on disk, by anyone: compare the open ones with their files.
   useEffect(
     () =>
@@ -261,6 +306,13 @@ export function DocumentTabs({ documents, registry, bus, renderEditor, empty }: 
     const text = documents.getText(editorId);
     if (text !== undefined) editor.current?.setValue(text);
   }, [documents, editorId, editorRevision]);
+
+  // After the editor has switched to the document (a child's effects run first).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `revealAsked` is how a new request asks for this to run
+  useEffect(() => {
+    shownId.current = editorId;
+    applyReveal();
+  }, [editorId, revealAsked, applyReveal]);
 
   const dialog = (
     <CloseDialog

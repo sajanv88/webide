@@ -18,6 +18,9 @@ const isSave = (event: KeyboardEvent): boolean =>
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(min, Math.trunc(value)), max);
 
+/** How many frames `focus` and `revealPosition` wait for a new editor to be drawn. */
+const READY_FRAMES = 60;
+
 /**
  * The editor: nuvui's CodeEditor, with the code and the status line under it
  * (where the cursor is, and the language). One editor shows every document,
@@ -38,22 +41,31 @@ export function EditorSurface({
 }: EditorSurfaceProps) {
   const editor = useRef<CodeEditorHandle>(null);
 
-  useImperativeHandle(
-    ref,
-    () => ({
+  useImperativeHandle(ref, () => {
+    // The editor draws its view a render after it mounts, so a document opened
+    // a moment ago may not be shown yet: wait for it, a frame at a time.
+    const whenDrawn = (run: (handle: CodeEditorHandle) => void) => {
+      let frames = 0;
+      const attempt = () => {
+        const handle = editor.current;
+        if (handle?.view) run(handle);
+        else if (++frames < READY_FRAMES) requestAnimationFrame(attempt);
+      };
+      attempt();
+    };
+    return {
       getValue: () => editor.current?.getValue() ?? "",
       setValue: (value) => editor.current?.setValue(value),
-      focus: () => editor.current?.focus(),
-      revealPosition(line, column) {
-        const handle = editor.current;
-        const doc = handle?.view?.state.doc;
-        if (!handle || !doc) return;
-        const target = doc.line(clamp(line, 1, doc.lines));
-        handle.select(target.from + clamp(column - 1, 0, target.length));
-      },
-    }),
-    [],
-  );
+      focus: () => whenDrawn((handle) => handle.focus()),
+      revealPosition: (line, column) =>
+        whenDrawn((handle) => {
+          const doc = handle.view?.state.doc;
+          if (!doc) return;
+          const target = doc.line(clamp(line, 1, doc.lines));
+          handle.select(target.from + clamp(column - 1, 0, target.length));
+        }),
+    };
+  }, []);
 
   return (
     <CodeEditor

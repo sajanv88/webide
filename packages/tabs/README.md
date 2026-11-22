@@ -1,6 +1,6 @@
 # @repo/tabs
 
-**Status:** Phase 6.
+**Status:** Milestone 2.
 
 ## Purpose
 
@@ -20,6 +20,9 @@ question asked before closing one that has.
 - A file chosen in the explorer (`explorer.fileActivated`) opens in a new tab
   next to the active one, or activates the tab it's already in. Two open files
   with the same name are labelled with their folders.
+- A file asked for elsewhere (`file.openRequested`: a search result, Go to
+  File) opens the same way, and the editor takes focus once it shows the
+  file, with the cursor at the line and column given.
 - Text is kept as the editor holds it, with `\n` line breaks. Saving puts the
   file's own line endings back (CRLF stays CRLF). A file with mixed endings
   says so, and is saved with LF.
@@ -75,7 +78,8 @@ works from the keyboard.
   `DocumentsState`, `PendingClose`, `CloseChoice`, `DocumentsOptions`.
 - `DocumentTabs` with `DocumentTabsProps`: `documents`, `registry`, `bus`,
   `renderEditor(props: EditorSlotProps)`, `empty`. Pass `props.ref` to the
-  editor (an `EditorSlotHandle`: `setValue`), so reloads reach it.
+  editor (an `EditorSlotHandle`: `setValue`, `focus`, `revealPosition`), so
+  reloads and requested positions reach it.
 - `toEditorText`, `toDiskText`, `endingAfterSave`: the line-ending rules.
 
 ## May depend on
