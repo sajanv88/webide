@@ -1,6 +1,6 @@
 # ide-ipc
 
-**Status:** Phase 5.
+**Status:** Milestone 2.
 
 ## Purpose
 
@@ -34,6 +34,8 @@ ts-rs.
 | `write_file`            | `{ workspaceId, path, text }`         | `FileStampDto`                                         |
 | `get_settings`          | none                                  | `SettingsDto`                                          |
 | `update_settings`       | `SettingsPatchDto`                    | `SettingsDto`                                          |
+| `search_text`           | `SearchTextArgs`                      | `TextSearchDto` (a newer search cancels this one)      |
+| `list_files`            | `{ workspaceId }`                     | `FileListDto`, for quick open                          |
 | `subscribe_events`      | `{ channel }` (a Tauri `Channel`)     | nothing; `BackendEventDto`s arrive on the channel      |
 | `set_close_guard`       | `{ unsaved }`                         | nothing                                                |
 | `close_window`          | none                                  | nothing; closes the calling window without asking      |
@@ -61,12 +63,15 @@ The rules that keep the webview contained:
 - File commands carry the `workspaceId` of the open workspace. A request meant
   for another one fails with `workspaceChanged`.
 - Paths are validated (`RelPath`) and contained (`ide-fs`) before any IO.
+- Search walks only the open workspace's root (`ide-search` never follows
+  symlinks) and skips files over the "don't open above" size. One search runs
+  at a time: a new one, or opening another workspace, cancels it.
 - Each command has its own `allow-*` permission. The main window's capability
   grants the `ipc-commands` set and nothing else.
 
 ## Public API
 
-- `run(context, services)`, with `Services { fs, workspace, watcher }` and `AppPaths`.
+- `run(context, services)`, with `Services { fs, workspace, watcher, search }` and `AppPaths`.
 - `COMMAND_NAMES`, `IpcError`, `IpcErrorCode`, `MAIN_WINDOW`.
 
 ## May depend on

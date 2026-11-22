@@ -9,7 +9,10 @@ use ide_core::fs::{
     DirListing, FileNode, FileStamp, LineEnding, NodeKind, ReadOnlyReason, ReadOutcome,
 };
 use ide_core::workspace::display_path;
-use ide_core::{FsChange, RecentWorkspace, RelPath, Settings, SettingsPatch, Theme};
+use ide_core::{
+    FileList, FileMatches, FsChange, LineMatch, RecentWorkspace, RelPath, Settings, SettingsPatch,
+    Span, TextSearchOutcome, Theme,
+};
 use serde::{Deserialize, Serialize};
 use tauri::ipc::JavaScriptChannelId;
 use ts_rs::TS;
@@ -207,6 +210,54 @@ pub enum BackendEventDto {
     CloseRequested,
 }
 
+/// A span inside a search preview, in UTF-16 code units (JavaScript string indices).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct SpanDto {
+    pub start: u32,
+    pub end: u32,
+}
+
+/// One line that matched a search.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct LineMatchDto {
+    /// 1-based.
+    pub line: u32,
+    /// 1-based, in UTF-16 units of the whole line: where the first match starts.
+    pub column: u32,
+    /// The line, or the part around the first match when it's long.
+    pub preview: String,
+    /// Every match in `preview`.
+    pub spans: Vec<SpanDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FileMatchesDto {
+    pub path: String,
+    pub lines: Vec<LineMatchDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TextSearchDto {
+    pub files: Vec<FileMatchesDto>,
+    /// It stopped at the match limit: there may be more.
+    pub truncated: bool,
+    /// A newer search replaced this one; its results are partial.
+    pub cancelled: bool,
+}
+
+/// The workspace's files for quick open, ignored ones left out.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FileListDto {
+    pub files: Vec<String>,
+    /// It stopped at the file limit.
+    pub truncated: bool,
+}
+
 // ---------- Arguments ----------
 
 #[derive(Debug, Clone, Deserialize, TS)]
@@ -223,6 +274,28 @@ pub struct WorkspacePathArgs {
     pub workspace_id: String,
     /// Relative to the workspace root, `/`-separated; `""` is the root.
     pub path: String,
+}
+
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkspaceArgs {
+    pub workspace_id: String,
+}
+
+/// Find in files. A new search cancels the one still running.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SearchTextArgs {
+    pub workspace_id: String,
+    pub pattern: String,
+    /// A regular expression (Rust syntax) rather than the text as written.
+    pub is_regex: bool,
+    pub match_case: bool,
+    pub whole_word: bool,
+    /// Gitignore-style globs; when any are given, only matching files are searched.
+    pub include: Vec<String>,
+    /// Gitignore-style globs of files to leave out.
+    pub exclude: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, TS)]
@@ -430,6 +503,58 @@ impl From<SettingsPatchDto> for SettingsPatch {
             theme: patch.theme.map(Into::into),
             read_only_above_bytes: patch.read_only_above_bytes,
             refuse_above_bytes: patch.refuse_above_bytes,
+        }
+    }
+}
+
+impl From<Span> for SpanDto {
+    fn from(span: Span) -> Self {
+        Self {
+            start: span.start,
+            end: span.end,
+        }
+    }
+}
+
+impl From<LineMatch> for LineMatchDto {
+    fn from(found: LineMatch) -> Self {
+        Self {
+            line: found.line,
+            column: found.column,
+            preview: found.preview,
+            spans: found.spans.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<FileMatches> for FileMatchesDto {
+    fn from(file: FileMatches) -> Self {
+        Self {
+            path: file.path.as_str().to_owned(),
+            lines: file.lines.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<TextSearchOutcome> for TextSearchDto {
+    fn from(outcome: TextSearchOutcome) -> Self {
+        Self {
+            files: outcome.files.into_iter().map(Into::into).collect(),
+            truncated: outcome.truncated,
+            cancelled: outcome.cancelled,
+        }
+    }
+}
+
+impl From<FileList> for FileListDto {
+    fn from(list: FileList) -> Self {
+        Self {
+            files: list
+                .files
+                .iter()
+                .map(|path| path.as_str().to_owned())
+                .collect(),
+            truncated: list.truncated,
         }
     }
 }

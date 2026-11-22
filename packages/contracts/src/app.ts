@@ -3,11 +3,14 @@
 import type {
   DirListingDto,
   FileChangeDto,
+  FileListDto,
   FileStampDto,
   IpcError,
   ReadFileDto,
+  SearchTextArgs,
   SettingsDto,
   SettingsPatchDto,
+  TextSearchDto,
   WorkspaceDto,
 } from "./generated/index";
 
@@ -25,7 +28,11 @@ export type AppCommandId =
   | "workspace.openRecent"
   | "explorer.refresh"
   | "explorer.collapseAll"
-  | "view.toggleExplorer"
+  | "view.toggleSidebar"
+  | "view.showView"
+  | "view.showExplorer"
+  | "search.findInFiles"
+  | "search.goToFile"
   | "file.save"
   | "file.saveAll"
   | "tabs.close"
@@ -43,6 +50,15 @@ export interface AppEvents {
   "workspace.opened": WorkspaceDto;
   /** A file was chosen in the explorer. */
   "explorer.fileActivated": { readonly path: string };
+  /**
+   * Open a file (from search, quick open…), and put the cursor at `line` and
+   * `column` (1-based, UTF-16 units) when given. The editor takes focus.
+   */
+  "file.openRequested": {
+    readonly path: string;
+    readonly line?: number;
+    readonly column?: number;
+  };
   /**
    * Files of the open workspace changed on disk, by anyone (this app's own
    * saves included). With `rescan`, `changes` is incomplete: reload whatever
@@ -77,4 +93,11 @@ export interface SettingsPort {
   get(): Promise<IpcResult<SettingsDto>>;
   /** Saves the fields given; the rest stay. Resolves to the settings as saved. */
   update(patch: SettingsPatchDto): Promise<IpcResult<SettingsDto>>;
+}
+
+/** What search needs: find in files, and the file list for quick open, in the open workspace. */
+export interface SearchPort {
+  /** A new search cancels the one still running (its result says `cancelled`). */
+  searchText(query: Omit<SearchTextArgs, "workspaceId">): Promise<IpcResult<TextSearchDto>>;
+  listFiles(): Promise<IpcResult<FileListDto>>;
 }

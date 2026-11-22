@@ -4,15 +4,17 @@ use std::sync::{Arc, Mutex};
 use ide_core::fs::{
     DirListing, FileNode, FileStamp, LineEnding, NodeKind, ReadLimits, ReadOutcome,
 };
+use ide_core::search::line_match;
 use ide_core::{
-    FsChange, FsWatcher, IdeError, RecentWorkspace, RelPath, Settings, SettingsPatch, WatchEvent,
-    WatchGuard, WatchSink, WorkspaceFs, WorkspaceRoot, WorkspaceStore,
+    CancelFlag, FileList, FileMatches, FsChange, FsWatcher, IdeError, RecentWorkspace, RelPath,
+    Settings, SettingsPatch, TextQuery, TextSearchOutcome, WatchEvent, WatchGuard, WatchSink,
+    WorkspaceFs, WorkspaceRoot, WorkspaceSearch, WorkspaceStore,
 };
 use serde_json::json;
 
 use crate::dto::{
-    AppInfoDto, BackendEventDto, CloseGuardArgs, OpenRecentArgs, ReadFileDto, SettingsPatchDto,
-    WorkspacePathArgs, WriteFileArgs,
+    AppInfoDto, BackendEventDto, CloseGuardArgs, OpenRecentArgs, ReadFileDto, SearchTextArgs,
+    SettingsPatchDto, WorkspaceArgs, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::{IpcError, IpcErrorCode};
 use crate::handlers::{self, IpcState, Services};
@@ -137,6 +139,45 @@ impl FakeWatcher {
     }
 }
 
+/// Records each query and its cancel flag; finds one line in `src/a.ts`.
+#[derive(Default)]
+struct FakeSearch {
+    queries: Mutex<Vec<(TextQuery, CancelFlag)>>,
+}
+
+impl WorkspaceSearch for FakeSearch {
+    fn search_text(
+        &self,
+        _root: &WorkspaceRoot,
+        query: &TextQuery,
+        cancel: &CancelFlag,
+    ) -> Result<TextSearchOutcome, IdeError> {
+        self.queries
+            .lock()
+            .unwrap()
+            .push((query.clone(), cancel.clone()));
+        Ok(TextSearchOutcome {
+            files: vec![FileMatches {
+                path: RelPath::parse("src/a.ts").unwrap(),
+                lines: vec![line_match(2, "let needle = 1;", &[(4, 10)])],
+            }],
+            truncated: false,
+            cancelled: false,
+        })
+    }
+
+    fn list_files(
+        &self,
+        _root: &WorkspaceRoot,
+        _cancel: &CancelFlag,
+    ) -> Result<FileList, IdeError> {
+        Ok(FileList {
+            files: vec![RelPath::parse("src/a.ts").unwrap()],
+            truncated: false,
+        })
+    }
+}
+
 fn folder(name: &str) -> PathBuf {
     std::env::temp_dir().join(name)
 }
@@ -146,6 +187,7 @@ struct Fixture {
     fs: Arc<FakeFs>,
     store: Arc<FakeStore>,
     watcher: Arc<FakeWatcher>,
+    search: Arc<FakeSearch>,
     /// What was sent to the webview.
     emitted: Arc<Mutex<Vec<BackendEventDto>>>,
 }
@@ -168,10 +210,12 @@ fn fixture() -> Fixture {
         opened: Mutex::new(Vec::new()),
     });
     let watcher = Arc::new(FakeWatcher::default());
+    let search = Arc::new(FakeSearch::default());
     let services = Services {
         fs: fs.clone(),
         workspace: store.clone(),
         watcher: watcher.clone(),
+        search: search.clone(),
     };
     let info = AppInfoDto {
         name: "test".to_owned(),
@@ -185,7 +229,20 @@ fn fixture() -> Fixture {
         fs,
         store,
         watcher,
+        search,
         emitted,
+    }
+}
+
+fn search_args(workspace_id: &str, pattern: &str) -> SearchTextArgs {
+    SearchTextArgs {
+        workspace_id: workspace_id.to_owned(),
+        pattern: pattern.to_owned(),
+        is_regex: false,
+        match_case: true,
+        whole_word: false,
+        include: vec!["*.ts".to_owned()],
+        exclude: Vec::new(),
     }
 }
 
@@ -449,4 +506,70 @@ fn the_close_guard_holds_the_window_only_while_a_page_can_answer() {
     hub.set_unsaved(true);
     hub.reset();
     assert!(!hub.hold_close());
+}
+
+#[test]
+fn search_needs_the_open_workspace_and_passes_the_query_through() {
+    let fx = fixture();
+    assert_eq!(
+        code(handlers::search_text(&fx.state, search_args("1", "needle"))),
+        IpcErrorCode::NoWorkspace
+    );
+    let ws = handlers::open_picked(&fx.state, &folder("alpha")).unwrap();
+    let found = handlers::search_text(&fx.state, search_args(&ws.id, "needle")).unwrap();
+    assert_eq!(
+        serde_json::to_value(&found).unwrap(),
+        json!({
+            "files": [{
+                "path": "src/a.ts",
+                "lines": [{
+                    "line": 2,
+                    "column": 5,
+                    "preview": "let needle = 1;",
+                    "spans": [{ "start": 4, "end": 10 }],
+                }],
+            }],
+            "truncated": false,
+            "cancelled": false,
+        })
+    );
+    let queries = fx.search.queries.lock().unwrap();
+    let (query, _) = &queries[0];
+    assert_eq!(query.pattern, "needle");
+    assert!(query.match_case);
+    assert_eq!(query.include, ["*.ts"]);
+    // Files too large to open aren't searched either.
+    assert_eq!(
+        query.max_file_bytes,
+        Settings::default().read_limits().refuse_above
+    );
+}
+
+#[test]
+fn a_new_search_or_workspace_cancels_the_running_search() {
+    let fx = fixture();
+    let ws = handlers::open_picked(&fx.state, &folder("alpha")).unwrap();
+    handlers::search_text(&fx.state, search_args(&ws.id, "one")).unwrap();
+    handlers::search_text(&fx.state, search_args(&ws.id, "two")).unwrap();
+    {
+        let queries = fx.search.queries.lock().unwrap();
+        assert!(queries[0].1.is_cancelled());
+        assert!(!queries[1].1.is_cancelled());
+    }
+    handlers::open_picked(&fx.state, &folder("beta")).unwrap();
+    assert!(fx.search.queries.lock().unwrap()[1].1.is_cancelled());
+}
+
+#[test]
+fn list_files_returns_workspace_relative_paths() {
+    let fx = fixture();
+    let ws = handlers::open_picked(&fx.state, &folder("alpha")).unwrap();
+    let args = WorkspaceArgs {
+        workspace_id: ws.id,
+    };
+    let list = handlers::list_files(&fx.state, args).unwrap();
+    assert_eq!(
+        serde_json::to_value(&list).unwrap(),
+        json!({ "files": ["src/a.ts"], "truncated": false })
+    );
 }

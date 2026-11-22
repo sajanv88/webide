@@ -2,12 +2,16 @@
 import type {
   AppInfoDto,
   DirListingDto,
+  FileListDto,
   FileStampDto,
   OpenRecentArgs,
   ReadFileDto,
   RecentWorkspaceDto,
+  SearchTextArgs,
   SettingsDto,
   SettingsPatchDto,
+  TextSearchDto,
+  WorkspaceArgs,
   WorkspaceDto,
   WorkspacePathArgs,
   WriteFileArgs,
@@ -49,3 +53,11 @@ export const getSettings = (): Promise<IpcResult<SettingsDto>> => call("get_sett
 
 export const updateSettings = (patch: SettingsPatchDto): Promise<IpcResult<SettingsDto>> =>
   call("update_settings", patch);
+
+/** Find in files; a new search cancels the one still running. */
+export const searchText = (args: SearchTextArgs): Promise<IpcResult<TextSearchDto>> =>
+  call("search_text", args);
+
+/** The workspace's files, for quick open (ignored ones left out). */
+export const listFiles = (args: WorkspaceArgs): Promise<IpcResult<FileListDto>> =>
+  call("list_files", args);

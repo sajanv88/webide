@@ -11,6 +11,8 @@ const IPC_COMMANDS: &[&str] = &[
     "write_file",
     "get_settings",
     "update_settings",
+    "search_text",
+    "list_files",
     "pick_workspace",
     "subscribe_events",
     "set_close_guard",
