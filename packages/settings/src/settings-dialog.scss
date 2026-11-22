@@ -1,0 +1,29 @@
+// The settings form, inside nuvui's Dialog.
+.settings-dialog {
+  &__form {
+    display: grid;
+    gap: calc(var(--spacing) * 5);
+  }
+
+  &__themes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: calc(var(--spacing) * 2) calc(var(--spacing) * 5);
+  }
+
+  &__theme {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2);
+  }
+
+  &__size {
+    --nuv-number-field-width: 12rem;
+  }
+
+  &__loading {
+    display: grid;
+    place-items: center;
+    padding-block: calc(var(--spacing) * 6);
+  }
+}
