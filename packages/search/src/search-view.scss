@@ -1,0 +1,159 @@
+// The Search view, in the side pane. Head as the explorer's; results after its tree.
+.search-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  block-size: 100%;
+  min-inline-size: 0;
+  background-color: var(--color-surface);
+  color: var(--color-surface-foreground);
+
+  &__header {
+    display: flex;
+    gap: calc(var(--spacing) * 2);
+    align-items: center;
+    justify-content: space-between;
+    padding-block: calc(var(--spacing) * 2);
+    padding-inline: calc(var(--spacing) * 4) calc(var(--spacing) * 2);
+    border-block-end: var(--nuv-border-width) solid var(--color-border);
+  }
+
+  &__title {
+    margin: 0;
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--text-sm--line-height);
+  }
+
+  // Square, as the button holds only an icon.
+  &__icon {
+    aspect-ratio: 1;
+    padding: 0;
+  }
+
+  &__form {
+    display: grid;
+    gap: calc(var(--spacing) * 2);
+    padding: calc(var(--spacing) * 3);
+  }
+
+  &__label {
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+  }
+
+  &__options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing);
+    align-items: center;
+  }
+
+  &__glyph {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: 1;
+  }
+
+  &__glyph--word {
+    text-decoration: underline;
+  }
+
+  &__filters-button {
+    margin-inline-start: auto;
+  }
+
+  &__filters {
+    display: grid;
+    gap: calc(var(--spacing) * 2);
+  }
+
+  &__status {
+    margin: 0;
+    padding-inline: calc(var(--spacing) * 3);
+    padding-block-end: calc(var(--spacing) * 2);
+    color: var(--color-muted-foreground);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+  }
+
+  &__status:empty {
+    display: none;
+  }
+
+  &__results {
+    min-block-size: 0;
+    border-block-start: var(--nuv-border-width) solid var(--color-border);
+  }
+
+  &__scroll {
+    block-size: 100%;
+  }
+
+  &__tree {
+    --nuv-tree-indent: calc(var(--spacing) * 3);
+
+    padding: calc(var(--spacing) * 2);
+  }
+}
+
+// A file in the results: icon, name, folder, how many lines matched.
+.search-file {
+  display: flex;
+  gap: calc(var(--spacing) * 1.5);
+  align-items: center;
+  min-inline-size: 0;
+
+  &__icon {
+    flex: none;
+  }
+
+  &__name {
+    flex: none;
+    font-weight: var(--font-weight-medium);
+  }
+
+  &__folder {
+    min-inline-size: 0;
+    overflow: hidden;
+    color: var(--color-muted-foreground);
+    font-size: var(--text-xs);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__count {
+    flex: none;
+    margin-inline-start: auto;
+    padding-inline: calc(var(--spacing) * 1.5);
+    border-radius: var(--radius-full);
+    background-color: var(--color-muted);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+  }
+}
+
+// A matching line: its number, then the line with each match marked.
+.search-line {
+  display: flex;
+  gap: calc(var(--spacing) * 2);
+  min-inline-size: 0;
+  font-size: var(--text-xs);
+  line-height: var(--text-xs--line-height);
+
+  &__number {
+    flex: none;
+    min-inline-size: 3ch;
+    color: var(--color-muted-foreground);
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+
+  &__text {
+    min-inline-size: 0;
+    overflow: hidden;
+    font-family: var(--font-mono);
+    text-overflow: ellipsis;
+    white-space: pre;
+  }
+}

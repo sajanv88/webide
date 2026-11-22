@@ -133,7 +133,13 @@
                       "@repo/tabs",
                       "@repo/editor-surface",
                       "@repo/commands",
-                      "@repo/settings"
+                      "@repo/settings",
+                      "@repo/search",
+                      "@repo/git",
+                      "@repo/terminal",
+                      "@repo/lsp",
+                      "@repo/debug",
+                      "@repo/mcp"
                     ],
                     "message": "@repo/ipc is infrastructure: it may depend on @repo/contracts only."
                   }
@@ -189,6 +195,12 @@
                       "@repo/editor-surface",
                       "@repo/commands",
                       "@repo/settings",
+                      "@repo/search",
+                      "@repo/git",
+                      "@repo/terminal",
+                      "@repo/lsp",
+                      "@repo/debug",
+                      "@repo/mcp",
                       "react",
                       "react-dom",
                       "react/**",
@@ -210,7 +222,13 @@
         "packages/explorer/**",
         "packages/tabs/**",
         "packages/commands/**",
-        "packages/settings/**"
+        "packages/settings/**",
+        "packages/search/**",
+        "packages/git/**",
+        "packages/terminal/**",
+        "packages/lsp/**",
+        "packages/debug/**",
+        "packages/mcp/**"
       ],
       "linter": {
         "rules": {
