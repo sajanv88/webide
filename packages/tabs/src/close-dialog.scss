@@ -1,0 +1,18 @@
+// The files listed in "Save changes to N files?".
+.close-dialog {
+  &__files {
+    display: grid;
+    gap: calc(var(--spacing) * 1);
+    max-block-size: 12rem;
+    margin: 0;
+    padding-inline-start: calc(var(--spacing) * 5);
+    overflow: auto;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+  }
+
+  &__file {
+    overflow-wrap: anywhere;
+  }
+}

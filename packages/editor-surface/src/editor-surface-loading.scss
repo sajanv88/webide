@@ -1,0 +1,6 @@
+// While the editor's code loads, the first time a file is shown.
+.editor-surface-loading {
+  display: grid;
+  place-items: center;
+  block-size: 100%;
+}

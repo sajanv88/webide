@@ -1,0 +1,33 @@
+// The tab row over one panel, filling the work area.
+.document-tabs {
+  --nuv-tabs-gap: 0;
+
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  block-size: 100%;
+  min-block-size: 0;
+
+  &__empty {
+    block-size: 100%;
+  }
+
+  &__list {
+    background-color: var(--color-surface);
+  }
+
+  &__panel {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-block-size: 0;
+  }
+
+  &__editor {
+    display: grid;
+    grid-row: 2;
+    min-block-size: 0;
+  }
+}
+
+.document-tabs__editor[hidden] {
+  display: none;
+}

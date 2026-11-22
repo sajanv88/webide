@@ -1,0 +1,22 @@
+// The editor filling the work area: no box around it, and the code scrolls
+// inside it with the status line pinned under it.
+.editor-surface {
+  --nuv-code-editor-radius: 0;
+  --nuv-code-editor-border: transparent;
+
+  box-sizing: border-box;
+  block-size: 100%;
+  min-block-size: 0;
+
+  &__code {
+    min-block-size: 0;
+  }
+}
+
+// CodeMirror's own element, which nuvui doesn't size: it takes the height
+// left and scrolls, rather than growing with the text. (The alternative is a
+// CodeMirror theme extension, which would need @codemirror/view imported here.)
+.editor-surface__code .cm-editor {
+  flex: 1 1 0;
+  min-block-size: 0;
+}

@@ -1,0 +1,77 @@
+// One open file in the tab row: the tab, and a close button beside it that
+// shows a dot while there are unsaved changes.
+.document-tab {
+  display: flex;
+  flex: none;
+  align-items: center;
+  border-inline-end: var(--nuv-border-width) solid var(--color-border);
+
+  &__trigger {
+    gap: calc(var(--spacing) * 1.5);
+    padding-inline-end: calc(var(--spacing) * 1);
+  }
+
+  &__name {
+    max-inline-size: 24ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__close {
+    display: grid;
+    flex: none;
+    place-items: center;
+    inline-size: calc(var(--spacing) * 6);
+    block-size: calc(var(--spacing) * 6);
+    margin-inline-end: calc(var(--spacing) * 1.5);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--color-muted-foreground);
+    cursor: pointer;
+
+    &:hover {
+      background-color: var(--color-muted);
+      color: var(--color-foreground);
+    }
+  }
+
+  &__dot {
+    display: none;
+    inline-size: calc(var(--spacing) * 2);
+    block-size: calc(var(--spacing) * 2);
+    border-radius: var(--radius-full);
+    background-color: currentcolor;
+  }
+}
+
+// Deleted on disk: the name struck through (it's also in the tab's name for
+// screen readers, and in a bar over the text).
+.document-tab--deleted .document-tab__name {
+  text-decoration: line-through;
+}
+
+// Changed on disk under unsaved changes: the name in the warning colour, with
+// the words in the tab's name and a bar over the text.
+.document-tab--conflict .document-tab__name {
+  color: var(--color-warning);
+}
+
+// Unsaved: a dot in place of the ×, until the pointer is over the tab.
+.document-tab--dirty .document-tab__dot {
+  display: block;
+}
+
+.document-tab--dirty .document-tab__x {
+  display: none;
+}
+
+.document-tab--dirty:hover .document-tab__dot {
+  display: none;
+}
+
+.document-tab--dirty:hover .document-tab__x {
+  display: block;
+}
