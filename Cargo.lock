@@ -1624,6 +1624,7 @@ name = "ide-desktop"
 version = "0.1.0"
 dependencies = [
  "ide-fs",
+ "ide-git",
  "ide-ipc",
  "ide-search",
  "ide-watcher",
@@ -1634,6 +1635,14 @@ dependencies = [
 
 [[package]]
 name = "ide-fs"
+version = "0.1.0"
+dependencies = [
+ "ide-core",
+ "tempfile",
+]
+
+[[package]]
+name = "ide-git"
 version = "0.1.0"
 dependencies = [
  "ide-core",
