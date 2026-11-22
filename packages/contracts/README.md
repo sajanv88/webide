@@ -1,6 +1,6 @@
 # @repo/contracts
 
-**Status:** Milestone 3: IPC types (generated), and the app's command ids, events and ports (hand-written).
+**Status:** Milestone 4: IPC types (generated), and the app's command ids, events and ports (hand-written).
 
 ## Purpose
 
@@ -25,7 +25,8 @@ Types only (`export type *`):
   `TextSearchDto` (`FileMatchesDto`, `LineMatchDto`, `SpanDto`), `FileListDto`,
   `GitStateDto`, `GitHeadDto`, `GitFileDto`, `GitChangeDto`, `GitDiffDto`,
   `GitBranchDto`, `DiffSideDto`, and `GitDiffArgs`, `GitPathsArgs`,
-  `GitCommitArgs`, `GitSwitchArgs`,
+  `GitCommitArgs`, `GitSwitchArgs`, `TerminalDto`, `TerminalEventDto`,
+  `TerminalOpenArgs`, `TerminalWriteArgs`, `TerminalResizeArgs`, `TerminalIdArgs`,
   and the argument types `WorkspacePathArgs`, `WorkspaceArgs`, `WriteFileArgs`,
   `OpenRecentArgs`, `SearchTextArgs`.
 - `IpcResult<T>`: `{ ok: true, value } | { ok: false, error: IpcError }`.
@@ -38,6 +39,8 @@ Types only (`export type *`):
 - `SearchPort`: `searchText(query)`, `listFiles()`, the same way, for `@repo/search`.
 - `GitPort`: `state()`, `diff(path, side)`, `stage`, `unstage`, `discard`,
   `commit(message)`, `branches()`, `switchBranch(name, create)`, `init()`, for `@repo/git`.
+- `TerminalPort`: `open(cols, rows, onEvent)` → `OpenTerminal`, `write`, `resize`, `close`,
+  for `@repo/terminal`.
 
 ## May depend on
 

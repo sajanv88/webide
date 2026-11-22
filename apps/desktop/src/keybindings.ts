@@ -1,6 +1,6 @@
 // The app's keys: the one table menus, the palette and key presses all read.
 // `Mod` is Ctrl, or Command on macOS. The format is described in @repo/commands.
-import type { KeybindingSpec } from "@repo/commands";
+import type { KeybindingSpec, Keybindings } from "@repo/commands";
 import type { AppCommandId } from "@repo/contracts";
 
 export const DEFAULT_KEYBINDINGS: readonly KeybindingSpec<AppCommandId>[] = [
@@ -18,5 +18,36 @@ export const DEFAULT_KEYBINDINGS: readonly KeybindingSpec<AppCommandId>[] = [
   // Global: in the editor, CodeMirror would take it as "find previous" (Shift+F3 does that too).
   { key: "Ctrl+Shift+G", command: "view.showSourceControl", global: true },
   { key: "Mod+P", command: "search.goToFile" },
+  { key: "Ctrl+`", command: "terminal.focus" },
+  { key: "Ctrl+Shift+`", command: "terminal.new" },
   { key: "Mod+,", command: "settings.open" },
 ];
+
+/**
+ * The keys a terminal leaves to the app, as VS Code does: the palette, the
+ * views and panels, Go to File, switching editors and settings. Everything
+ * else (Ctrl+C, Ctrl+W, Ctrl+B…) goes to the shell, which has its own uses.
+ */
+const TERMINAL_PASSES: ReadonlySet<AppCommandId> = new Set<AppCommandId>([
+  "commands.showPalette",
+  "search.goToFile",
+  "search.findInFiles",
+  "view.showExplorer",
+  "view.showSourceControl",
+  "view.toggleSidebar",
+  "terminal.focus",
+  "terminal.new",
+  "tabs.next",
+  "tabs.previous",
+  "settings.open",
+]);
+
+/** Whether a key pressed in a terminal is the app's. */
+export function terminalPassesKey(
+  keybindings: Keybindings<AppCommandId>,
+): (event: KeyboardEvent) => boolean {
+  return (event) => {
+    const binding = keybindings.match(event);
+    return binding !== undefined && TERMINAL_PASSES.has(binding.command);
+  };
+}
