@@ -1,0 +1,35 @@
+# @repo/contracts
+
+**Status:** Phase 6: IPC types (generated), and the app's command ids, events and ports (hand-written).
+
+## Purpose
+
+The types modules share.
+
+- `src/generated/`: every IPC command and DTO, generated from the Rust DTOs in
+  `crates/ide-ipc` with [ts-rs](https://github.com/Aleph-Alpha/ts-rs) by
+  `pnpm contracts:generate`. Never written by hand. `pnpm lint` runs
+  `cargo xtask check-contracts`, which fails if this folder drifts.
+- `src/app.ts`: frontend-only contracts, hand-written because they have no Rust
+  side: `AppCommandId`, `AppEvents`, the ports feature packages take, and
+  `IpcResult`.
+
+## Public API
+
+Types only (`export type *`):
+
+- `CommandMap`, `CommandName`: every command's `args` (`null` when none) and `output`.
+- `IpcError`, `IpcErrorCode`: what a failing command rejects with.
+- The DTOs: `WorkspaceDto`, `RecentWorkspaceDto`, `DirListingDto`, `FileNodeDto`,
+  `ReadFileDto` (switch on `kind`), `FileStampDto`, `SettingsDto`, `SettingsPatchDto`,
+  and the argument types `WorkspacePathArgs`, `WriteFileArgs`, `OpenRecentArgs`.
+- `IpcResult<T>`: `{ ok: true, value } | { ok: false, error: IpcError }`.
+- `AppCommandId`: every command id in the app's registry.
+- `AppEvents`: `workspace.opened`, `explorer.fileActivated`, `workspace.filesChanged`,
+  `settings.changed`.
+- `ExplorerPort`: `listDirectory(path)`, bound to the open workspace by the app.
+- `DocumentsPort`: `readFile(path)`, `writeFile(path, text)`, the same way, for `@repo/tabs`.
+
+## May depend on
+
+Nothing. Plain TypeScript types, no runtime code.

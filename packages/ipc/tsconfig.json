@@ -1,0 +1,7 @@
+{
+  "extends": "@repo/tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["es2023", "dom"]
+  },
+  "include": ["src", "vitest.config.ts"]
+}
