@@ -4,17 +4,21 @@ use std::sync::{Arc, Mutex};
 use ide_core::fs::{
     DirListing, FileNode, FileStamp, LineEnding, NodeKind, ReadLimits, ReadOutcome,
 };
+use ide_core::git::{
+    DiffSide, DiffTexts, GitBranch, GitChange, GitFileStatus, GitHead, GitState, GitStatus,
+};
 use ide_core::search::line_match;
 use ide_core::{
-    CancelFlag, FileList, FileMatches, FsChange, FsWatcher, IdeError, RecentWorkspace, RelPath,
-    Settings, SettingsPatch, TextQuery, TextSearchOutcome, WatchEvent, WatchGuard, WatchSink,
-    WorkspaceFs, WorkspaceRoot, WorkspaceSearch, WorkspaceStore,
+    CancelFlag, FileList, FileMatches, FsChange, FsWatcher, GitClient, IdeError, RecentWorkspace,
+    RelPath, Settings, SettingsPatch, TextQuery, TextSearchOutcome, WatchEvent, WatchGuard,
+    WatchSink, WorkspaceFs, WorkspaceRoot, WorkspaceSearch, WorkspaceStore,
 };
 use serde_json::json;
 
 use crate::dto::{
-    AppInfoDto, BackendEventDto, CloseGuardArgs, OpenRecentArgs, ReadFileDto, SearchTextArgs,
-    SettingsPatchDto, WorkspaceArgs, WorkspacePathArgs, WriteFileArgs,
+    AppInfoDto, BackendEventDto, CloseGuardArgs, DiffSideDto, GitCommitArgs, GitDiffArgs,
+    GitPathsArgs, GitSwitchArgs, OpenRecentArgs, ReadFileDto, SearchTextArgs, SettingsPatchDto,
+    WorkspaceArgs, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::{IpcError, IpcErrorCode};
 use crate::handlers::{self, IpcState, Services};
@@ -178,6 +182,95 @@ impl WorkspaceSearch for FakeSearch {
     }
 }
 
+/// Records each call; one modified file on `main`.
+#[derive(Default)]
+struct FakeGit {
+    calls: Mutex<Vec<String>>,
+}
+
+impl FakeGit {
+    fn record(&self, call: String) {
+        self.calls.lock().unwrap().push(call);
+    }
+}
+
+fn joined(paths: &[RelPath]) -> String {
+    paths
+        .iter()
+        .map(RelPath::as_str)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+impl GitClient for FakeGit {
+    fn state(&self, _root: &WorkspaceRoot) -> Result<GitState, IdeError> {
+        Ok(GitState::Repository(GitStatus {
+            head: GitHead {
+                branch: Some("main".into()),
+                commit: Some("abc1234".into()),
+                upstream: None,
+                ahead: 0,
+                behind: 0,
+            },
+            files: vec![GitFileStatus {
+                path: RelPath::parse("src/a.ts").unwrap(),
+                from: None,
+                staged: None,
+                unstaged: Some(GitChange::Modified),
+            }],
+            truncated: false,
+        }))
+    }
+    fn diff_texts(
+        &self,
+        _root: &WorkspaceRoot,
+        path: &RelPath,
+        side: DiffSide,
+        limit: u64,
+    ) -> Result<DiffTexts, IdeError> {
+        self.record(format!("diff {path} {side:?} {limit}"));
+        Ok(DiffTexts::Text {
+            original: "a".into(),
+            modified: "b".into(),
+        })
+    }
+    fn stage(&self, _root: &WorkspaceRoot, paths: &[RelPath]) -> Result<(), IdeError> {
+        self.record(format!("stage {}", joined(paths)));
+        Ok(())
+    }
+    fn unstage(&self, _root: &WorkspaceRoot, paths: &[RelPath]) -> Result<(), IdeError> {
+        self.record(format!("unstage {}", joined(paths)));
+        Ok(())
+    }
+    fn discard(&self, _root: &WorkspaceRoot, paths: &[RelPath]) -> Result<(), IdeError> {
+        self.record(format!("discard {}", joined(paths)));
+        Ok(())
+    }
+    fn commit(&self, _root: &WorkspaceRoot, message: &str) -> Result<(), IdeError> {
+        self.record(format!("commit {message}"));
+        Err(IdeError::Git("nothing to commit".into()))
+    }
+    fn branches(&self, _root: &WorkspaceRoot) -> Result<Vec<GitBranch>, IdeError> {
+        Ok(vec![GitBranch {
+            name: "main".into(),
+            current: true,
+        }])
+    }
+    fn switch_branch(
+        &self,
+        _root: &WorkspaceRoot,
+        name: &str,
+        create: bool,
+    ) -> Result<(), IdeError> {
+        self.record(format!("switch {name} {create}"));
+        Ok(())
+    }
+    fn init(&self, _root: &WorkspaceRoot) -> Result<(), IdeError> {
+        self.record("init".into());
+        Ok(())
+    }
+}
+
 fn folder(name: &str) -> PathBuf {
     std::env::temp_dir().join(name)
 }
@@ -188,6 +281,7 @@ struct Fixture {
     store: Arc<FakeStore>,
     watcher: Arc<FakeWatcher>,
     search: Arc<FakeSearch>,
+    git: Arc<FakeGit>,
     /// What was sent to the webview.
     emitted: Arc<Mutex<Vec<BackendEventDto>>>,
 }
@@ -211,11 +305,13 @@ fn fixture() -> Fixture {
     });
     let watcher = Arc::new(FakeWatcher::default());
     let search = Arc::new(FakeSearch::default());
+    let git = Arc::new(FakeGit::default());
     let services = Services {
         fs: fs.clone(),
         workspace: store.clone(),
         watcher: watcher.clone(),
         search: search.clone(),
+        git: git.clone(),
     };
     let info = AppInfoDto {
         name: "test".to_owned(),
@@ -230,6 +326,7 @@ fn fixture() -> Fixture {
         store,
         watcher,
         search,
+        git,
         emitted,
     }
 }
@@ -572,4 +669,120 @@ fn list_files_returns_workspace_relative_paths() {
         serde_json::to_value(&list).unwrap(),
         json!({ "files": ["src/a.ts"], "truncated": false })
     );
+}
+
+#[test]
+fn git_commands_need_the_open_workspace_and_valid_paths() {
+    let fx = fixture();
+    let ws_args = |id: &str| WorkspaceArgs {
+        workspace_id: id.to_owned(),
+    };
+    assert_eq!(
+        code(handlers::git_state(&fx.state, ws_args("1"))),
+        IpcErrorCode::NoWorkspace
+    );
+    let ws = handlers::open_picked(&fx.state, &folder("alpha")).unwrap();
+
+    // A path that could leave the workspace never reaches git.
+    let bad = GitPathsArgs {
+        workspace_id: ws.id.clone(),
+        paths: vec!["src/a.ts".into(), "../outside".into()],
+    };
+    assert_eq!(
+        code(handlers::git_stage(&fx.state, bad)),
+        IpcErrorCode::InvalidPath
+    );
+    assert!(fx.git.calls.lock().unwrap().is_empty());
+
+    let good = GitPathsArgs {
+        workspace_id: ws.id.clone(),
+        paths: vec!["src/a.ts".into(), "b.ts".into()],
+    };
+    handlers::git_stage(&fx.state, good.clone()).unwrap();
+    handlers::git_unstage(&fx.state, good.clone()).unwrap();
+    handlers::git_discard(&fx.state, good).unwrap();
+    handlers::git_switch_branch(
+        &fx.state,
+        GitSwitchArgs {
+            workspace_id: ws.id.clone(),
+            name: "feature".into(),
+            create: true,
+        },
+    )
+    .unwrap();
+    // Git's refusal reaches the page with the git code and git's words.
+    let refused = handlers::git_commit(
+        &fx.state,
+        GitCommitArgs {
+            workspace_id: ws.id.clone(),
+            message: "first".into(),
+        },
+    )
+    .unwrap_err();
+    assert_eq!(refused.code, IpcErrorCode::Git);
+    assert_eq!(refused.message, "nothing to commit");
+    handlers::git_diff(
+        &fx.state,
+        GitDiffArgs {
+            workspace_id: ws.id.clone(),
+            path: "src/a.ts".into(),
+            side: DiffSideDto::Unstaged,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        *fx.git.calls.lock().unwrap(),
+        [
+            "stage src/a.ts,b.ts".to_owned(),
+            "unstage src/a.ts,b.ts".to_owned(),
+            "discard src/a.ts,b.ts".to_owned(),
+            "switch feature true".to_owned(),
+            "commit first".to_owned(),
+            // The limit is the "don't open above" size.
+            format!(
+                "diff src/a.ts Unstaged {}",
+                Settings::default().read_limits().refuse_above
+            ),
+        ]
+    );
+}
+
+#[test]
+fn git_state_has_the_shape_the_frontend_expects() {
+    let fx = fixture();
+    let ws = handlers::open_picked(&fx.state, &folder("alpha")).unwrap();
+    let state = handlers::git_state(
+        &fx.state,
+        WorkspaceArgs {
+            workspace_id: ws.id.clone(),
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::to_value(&state).unwrap(),
+        json!({
+            "kind": "repository",
+            "head": { "branch": "main", "commit": "abc1234", "upstream": null, "ahead": 0, "behind": 0 },
+            "files": [{ "path": "src/a.ts", "from": null, "staged": null, "unstaged": "modified" }],
+            "truncated": false,
+        })
+    );
+    let diff = handlers::git_diff(
+        &fx.state,
+        GitDiffArgs {
+            workspace_id: ws.id,
+            path: "src/a.ts".into(),
+            side: DiffSideDto::Staged,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::to_value(&diff).unwrap(),
+        json!({ "kind": "text", "original": "a", "modified": "b" })
+    );
+    // Sides are camelCase strings.
+    let args: GitDiffArgs =
+        serde_json::from_value(json!({ "workspaceId": "1", "path": "a", "side": "unstaged" }))
+            .unwrap();
+    assert_eq!(args.side, DiffSideDto::Unstaged);
 }

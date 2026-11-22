@@ -3,4 +3,4 @@
 /**
  * Stable error codes. The frontend switches on these, never on `message`.
  */
-export type IpcErrorCode = "invalidPath" | "outsideWorkspace" | "notFound" | "notADirectory" | "notAFile" | "permissionDenied" | "noWorkspace" | "workspaceChanged" | "notARecentWorkspace" | "invalidSettings" | "invalidQuery" | "io" | "internal";
+export type IpcErrorCode = "invalidPath" | "outsideWorkspace" | "notFound" | "notADirectory" | "notAFile" | "permissionDenied" | "noWorkspace" | "workspaceChanged" | "notARecentWorkspace" | "invalidSettings" | "invalidQuery" | "git" | "io" | "internal";
