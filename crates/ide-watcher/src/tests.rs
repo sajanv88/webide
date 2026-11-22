@@ -155,14 +155,30 @@ fn workspace() -> (tempfile::TempDir, WorkspaceRoot) {
 
 /// Collects events until one mentions `path`, or the time runs out.
 fn wait_for(events: &mpsc::Receiver<WatchEvent>, path: &RelPath) -> Vec<FsChange> {
+    wait_until(events, &format!("a change to {path}"), |change| {
+        change.path() == path
+    })
+}
+
+/// Collects events until `change` itself arrives. (FSEvents can deliver a
+/// late `Modified` for a path before the change a test is waiting for.)
+fn wait_for_change(events: &mpsc::Receiver<WatchEvent>, change: &FsChange) -> Vec<FsChange> {
+    wait_until(events, &format!("{change:?}"), |seen| seen == change)
+}
+
+fn wait_until(
+    events: &mpsc::Receiver<WatchEvent>,
+    what: &str,
+    found: impl Fn(&FsChange) -> bool,
+) -> Vec<FsChange> {
     let deadline = Instant::now() + Duration::from_secs(10);
     let mut seen = Vec::new();
     while let Some(left) = deadline.checked_duration_since(Instant::now()) {
         match events.recv_timeout(left) {
             Ok(WatchEvent::Changed { changes, .. }) => {
-                let found = changes.iter().any(|change| change.path() == path);
+                let done = changes.iter().any(&found);
                 seen.extend(changes);
-                if found {
+                if done {
                     return seen;
                 }
             }
@@ -170,7 +186,7 @@ fn wait_for(events: &mpsc::Receiver<WatchEvent>, path: &RelPath) -> Vec<FsChange
             Err(_) => break,
         }
     }
-    panic!("no change to {path} within 10 s; saw {seen:?}");
+    panic!("no {what} within 10 s; saw {seen:?}");
 }
 
 fn start_watch(root: &WorkspaceRoot) -> (WatchGuard, mpsc::Receiver<WatchEvent>) {
@@ -196,16 +212,16 @@ fn reports_files_created_changed_and_removed_on_disk() {
     std::fs::write(&file, "one").unwrap();
     wait_for(&events, &p("a.txt"));
 
+    // inotify watches a new folder only once it has seen it created, so a
+    // file written into it at once can be missed (the folder's creation is
+    // what the explorer needs). Wait for the folder first.
     std::fs::create_dir(root.path().join("src")).unwrap();
+    wait_for(&events, &p("src"));
     std::fs::write(root.path().join("src").join("b.txt"), "b").unwrap();
     wait_for(&events, &p("src/b.txt"));
 
     std::fs::remove_file(&file).unwrap();
-    let seen = wait_for(&events, &p("a.txt"));
-    assert!(
-        seen.contains(&FsChange::Removed(p("a.txt"))),
-        "expected a removal, saw {seen:?}"
-    );
+    wait_for_change(&events, &FsChange::Removed(p("a.txt")));
 }
 
 #[test]
