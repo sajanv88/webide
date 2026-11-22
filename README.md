@@ -18,10 +18,11 @@ Status and plan: [checklist.md](checklist.md), from [plan.md](plan.md).
 | Ctrl+P                      | Go to file                |
 | Ctrl+Shift+F                | Find in files             |
 | Ctrl+Shift+E                | Show the explorer         |
+| Ctrl+Shift+G                | Show source control       |
 | Ctrl+B                      | Show or hide the side bar |
 | Ctrl+,                      | Settings                  |
 
-On macOS, Ctrl+PageDown and Ctrl+PageUp stay on the Control key. They're one
+On macOS, Ctrl+PageDown, Ctrl+PageUp and Ctrl+Shift+G stay on the Control key. They're one
 table, [apps/desktop/src/keybindings.ts](apps/desktop/src/keybindings.ts);
 the menus and the palette show them from there.
 
@@ -46,10 +47,10 @@ the menus and the palette show them from there.
 ## Layout
 
 ```
-crates/            Rust: ide-core, ide-fs, ide-watcher, ide-workspace, ide-search, ide-ipc
+crates/            Rust: ide-core, ide-fs, ide-watcher, ide-workspace, ide-search, ide-git, ide-ipc
 apps/desktop/      The Vite frontend (src/) and the Tauri composition root (src-tauri/)
 packages/          Frontend modules: contracts, kernel, ipc, shell, explorer, tabs,
-                   editor-surface, commands, settings, search, and the shared tsconfig
+                   editor-surface, commands, settings, search, git, and the shared tsconfig
 xtask/             cargo xtask check-boundaries, check-csp, check-contracts
 ```
 

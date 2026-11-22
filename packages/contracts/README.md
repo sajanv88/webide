@@ -1,6 +1,6 @@
 # @repo/contracts
 
-**Status:** Milestone 2: IPC types (generated), and the app's command ids, events and ports (hand-written).
+**Status:** Milestone 3: IPC types (generated), and the app's command ids, events and ports (hand-written).
 
 ## Purpose
 
@@ -23,6 +23,9 @@ Types only (`export type *`):
 - The DTOs: `WorkspaceDto`, `RecentWorkspaceDto`, `DirListingDto`, `FileNodeDto`,
   `ReadFileDto` (switch on `kind`), `FileStampDto`, `SettingsDto`, `SettingsPatchDto`,
   `TextSearchDto` (`FileMatchesDto`, `LineMatchDto`, `SpanDto`), `FileListDto`,
+  `GitStateDto`, `GitHeadDto`, `GitFileDto`, `GitChangeDto`, `GitDiffDto`,
+  `GitBranchDto`, `DiffSideDto`, and `GitDiffArgs`, `GitPathsArgs`,
+  `GitCommitArgs`, `GitSwitchArgs`,
   and the argument types `WorkspacePathArgs`, `WorkspaceArgs`, `WriteFileArgs`,
   `OpenRecentArgs`, `SearchTextArgs`.
 - `IpcResult<T>`: `{ ok: true, value } | { ok: false, error: IpcError }`.
@@ -33,6 +36,8 @@ Types only (`export type *`):
 - `ExplorerPort`: `listDirectory(path)`, bound to the open workspace by the app.
 - `DocumentsPort`: `readFile(path)`, `writeFile(path, text)`, the same way, for `@repo/tabs`.
 - `SearchPort`: `searchText(query)`, `listFiles()`, the same way, for `@repo/search`.
+- `GitPort`: `state()`, `diff(path, side)`, `stage`, `unstage`, `discard`,
+  `commit(message)`, `branches()`, `switchBranch(name, create)`, `init()`, for `@repo/git`.
 
 ## May depend on
 
