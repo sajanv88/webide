@@ -7,6 +7,10 @@ use ide_core::fs::{
 use ide_core::git::{
     DiffSide, DiffTexts, GitBranch, GitChange, GitFileStatus, GitHead, GitState, GitStatus,
 };
+use ide_core::language::{
+    Completions, Definition, HoverText, LanguageServer, LanguageServers, LanguageSink,
+    LanguageStatus, Problem, Severity, TextPosition, TextRange,
+};
 use ide_core::search::line_match;
 use ide_core::terminal::{MAX_TERMINALS, MAX_WRITE_BYTES};
 use ide_core::{
@@ -19,9 +23,9 @@ use serde_json::json;
 
 use crate::dto::{
     AppInfoDto, BackendEventDto, CloseGuardArgs, DiffSideDto, GitCommitArgs, GitDiffArgs,
-    GitPathsArgs, GitSwitchArgs, OpenRecentArgs, ReadFileDto, SearchTextArgs, SettingsPatchDto,
-    TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs, WorkspaceArgs, WorkspacePathArgs,
-    WriteFileArgs,
+    GitPathsArgs, GitSwitchArgs, LspDocumentArgs, LspPositionArgs, OpenRecentArgs, ReadFileDto,
+    SearchTextArgs, SettingsPatchDto, TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs,
+    WorkspaceArgs, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::{IpcError, IpcErrorCode};
 use crate::handlers::{self, IpcState, Services};
@@ -335,6 +339,103 @@ impl Drop for FakeSession {
     }
 }
 
+/// Starts once per call; logs what each server is told; can be made to fail.
+#[derive(Default)]
+struct FakeLanguages {
+    log: Arc<Mutex<Vec<String>>>,
+    fail: std::sync::atomic::AtomicBool,
+}
+
+struct FakeServer {
+    n: usize,
+    log: Arc<Mutex<Vec<String>>>,
+}
+
+impl LanguageServers for FakeLanguages {
+    fn handles(&self, path: &RelPath) -> bool {
+        path.as_str().ends_with(".ts")
+    }
+    fn start(
+        &self,
+        root: &WorkspaceRoot,
+        status: LanguageSink,
+    ) -> Result<Box<dyn LanguageServer>, IdeError> {
+        let mut log = self.log.lock().unwrap();
+        let n = log.iter().filter(|line| line.starts_with("start")).count() + 1;
+        log.push(format!("start {n} in {}", root.name()));
+        status(LanguageStatus::Starting);
+        if self.fail.load(std::sync::atomic::Ordering::Relaxed) {
+            status(LanguageStatus::Failed("no server".into()));
+            return Err(IdeError::Io("no server".into()));
+        }
+        status(LanguageStatus::Ready);
+        Ok(Box::new(FakeServer {
+            n,
+            log: Arc::clone(&self.log),
+        }))
+    }
+}
+
+impl FakeServer {
+    fn note(&self, what: String) {
+        self.log.lock().unwrap().push(format!("{} {what}", self.n));
+    }
+}
+
+fn at(line: u32, character: u32) -> TextPosition {
+    TextPosition { line, character }
+}
+
+impl LanguageServer for FakeServer {
+    fn open(&self, path: &RelPath, text: &str) -> Result<(), IdeError> {
+        self.note(format!("open {path} {text}"));
+        Ok(())
+    }
+    fn change(&self, path: &RelPath, text: &str) -> Result<(), IdeError> {
+        self.note(format!("change {path} {text}"));
+        Ok(())
+    }
+    fn close(&self, path: &RelPath) -> Result<(), IdeError> {
+        self.note(format!("close {path}"));
+        Ok(())
+    }
+    fn problems(&self, _path: &RelPath) -> Result<Vec<Problem>, IdeError> {
+        Ok(vec![Problem {
+            range: TextRange {
+                start: at(0, 6),
+                end: at(0, 7),
+            },
+            severity: Severity::Error,
+            message: "Type 'string' is not assignable to type 'number'.".into(),
+            source: Some("ts".into()),
+            code: Some("2322".into()),
+        }])
+    }
+    fn completions(&self, _path: &RelPath, _at: TextPosition) -> Result<Completions, IdeError> {
+        Ok(Completions::default())
+    }
+    fn hover(&self, _path: &RelPath, _at: TextPosition) -> Result<Option<HoverText>, IdeError> {
+        Ok(Some(HoverText {
+            markdown: "const x: number".into(),
+        }))
+    }
+    fn definition(&self, path: &RelPath, _at: TextPosition) -> Result<Vec<Definition>, IdeError> {
+        Ok(vec![Definition::Workspace {
+            path: path.clone(),
+            range: TextRange {
+                start: at(0, 6),
+                end: at(0, 7),
+            },
+        }])
+    }
+}
+
+impl Drop for FakeServer {
+    fn drop(&mut self) {
+        self.note("stop".into());
+    }
+}
+
 fn folder(name: &str) -> PathBuf {
     std::env::temp_dir().join(name)
 }
@@ -347,6 +448,7 @@ struct Fixture {
     search: Arc<FakeSearch>,
     git: Arc<FakeGit>,
     terminals: Arc<FakeTerminals>,
+    languages: Arc<FakeLanguages>,
     /// What was sent to the webview.
     emitted: Arc<Mutex<Vec<BackendEventDto>>>,
 }
@@ -372,6 +474,7 @@ fn fixture() -> Fixture {
     let search = Arc::new(FakeSearch::default());
     let git = Arc::new(FakeGit::default());
     let terminals = Arc::new(FakeTerminals::default());
+    let languages = Arc::new(FakeLanguages::default());
     let services = Services {
         fs: fs.clone(),
         workspace: store.clone(),
@@ -379,6 +482,7 @@ fn fixture() -> Fixture {
         search: search.clone(),
         git: git.clone(),
         terminals: terminals.clone(),
+        languages: languages.clone(),
     };
     let info = AppInfoDto {
         name: "test".to_owned(),
@@ -395,6 +499,7 @@ fn fixture() -> Fixture {
         search,
         git,
         terminals,
+        languages,
         emitted,
     }
 }
@@ -982,4 +1087,129 @@ fn another_workspace_or_too_many_terminals_end_or_refuse_them() {
         fx.terminals.log.lock().unwrap().last().map(String::as_str),
         Some("end 11")
     );
+}
+
+fn doc(workspace_id: &str, path: &str, text: &str) -> LspDocumentArgs {
+    LspDocumentArgs {
+        workspace_id: workspace_id.to_owned(),
+        path: path.to_owned(),
+        text: text.to_owned(),
+    }
+}
+
+fn place(workspace_id: &str, path: &str) -> LspPositionArgs {
+    LspPositionArgs {
+        workspace_id: workspace_id.to_owned(),
+        path: path.to_owned(),
+        line: 0,
+        character: 6,
+    }
+}
+
+#[test]
+fn the_language_server_starts_with_the_first_file_it_handles_and_stops_with_the_workspace() {
+    let fx = fixture();
+    let ws = handlers::open_picked(&fx.state, &folder("alpha")).unwrap();
+    // Not its kind of file: nothing starts.
+    handlers::lsp_open(&fx.state, doc(&ws.id, "notes.md", "x")).unwrap();
+    assert!(fx.languages.log.lock().unwrap().is_empty());
+
+    handlers::lsp_open(&fx.state, doc(&ws.id, "a.ts", "one")).unwrap();
+    handlers::lsp_change(&fx.state, doc(&ws.id, "a.ts", "two")).unwrap();
+    let problems = handlers::lsp_problems(&fx.state, args(&ws.id, "a.ts")).unwrap();
+    assert_eq!(
+        serde_json::to_value(&problems).unwrap(),
+        json!([{
+            "range": { "start": { "line": 0, "character": 6 }, "end": { "line": 0, "character": 7 } },
+            "severity": "error",
+            "message": "Type 'string' is not assignable to type 'number'.",
+            "source": "ts",
+            "code": "2322",
+        }])
+    );
+    let definition = handlers::lsp_definition(&fx.state, place(&ws.id, "a.ts")).unwrap();
+    assert_eq!(
+        serde_json::to_value(&definition).unwrap()[0]["kind"],
+        json!("workspace")
+    );
+    assert!(
+        handlers::lsp_hover(&fx.state, place(&ws.id, "a.ts"))
+            .unwrap()
+            .is_some()
+    );
+    handlers::lsp_close(&fx.state, args(&ws.id, "a.ts")).unwrap();
+    // A path that could leave the workspace never reaches the server.
+    assert_eq!(
+        code(handlers::lsp_open(&fx.state, doc(&ws.id, "../x.ts", "x"))),
+        IpcErrorCode::InvalidPath
+    );
+
+    // Its status reached the page, tagged with the workspace.
+    let statuses: Vec<_> = fx
+        .emitted
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|event| match event {
+            BackendEventDto::LanguageStatus {
+                workspace_id,
+                status,
+            } => Some(format!("{workspace_id} {status:?}")),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        statuses,
+        [format!("{} Starting", ws.id), format!("{} Ready", ws.id)]
+    );
+
+    handlers::open_picked(&fx.state, &folder("beta")).unwrap();
+    assert_eq!(
+        *fx.languages.log.lock().unwrap(),
+        [
+            "start 1 in alpha",
+            "1 open a.ts one",
+            "1 change a.ts two",
+            "1 close a.ts",
+            "1 stop",
+        ]
+    );
+}
+
+#[test]
+fn a_server_that_cant_start_isnt_tried_again_until_asked() {
+    let fx = fixture();
+    fx.languages
+        .fail
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+    let ws = handlers::open_picked(&fx.state, &folder("alpha")).unwrap();
+    handlers::lsp_open(&fx.state, doc(&ws.id, "a.ts", "x")).unwrap();
+    assert!(
+        handlers::lsp_problems(&fx.state, args(&ws.id, "a.ts"))
+            .unwrap()
+            .is_empty()
+    );
+    let starts = || {
+        fx.languages
+            .log
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|line| line.starts_with("start"))
+            .count()
+    };
+    assert_eq!(starts(), 1);
+
+    fx.languages
+        .fail
+        .store(false, std::sync::atomic::Ordering::Relaxed);
+    handlers::lsp_restart(
+        &fx.state,
+        WorkspaceArgs {
+            workspace_id: ws.id.clone(),
+        },
+    )
+    .unwrap();
+    handlers::lsp_open(&fx.state, doc(&ws.id, "a.ts", "x")).unwrap();
+    assert_eq!(starts(), 2);
 }

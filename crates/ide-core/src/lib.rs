@@ -6,6 +6,7 @@
 pub mod error;
 pub mod fs;
 pub mod git;
+pub mod language;
 pub mod path;
 pub mod ports;
 pub mod search;

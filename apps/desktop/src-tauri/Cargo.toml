@@ -13,6 +13,7 @@ tauri-build = { workspace = true }
 ide-fs = { workspace = true }
 ide-git = { workspace = true }
 ide-ipc = { workspace = true }
+ide-lsp = { workspace = true }
 ide-search = { workspace = true }
 ide-terminal = { workspace = true }
 ide-watcher = { workspace = true }

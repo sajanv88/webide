@@ -1649,6 +1649,7 @@ dependencies = [
  "ide-fs",
  "ide-git",
  "ide-ipc",
+ "ide-lsp",
  "ide-search",
  "ide-terminal",
  "ide-watcher",
@@ -1684,6 +1685,15 @@ dependencies = [
  "tauri-plugin-dialog",
  "thiserror 2.0.21",
  "ts-rs",
+]
+
+[[package]]
+name = "ide-lsp"
+version = "0.1.0"
+dependencies = [
+ "ide-core",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

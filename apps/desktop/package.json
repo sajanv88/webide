@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:web": "vite",
-    "build": "vite build",
+    "dev:web": "node scripts/stage-typescript.mjs && vite",
+    "build": "node scripts/stage-typescript.mjs && vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "stage:typescript": "node scripts/stage-typescript.mjs"
   },
   "dependencies": {
     "@nuvui/backgrounds": "catalog:",

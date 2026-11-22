@@ -17,6 +17,7 @@ ide-core = { path = "crates/ide-core" }
 ide-fs = { path = "crates/ide-fs" }
 ide-git = { path = "crates/ide-git" }
 ide-ipc = { path = "crates/ide-ipc" }
+ide-lsp = { path = "crates/ide-lsp" }
 ide-search = { path = "crates/ide-search" }
 ide-terminal = { path = "crates/ide-terminal" }
 ide-watcher = { path = "crates/ide-watcher" }

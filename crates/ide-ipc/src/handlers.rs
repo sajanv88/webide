@@ -6,6 +6,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
+use ide_core::language::{LanguageServer, LanguageServers, LanguageStatus, TextPosition};
 use ide_core::terminal::{MAX_TERMINALS, MAX_WRITE_BYTES};
 use ide_core::workspace::display_path;
 use ide_core::{
@@ -15,9 +16,10 @@ use ide_core::{
 };
 
 use crate::dto::{
-    AppInfoDto, BackendEventDto, DirListingDto, FileListDto, FileStampDto, GitBranchDto,
-    GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs,
-    OpenRecentArgs, ReadFileDto, RecentWorkspaceDto, SearchTextArgs, SettingsDto, SettingsPatchDto,
+    AppInfoDto, BackendEventDto, CompletionsDto, DefinitionDto, DirListingDto, FileListDto,
+    FileStampDto, GitBranchDto, GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto,
+    GitSwitchArgs, HoverDto, LanguageStatusDto, LspDocumentArgs, LspPositionArgs, OpenRecentArgs,
+    ProblemDto, ReadFileDto, RecentWorkspaceDto, SearchTextArgs, SettingsDto, SettingsPatchDto,
     TerminalDto, TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs, TextSearchDto,
     WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
 };
@@ -32,6 +34,7 @@ pub struct Services {
     pub search: Arc<dyn WorkspaceSearch>,
     pub git: Arc<dyn GitClient>,
     pub terminals: Arc<dyn TerminalHost>,
+    pub languages: Arc<dyn LanguageServers>,
 }
 
 impl std::fmt::Debug for Services {
@@ -70,6 +73,23 @@ pub struct IpcState {
     /// one ends its shell.
     terminals: Mutex<HashMap<u32, StoredTerminal>>,
     next_terminal: AtomicU64,
+    /// The open workspace's language server, started when a file it handles
+    /// is first opened. Held while it starts, so it starts once.
+    language: Mutex<Language>,
+}
+
+/// The language server of one workspace.
+#[derive(Default)]
+enum Language {
+    #[default]
+    NotStarted,
+    Running {
+        workspace_id: String,
+        server: Arc<dyn LanguageServer>,
+    },
+    /// It couldn't start; not tried again until the workspace opens again (or
+    /// `lsp_restart`).
+    Failed { workspace_id: String },
 }
 
 impl std::fmt::Debug for IpcState {
@@ -92,6 +112,59 @@ impl IpcState {
             search: Mutex::new(None),
             terminals: Mutex::new(HashMap::new()),
             next_terminal: AtomicU64::new(1),
+            language: Mutex::new(Language::NotStarted),
+        }
+    }
+
+    /// Stops the language server: another workspace opened, or the page started again.
+    pub fn stop_language(&self) {
+        let old =
+            std::mem::take(&mut *self.language.lock().unwrap_or_else(PoisonError::into_inner));
+        // Stopped outside the lock: it asks the server to leave, which takes a moment.
+        drop(old);
+    }
+
+    /// The workspace's language server, started if it isn't yet. `None`
+    /// when it couldn't start (its status said why).
+    fn language_for(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Option<Arc<dyn LanguageServer>>, IdeError> {
+        let root = self.root_for(workspace_id)?;
+        let mut language = self.language.lock().unwrap_or_else(PoisonError::into_inner);
+        match &*language {
+            Language::Running {
+                workspace_id: id,
+                server,
+            } if id == workspace_id => {
+                return Ok(Some(Arc::clone(server)));
+            }
+            Language::Failed { workspace_id: id } if id == workspace_id => return Ok(None),
+            _ => {}
+        }
+        let emit = Arc::clone(&self.emit);
+        let id = workspace_id.to_owned();
+        let status: ide_core::language::LanguageSink = Arc::new(move |status: LanguageStatus| {
+            emit(BackendEventDto::LanguageStatus {
+                workspace_id: id.clone(),
+                status: LanguageStatusDto::from(status),
+            });
+        });
+        match self.services.languages.start(&root, status) {
+            Ok(server) => {
+                let server: Arc<dyn LanguageServer> = Arc::from(server);
+                *language = Language::Running {
+                    workspace_id: workspace_id.to_owned(),
+                    server: Arc::clone(&server),
+                };
+                Ok(Some(server))
+            }
+            Err(_) => {
+                *language = Language::Failed {
+                    workspace_id: workspace_id.to_owned(),
+                };
+                Ok(None)
+            }
         }
     }
 
@@ -144,6 +217,7 @@ impl IpcState {
         // new one is open, so a terminal still starting for the old one is
         // either closed here or refused when it's stored (`terminal_open`).
         self.close_terminals();
+        self.stop_language();
         dto
     }
 
@@ -475,5 +549,111 @@ pub fn terminal_close(state: &IpcState, args: TerminalIdArgs) -> Result<(), IpcE
         .remove(&args.id)
         .ok_or(IdeError::NotFound)?;
     drop(session);
+    Ok(())
+}
+
+/// The server for a file, if one handles it and it's running.
+fn language_server(
+    state: &IpcState,
+    workspace_id: &str,
+    path: &RelPath,
+) -> Result<Option<Arc<dyn LanguageServer>>, IpcError> {
+    if !state.services.languages.handles(path) {
+        // Still checks the workspace, as every command does.
+        state.root_for(workspace_id)?;
+        return Ok(None);
+    }
+    Ok(state.language_for(workspace_id)?)
+}
+
+/// The file is open in the editor: the language server (started now if need
+/// be) reads it from here on.
+pub fn lsp_open(state: &IpcState, args: LspDocumentArgs) -> Result<(), IpcError> {
+    let path = RelPath::parse(&args.path)?;
+    match language_server(state, &args.workspace_id, &path)? {
+        Some(server) => Ok(server.open(&path, &args.text)?),
+        None => Ok(()),
+    }
+}
+
+pub fn lsp_change(state: &IpcState, args: LspDocumentArgs) -> Result<(), IpcError> {
+    let path = RelPath::parse(&args.path)?;
+    match language_server(state, &args.workspace_id, &path)? {
+        Some(server) => Ok(server.change(&path, &args.text)?),
+        None => Ok(()),
+    }
+}
+
+pub fn lsp_close(state: &IpcState, args: WorkspacePathArgs) -> Result<(), IpcError> {
+    let path = RelPath::parse(&args.path)?;
+    match language_server(state, &args.workspace_id, &path)? {
+        Some(server) => Ok(server.close(&path)?),
+        None => Ok(()),
+    }
+}
+
+pub fn lsp_problems(
+    state: &IpcState,
+    args: WorkspacePathArgs,
+) -> Result<Vec<ProblemDto>, IpcError> {
+    let path = RelPath::parse(&args.path)?;
+    Ok(match language_server(state, &args.workspace_id, &path)? {
+        Some(server) => server
+            .problems(&path)?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+        None => Vec::new(),
+    })
+}
+
+fn at(args: &LspPositionArgs) -> TextPosition {
+    TextPosition {
+        line: args.line,
+        character: args.character,
+    }
+}
+
+pub fn lsp_completions(
+    state: &IpcState,
+    args: LspPositionArgs,
+) -> Result<CompletionsDto, IpcError> {
+    let path = RelPath::parse(&args.path)?;
+    Ok(match language_server(state, &args.workspace_id, &path)? {
+        Some(server) => server.completions(&path, at(&args))?.into(),
+        None => CompletionsDto {
+            items: Vec::new(),
+            incomplete: false,
+        },
+    })
+}
+
+pub fn lsp_hover(state: &IpcState, args: LspPositionArgs) -> Result<Option<HoverDto>, IpcError> {
+    let path = RelPath::parse(&args.path)?;
+    Ok(match language_server(state, &args.workspace_id, &path)? {
+        Some(server) => server.hover(&path, at(&args))?.map(Into::into),
+        None => None,
+    })
+}
+
+pub fn lsp_definition(
+    state: &IpcState,
+    args: LspPositionArgs,
+) -> Result<Vec<DefinitionDto>, IpcError> {
+    let path = RelPath::parse(&args.path)?;
+    Ok(match language_server(state, &args.workspace_id, &path)? {
+        Some(server) => server
+            .definition(&path, at(&args))?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+        None => Vec::new(),
+    })
+}
+
+/// Stops the workspace's language server; it starts again when it's next needed.
+pub fn lsp_restart(state: &IpcState, args: WorkspaceArgs) -> Result<(), IpcError> {
+    state.root_for(&args.workspace_id)?;
+    state.stop_language();
     Ok(())
 }

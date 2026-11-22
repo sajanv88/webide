@@ -11,9 +11,10 @@ use tauri::{AppHandle, State, Webview, WebviewWindow, Wry};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::dto::{
-    AppInfoDto, CloseGuardArgs, DirListingDto, FileListDto, FileStampDto, GitBranchDto,
-    GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs,
-    OpenRecentArgs, ReadFileDto, RecentWorkspaceDto, SearchTextArgs, SettingsDto, SettingsPatchDto,
+    AppInfoDto, CloseGuardArgs, CompletionsDto, DefinitionDto, DirListingDto, FileListDto,
+    FileStampDto, GitBranchDto, GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto,
+    GitSwitchArgs, HoverDto, LspDocumentArgs, LspPositionArgs, OpenRecentArgs, ProblemDto,
+    ReadFileDto, RecentWorkspaceDto, SearchTextArgs, SettingsDto, SettingsPatchDto,
     SubscribeEventsArgs, TerminalDto, TerminalEventDto, TerminalIdArgs, TerminalOpenArgs,
     TerminalResizeArgs, TerminalWriteArgs, TextSearchDto, WorkspaceArgs, WorkspaceDto,
     WorkspacePathArgs, WriteFileArgs,
@@ -86,6 +87,14 @@ ipc_commands! {
         terminal_write(TerminalWriteArgs) -> ();
         terminal_resize(TerminalResizeArgs) -> ();
         terminal_close(TerminalIdArgs) -> ();
+        lsp_open(LspDocumentArgs) -> ();
+        lsp_change(LspDocumentArgs) -> ();
+        lsp_close(WorkspacePathArgs) -> ();
+        lsp_problems(WorkspacePathArgs) -> Vec<ProblemDto>;
+        lsp_completions(LspPositionArgs) -> CompletionsDto;
+        lsp_hover(LspPositionArgs) -> Option<HoverDto>;
+        lsp_definition(LspPositionArgs) -> Vec<DefinitionDto>;
+        lsp_restart(WorkspaceArgs) -> ();
     }
     custom {
         pick_workspace() -> Option<WorkspaceDto>;
@@ -295,6 +304,58 @@ pub async fn terminal_open(
         handlers::terminal_open(state, &workspace_id, cols, rows, sink)
     })
     .await
+}
+
+#[tauri::command]
+pub async fn lsp_open(state: Shared<'_>, args: LspDocumentArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::lsp_open(state, args)).await
+}
+
+#[tauri::command]
+pub async fn lsp_change(state: Shared<'_>, args: LspDocumentArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::lsp_change(state, args)).await
+}
+
+#[tauri::command]
+pub async fn lsp_close(state: Shared<'_>, args: WorkspacePathArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::lsp_close(state, args)).await
+}
+
+#[tauri::command]
+pub async fn lsp_problems(
+    state: Shared<'_>,
+    args: WorkspacePathArgs,
+) -> Result<Vec<ProblemDto>, IpcError> {
+    run_blocking(&state, move |state| handlers::lsp_problems(state, args)).await
+}
+
+#[tauri::command]
+pub async fn lsp_completions(
+    state: Shared<'_>,
+    args: LspPositionArgs,
+) -> Result<CompletionsDto, IpcError> {
+    run_blocking(&state, move |state| handlers::lsp_completions(state, args)).await
+}
+
+#[tauri::command]
+pub async fn lsp_hover(
+    state: Shared<'_>,
+    args: LspPositionArgs,
+) -> Result<Option<HoverDto>, IpcError> {
+    run_blocking(&state, move |state| handlers::lsp_hover(state, args)).await
+}
+
+#[tauri::command]
+pub async fn lsp_definition(
+    state: Shared<'_>,
+    args: LspPositionArgs,
+) -> Result<Vec<DefinitionDto>, IpcError> {
+    run_blocking(&state, move |state| handlers::lsp_definition(state, args)).await
+}
+
+#[tauri::command]
+pub async fn lsp_restart(state: Shared<'_>, args: WorkspaceArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::lsp_restart(state, args)).await
 }
 
 /// Sends backend events (file changes, the close request) to the calling page,
