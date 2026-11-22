@@ -1,6 +1,6 @@
 # @repo/ipc
 
-**Status:** Milestone 2: every command, typed, and the backend's events.
+**Status:** Milestone 3: every command, typed, and the backend's events.
 
 ## Purpose
 
@@ -14,7 +14,9 @@ The only package that imports `@tauri-apps/api`. It turns the commands in
   types from Rust. Input is sent as `{ args }`.
 - Named wrappers: `appInfo`, `pickWorkspace`, `openRecentWorkspace`,
   `recentWorkspaces`, `currentWorkspace`, `listDirectory`, `readFile`,
-  `writeFile`, `getSettings`, `updateSettings`, `searchText`, `listFiles`.
+  `writeFile`, `getSettings`, `updateSettings`, `searchText`, `listFiles`,
+  `gitState`, `gitDiff`, `gitStage`, `gitUnstage`, `gitDiscard`, `gitCommit`,
+  `gitBranches`, `gitSwitchBranch`, `gitInit`.
 - `subscribeEvents(onEvent)`: hears `BackendEventDto`s (file changes, the
   window closing) over a Tauri `Channel`; resolves to the function that stops.
 - `setCloseGuard(unsaved)`, `closeWindow()`: the window asks before closing

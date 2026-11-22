@@ -4,6 +4,13 @@ import type {
   DirListingDto,
   FileListDto,
   FileStampDto,
+  GitBranchDto,
+  GitCommitArgs,
+  GitDiffArgs,
+  GitDiffDto,
+  GitPathsArgs,
+  GitStateDto,
+  GitSwitchArgs,
   OpenRecentArgs,
   ReadFileDto,
   RecentWorkspaceDto,
@@ -61,3 +68,28 @@ export const searchText = (args: SearchTextArgs): Promise<IpcResult<TextSearchDt
 /** The workspace's files, for quick open (ignored ones left out). */
 export const listFiles = (args: WorkspaceArgs): Promise<IpcResult<FileListDto>> =>
   call("list_files", args);
+
+export const gitState = (args: WorkspaceArgs): Promise<IpcResult<GitStateDto>> =>
+  call("git_state", args);
+
+export const gitDiff = (args: GitDiffArgs): Promise<IpcResult<GitDiffDto>> =>
+  call("git_diff", args);
+
+export const gitStage = (args: GitPathsArgs): Promise<IpcResult<null>> => call("git_stage", args);
+
+export const gitUnstage = (args: GitPathsArgs): Promise<IpcResult<null>> =>
+  call("git_unstage", args);
+
+export const gitDiscard = (args: GitPathsArgs): Promise<IpcResult<null>> =>
+  call("git_discard", args);
+
+export const gitCommit = (args: GitCommitArgs): Promise<IpcResult<null>> =>
+  call("git_commit", args);
+
+export const gitBranches = (args: WorkspaceArgs): Promise<IpcResult<GitBranchDto[]>> =>
+  call("git_branches", args);
+
+export const gitSwitchBranch = (args: GitSwitchArgs): Promise<IpcResult<null>> =>
+  call("git_switch_branch", args);
+
+export const gitInit = (args: WorkspaceArgs): Promise<IpcResult<null>> => call("git_init", args);
