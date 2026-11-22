@@ -172,6 +172,8 @@ impl DebugAdapters for NodeDebugger {
                 "cwd": folder,
                 "console": "internalConsole",
                 "outputCapture": "std",
+                // Stepping goes through the program, not Node's own code.
+                "skipFiles": ["<node_internals>/**"],
             }),
         );
         parent_initialized
