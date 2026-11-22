@@ -46,6 +46,12 @@ struct OpenWorkspace {
     root: WorkspaceRoot,
 }
 
+/// A running terminal, and the workspace it belongs to.
+struct StoredTerminal {
+    workspace_id: String,
+    session: Box<dyn TerminalSession>,
+}
+
 /// Delivers an event to the webview, if one is listening.
 pub type Emit = Arc<dyn Fn(BackendEventDto) + Send + Sync>;
 
@@ -60,8 +66,9 @@ pub struct IpcState {
     watch: Mutex<Option<WatchGuard>>,
     /// The text search running now, if any. A new one, or a new workspace, cancels it.
     search: Mutex<Option<CancelFlag>>,
-    /// Open terminals by id. Dropping one ends its shell.
-    terminals: Mutex<HashMap<u32, Box<dyn TerminalSession>>>,
+    /// Open terminals by id, with the workspace each was opened in. Dropping
+    /// one ends its shell.
+    terminals: Mutex<HashMap<u32, StoredTerminal>>,
     next_terminal: AtomicU64,
 }
 
@@ -122,8 +129,6 @@ impl IpcState {
         let mut watch = self.watch.lock().unwrap_or_else(PoisonError::into_inner);
         // Stop the old watch first, so its last events can't follow the new id.
         watch.take();
-        // Its terminals were in its folder.
-        self.close_terminals();
         if let Some(search) = self
             .search
             .lock()
@@ -135,6 +140,10 @@ impl IpcState {
         *watch = Some(self.services.watcher.watch(&root, self.sink(id.clone())));
         *self.open.write().unwrap_or_else(PoisonError::into_inner) =
             Some(OpenWorkspace { id, root });
+        // The old workspace's terminals were in its folder. Closed after the
+        // new one is open, so a terminal still starting for the old one is
+        // either closed here or refused when it's stored (`terminal_open`).
+        self.close_terminals();
         dto
     }
 
@@ -399,11 +408,24 @@ pub fn terminal_open(
     let session = state.services.terminals.spawn(&cwd, size, sink)?;
     let id = u32::try_from(state.next_terminal.fetch_add(1, Ordering::Relaxed)).unwrap_or(u32::MAX);
     let shell = session.shell().to_owned();
-    state
+    let mut terminals = state
         .terminals
         .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .insert(id, session);
+        .unwrap_or_else(PoisonError::into_inner);
+    // Starting the shell took a moment: if another workspace opened meanwhile,
+    // this one's terminal mustn't outlive it.
+    if state.current().is_none_or(|open| open.id != workspace_id) {
+        drop(terminals);
+        drop(session);
+        return Err(IdeError::WorkspaceChanged.into());
+    }
+    terminals.insert(
+        id,
+        StoredTerminal {
+            workspace_id: workspace_id.to_owned(),
+            session,
+        },
+    );
     Ok(TerminalDto { id, shell })
 }
 
@@ -416,8 +438,15 @@ fn with_terminal<T>(
         .terminals
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
-    let session = terminals.get(&id).ok_or(IdeError::NotFound)?;
-    Ok(work(session.as_ref())?)
+    let stored = terminals.get(&id).ok_or(IdeError::NotFound)?;
+    // Only the open workspace's terminals take input.
+    if state
+        .current()
+        .is_none_or(|open| open.id != stored.workspace_id)
+    {
+        return Err(IdeError::WorkspaceChanged.into());
+    }
+    Ok(work(stored.session.as_ref())?)
 }
 
 pub fn terminal_write(state: &IpcState, args: TerminalWriteArgs) -> Result<(), IpcError> {
