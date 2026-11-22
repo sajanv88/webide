@@ -1,0 +1,16 @@
+[package]
+name = "ide-fs"
+description = "Reads, writes and lists directories (lazily, one level at a time) inside a workspace root."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+ide-core = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
