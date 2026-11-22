@@ -1,0 +1,67 @@
+# Every check in the Definition of done, on Windows, macOS and Linux.
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # A new push to a PR replaces its old run; runs on main always finish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  TURBO_TELEMETRY_DISABLED: "1"
+
+jobs:
+  check:
+    name: check (${{ matrix.os }})
+    if: ${{ !github.event.pull_request.draft }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Tauri's Linux prerequisites (WebKitGTK and friends), to compile the app.
+      - name: Linux system packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      # The version and components come from rust-toolchain.toml.
+      - name: Rust toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - run: pnpm install --frozen-lockfile
+      # The app's crate embeds the built frontend, so build it before Rust compiles it.
+      - run: pnpm build
+
+      - run: pnpm rust:fmt
+      - run: pnpm rust:clippy
+      - run: pnpm rust:test
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
