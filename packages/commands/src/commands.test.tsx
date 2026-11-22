@@ -150,6 +150,38 @@ describe("keybindings", () => {
     editor.remove();
     dialog.remove();
   });
+
+  it("takes a global key before the element with focus, which never sees it", async () => {
+    const shown = vi.fn();
+    const registry = createCommandRegistry<AppCommandId>();
+    registry.register({ id: "view.showSourceControl", title: "Show Source Control", run: shown });
+    const keys = createKeybindings<AppCommandId>(
+      [{ key: "Ctrl+Shift+G", command: "view.showSourceControl", global: true }],
+      "other",
+    );
+    const dispose = attachKeybindings(window, keys, registry);
+    // An editor with its own use for the key (CodeMirror's "find previous").
+    const editor = document.createElement("div");
+    document.body.append(editor);
+    const editorSaw = vi.fn((event: KeyboardEvent) => event.preventDefault());
+    editor.addEventListener("keydown", editorSaw);
+
+    const event = new KeyboardEvent("keydown", {
+      code: "KeyG",
+      ctrlKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    editor.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(editorSaw).not.toHaveBeenCalled();
+    await waitFor(() => expect(shown).toHaveBeenCalledTimes(1));
+    expect(keys.forCommand("view.showSourceControl")?.label).toBe("Ctrl+Shift+G");
+
+    dispose();
+    editor.remove();
+  });
 });
 
 describe("CommandPalette", () => {
