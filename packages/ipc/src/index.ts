@@ -1,6 +1,8 @@
 // Public entry of @repo/ipc: the only package that imports @tauri-apps/api.
 import type {
   AppInfoDto,
+  CompletionsDto,
+  DefinitionDto,
   DirListingDto,
   FileListDto,
   FileStampDto,
@@ -11,7 +13,11 @@ import type {
   GitPathsArgs,
   GitStateDto,
   GitSwitchArgs,
+  HoverDto,
+  LspDocumentArgs,
+  LspPositionArgs,
   OpenRecentArgs,
+  ProblemDto,
   ReadFileDto,
   RecentWorkspaceDto,
   SearchTextArgs,
@@ -94,3 +100,26 @@ export const gitSwitchBranch = (args: GitSwitchArgs): Promise<IpcResult<null>> =
   call("git_switch_branch", args);
 
 export const gitInit = (args: WorkspaceArgs): Promise<IpcResult<null>> => call("git_init", args);
+
+export const lspOpen = (args: LspDocumentArgs): Promise<IpcResult<null>> => call("lsp_open", args);
+
+export const lspChange = (args: LspDocumentArgs): Promise<IpcResult<null>> =>
+  call("lsp_change", args);
+
+export const lspClose = (args: WorkspacePathArgs): Promise<IpcResult<null>> =>
+  call("lsp_close", args);
+
+export const lspProblems = (args: WorkspacePathArgs): Promise<IpcResult<ProblemDto[]>> =>
+  call("lsp_problems", args);
+
+export const lspCompletions = (args: LspPositionArgs): Promise<IpcResult<CompletionsDto>> =>
+  call("lsp_completions", args);
+
+export const lspHover = (args: LspPositionArgs): Promise<IpcResult<HoverDto | null>> =>
+  call("lsp_hover", args);
+
+export const lspDefinition = (args: LspPositionArgs): Promise<IpcResult<DefinitionDto[]>> =>
+  call("lsp_definition", args);
+
+export const lspRestart = (args: WorkspaceArgs): Promise<IpcResult<null>> =>
+  call("lsp_restart", args);

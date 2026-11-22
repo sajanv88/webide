@@ -1,6 +1,6 @@
 # @repo/ipc
 
-**Status:** Milestone 4: every command, typed, and the backend's events.
+**Status:** Milestone 5: every command, typed, and the backend's events.
 
 ## Purpose
 
@@ -19,6 +19,8 @@ The only package that imports `@tauri-apps/api`. It turns the commands in
   `gitBranches`, `gitSwitchBranch`, `gitInit`.
 - `openTerminal(args, onEvent)`: starts a shell; its output and exit arrive over a
   Tauri `Channel` of its own. `writeTerminal`, `resizeTerminal`, `closeTerminal`.
+- `lspOpen`, `lspChange`, `lspClose`, `lspProblems`, `lspCompletions`, `lspHover`,
+  `lspDefinition`, `lspRestart`.
 - `subscribeEvents(onEvent)`: hears `BackendEventDto`s (file changes, the
   window closing) over a Tauri `Channel`; resolves to the function that stops.
 - `setCloseGuard(unsaved)`, `closeWindow()`: the window asks before closing

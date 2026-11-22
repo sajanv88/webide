@@ -1,6 +1,8 @@
 // Hand-written, frontend-only contracts: how modules talk to each other.
 // (The IPC types are generated from Rust, in ./generated.)
 import type {
+  CompletionsDto,
+  DefinitionDto,
   DirListingDto,
   FileChangeDto,
   FileListDto,
@@ -8,7 +10,10 @@ import type {
   GitBranchDto,
   GitDiffDto,
   GitStateDto,
+  HoverDto,
   IpcError,
+  LanguageStatusDto,
+  ProblemDto,
   ReadFileDto,
   SearchTextArgs,
   SettingsDto,
@@ -51,6 +56,7 @@ export type AppCommandId =
   | "terminal.kill"
   | "terminal.focus"
   | "terminal.screenReader"
+  | "language.restart"
   | "file.save"
   | "file.saveAll"
   | "tabs.close"
@@ -88,6 +94,16 @@ export interface AppEvents {
   };
   /** The settings were saved; this is what they are now. */
   "settings.changed": SettingsDto;
+  /** A file's text is open in the editor (once its text has been read). */
+  "document.opened": { readonly path: string; readonly text: string };
+  /** An open file's text changed: typed, or reloaded from disk. */
+  "document.changed": { readonly path: string; readonly text: string };
+  /** A file was closed in the editor. */
+  "document.closed": { readonly path: string };
+  /** The problems the language server found in an open file, now. */
+  "language.problems": { readonly path: string; readonly problems: readonly EditorProblem[] };
+  /** How the open workspace's language server is doing. */
+  "language.status": LanguageStatusDto;
 }
 
 /** What the explorer needs from the outside: one level of a folder in the open workspace. */
@@ -162,4 +178,33 @@ export interface TerminalPort {
   resize(id: number, cols: number, rows: number): Promise<IpcResult<null>>;
   /** Ends the shell. */
   close(id: number): Promise<IpcResult<null>>;
+}
+
+/** A problem in a text, placed by character offsets (for the editor) and by line. */
+export interface EditorProblem {
+  /** Characters (UTF-16 units) from the start of the text. */
+  readonly from: number;
+  readonly to: number;
+  readonly severity: "error" | "warning" | "info" | "hint";
+  readonly message: string;
+  readonly source?: string;
+  /** 1-based, for lists. */
+  readonly line: number;
+  readonly column: number;
+}
+
+/**
+ * What language features need: the open workspace's language server.
+ * Positions are 0-based lines and UTF-16 columns.
+ */
+export interface LanguagePort {
+  open(path: string, text: string): Promise<IpcResult<null>>;
+  change(path: string, text: string): Promise<IpcResult<null>>;
+  close(path: string): Promise<IpcResult<null>>;
+  problems(path: string): Promise<IpcResult<ProblemDto[]>>;
+  completions(path: string, line: number, character: number): Promise<IpcResult<CompletionsDto>>;
+  hover(path: string, line: number, character: number): Promise<IpcResult<HoverDto | null>>;
+  definition(path: string, line: number, character: number): Promise<IpcResult<DefinitionDto[]>>;
+  /** Stops the server; it starts again when it's next needed. */
+  restart(): Promise<IpcResult<null>>;
 }
