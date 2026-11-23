@@ -5,6 +5,7 @@
 //! sizes and times as plain numbers (u64 is exported as `number`; every value
 //! here is far below 2^53).
 
+use ide_core::agent::{AgentCall, AgentConfig};
 use ide_core::debug::{Breakpoint, DebugEvent, FrameSource, Scope, StackFrame, Step, Variable};
 use ide_core::fs::{
     DirListing, FileNode, FileStamp, LineEnding, NodeKind, ReadOnlyReason, ReadOutcome,
@@ -229,6 +230,45 @@ pub enum BackendEventDto {
         workspace_id: String,
         status: LanguageStatusDto,
     },
+    /// An AI agent used a tool of the MCP server.
+    AgentCall { call: AgentCallDto },
+}
+
+/// The MCP server for AI agents: what the person chose, and whether it runs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentStatusDto {
+    pub enabled: bool,
+    /// Agents may write files, not only read them.
+    pub allow_edits: bool,
+    pub port: u16,
+    /// Where agents connect, while it runs: `http://127.0.0.1:7341/mcp`.
+    pub url: Option<String>,
+    /// What agents send as `Authorization: Bearer <token>`.
+    pub token: String,
+    /// Why it isn't running though enabled (the port is in use…).
+    pub error: Option<String>,
+}
+
+/// One tool an agent used.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCallDto {
+    pub tool: String,
+    /// A path, or a search's pattern.
+    pub target: Option<String>,
+    /// Why it failed, if it did.
+    pub error: Option<String>,
+}
+
+impl From<AgentCall> for AgentCallDto {
+    fn from(call: AgentCall) -> Self {
+        Self {
+            tool: call.tool,
+            target: call.target,
+            error: call.error,
+        }
+    }
 }
 
 /// A span inside a search preview, in UTF-16 code units (JavaScript string indices).
@@ -706,6 +746,25 @@ pub struct DebugEvaluateArgs {
     #[serde(default)]
     #[ts(optional)]
     pub frame_id: Option<i64>,
+}
+
+/// The MCP server's settings. It starts, stops or restarts to match.
+#[derive(Debug, Clone, Copy, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AgentConfigArgs {
+    pub enabled: bool,
+    pub allow_edits: bool,
+    pub port: u16,
+}
+
+impl From<AgentConfigArgs> for AgentConfig {
+    fn from(args: AgentConfigArgs) -> Self {
+        Self {
+            enabled: args.enabled,
+            allow_edits: args.allow_edits,
+            port: args.port,
+        }
+    }
 }
 
 /// Find in files. A new search cancels the one still running.
