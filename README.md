@@ -66,11 +66,11 @@ exist).
 
 ```
 crates/            Rust: ide-core, ide-fs, ide-watcher, ide-workspace, ide-search, ide-git,
-                   ide-terminal, ide-lsp, ide-debug, ide-ipc
+                   ide-terminal, ide-lsp, ide-debug, ide-mcp, ide-ipc
 apps/desktop/      The Vite frontend (src/) and the Tauri composition root (src-tauri/)
 packages/          Frontend modules: contracts, kernel, ipc, shell, explorer, tabs,
                    editor-surface, commands, settings, search, git, terminal, lsp, debug,
-                   and the shared tsconfig
+                   mcp, and the shared tsconfig
 xtask/             cargo xtask check-boundaries, check-csp, check-contracts
 ```
 
@@ -85,7 +85,12 @@ Each module has a README with its purpose, public API and allowed dependencies.
   through its public entry. CodeMirror only in `@repo/editor-surface`,
   xterm only in `@repo/terminal`.
 
-## Reserved names
+## AI agents
 
-Not built yet: `ide-mcp` and `@repo/mcp`. The boundary rules already treat
-them as feature modules.
+File → AI Agents… turns on an MCP server, so AI agents such as Claude Code
+can work in the open folder. It's off until turned on, listens on 127.0.0.1
+only, needs the token shown there, and refuses requests from web pages.
+Agents read files, search, and see git's changes; they write files only when
+"Allow agents to edit files" is on, never in `.git`, and never run commands.
+The dialog has the `claude mcp add …` command to copy, and lists what agents
+did. Details: [crates/ide-mcp](crates/ide-mcp/README.md).
