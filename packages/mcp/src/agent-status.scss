@@ -1,0 +1,15 @@
+// AI agents in the status bar: a button the size of the bar's text.
+.agent-status {
+  display: inline-flex;
+  gap: var(--spacing);
+  align-items: center;
+  min-block-size: 0;
+  padding-block: 0;
+  padding-inline: calc(var(--spacing) * 1.5);
+  font-size: var(--text-xs);
+  line-height: var(--text-xs--line-height);
+
+  &--failed {
+    color: var(--color-warning);
+  }
+}
