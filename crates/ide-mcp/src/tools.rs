@@ -171,7 +171,7 @@ impl Tools {
     }
 
     #[tool(
-        description = "What a folder in the workspace holds, one entry per line; folders end with '/'.",
+        description = "What a folder in the workspace holds, one entry per line; folders end with '/'. .git isn't listed.",
         annotations(read_only_hint = true)
     )]
     async fn list_directory(
@@ -184,9 +184,17 @@ impl Tools {
                 Some(path) => workspace_relative(root, path)?,
                 None => RelPath::root(),
             };
+            refuse_git_internal(&path)?;
             let listing = ports.fs.list_dir(root, &path).map_err(say)?;
+            // .git isn't shown: its config can hold credentials, and git's
+            // own tools (git_status, git_diff) say what agents need.
+            let entries: Vec<_> = listing
+                .entries
+                .iter()
+                .filter(|entry| !is_git_internal(&entry.path))
+                .collect();
             let mut out = String::new();
-            for entry in &listing.entries {
+            for entry in &entries {
                 match entry.kind {
                     NodeKind::Directory => {
                         let _ = writeln!(out, "{}/", entry.name);
@@ -201,7 +209,7 @@ impl Tools {
                     },
                 }
             }
-            if listing.entries.is_empty() {
+            if entries.is_empty() {
                 out.push_str("(empty)\n");
             }
             if listing.truncated {
@@ -220,6 +228,7 @@ impl Tools {
         let target = Some(args.path.clone());
         self.run("read_file", target, move |ports, root| {
             let path = workspace_relative(root, &args.path)?;
+            refuse_git_internal(&path)?;
             let limits = ports.workbench.read_limits();
             match ports.fs.read_file(root, &path, limits).map_err(say)? {
                 ReadOutcome::Text { text, .. } => Ok(lines(&text, args.start_line, args.end_line)),
@@ -382,6 +391,7 @@ impl Tools {
         let target = Some(args.path.clone());
         self.run("git_diff", target, move |ports, root| {
             let path = workspace_relative(root, &args.path)?;
+            refuse_git_internal(&path)?;
             let side = if args.staged {
                 DiffSide::Staged
             } else {
@@ -523,6 +533,16 @@ fn code(change: Option<GitChange>) -> char {
         Some(GitChange::TypeChanged) => 'T',
         Some(GitChange::Untracked) => '?',
         Some(GitChange::Conflicted) => 'U',
+    }
+}
+
+/// Agents don't read or list `.git`: its config can hold credentials (a
+/// remote's URL with a token in it), and nothing there is theirs to change.
+fn refuse_git_internal(path: &RelPath) -> Result<(), String> {
+    if is_git_internal(path) {
+        Err("files in .git can't be read: git_status and git_diff say what changed".to_owned())
+    } else {
+        Ok(())
     }
 }
 

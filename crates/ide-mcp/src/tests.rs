@@ -401,6 +401,21 @@ fn reads_the_workspace_and_reports_each_call() {
         server.call("list_directory", json!({})),
         (true, "src/\nREADME.md (12 bytes)\n".to_owned())
     );
+    // .git is neither listed nor read: its config can hold credentials.
+    server
+        .fs
+        .put(".git/config", "url = https://user:secret@example.com/r.git");
+    for (tool, args) in [
+        ("read_file", json!({ "path": ".git/config" })),
+        ("read_file", json!({ "path": "src/../.git/config" })),
+        ("read_file", json!({ "path": ".GIT/config" })),
+        ("list_directory", json!({ "path": ".git" })),
+        ("git_diff", json!({ "path": ".git/config" })),
+    ] {
+        let (ok, message) = server.call(tool, args);
+        assert!(!ok, "{tool}: {message}");
+        assert!(!message.contains("secret"), "{message}");
+    }
     assert_eq!(
         server.call("find_files", json!({ "query": "srcmn" })),
         (true, "src/main.ts\n".to_owned())
@@ -536,6 +551,13 @@ impl WorkspaceFs for FakeFs {
         Ok(DirListing {
             path: RelPath::root(),
             entries: vec![
+                FileNode {
+                    name: ".git".to_owned(),
+                    path: rel(".git"),
+                    kind: NodeKind::Directory,
+                    is_symlink: false,
+                    size: None,
+                },
                 FileNode {
                     name: "src".to_owned(),
                     path: rel("src"),
