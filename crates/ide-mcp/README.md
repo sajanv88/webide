@@ -26,10 +26,14 @@ on a tokio runtime of its own thread.
   `read_file` (from the disk, optionally some lines), `find_files`,
   `search_text`, `git_status`, `git_diff` (unified). With edits allowed,
   `write_file` too; without, it isn't offered, and is refused if called.
-  Nothing in `.git` is listed, read or written: its config can hold
-  credentials (a remote's URL with a token in it), and a hook written there
-  would run on the next commit; `git_status` and `git_diff` say what agents
-  need. No tool runs a command.
+  Nothing in a git directory is listed, read or written: its config can
+  hold credentials (a remote's URL with a token in it), and a hook written
+  there would run on the next commit; `git_status` and `git_diff` say what
+  agents need. That's checked on what a path names on disk, after symlinks,
+  case and Windows short names (`GIT~1`): every folder down to it is refused
+  when it's named `.git` or is a git directory by another name (a bare
+  repository, a `gitdir:` target). A folder that is itself a git directory
+  can't be used by agents at all. No tool runs a command.
 - **Through the app's ports.** Paths go through `RelPath` and the workspace
   ports (`WorkspaceFs`, `WorkspaceSearch`, `GitClient`), so an agent can't
   reach outside the folder, and the size limits from the settings apply.

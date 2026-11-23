@@ -70,6 +70,10 @@ impl Tools {
                 .workbench
                 .root()
                 .ok_or_else(|| "no folder is open in the IDE".to_owned())?;
+            // A bare repository (or another git directory) opened as the folder.
+            if looks_like_git_dir(root.path()) {
+                return Err("the open folder is a git directory: agents can't use it".to_owned());
+            }
             work(&ports, &root)
         })
         .await
@@ -184,7 +188,7 @@ impl Tools {
                 Some(path) => workspace_relative(root, path)?,
                 None => RelPath::root(),
             };
-            refuse_git_internal(&path)?;
+            refuse_git(root, &path, "read")?;
             let listing = ports.fs.list_dir(root, &path).map_err(say)?;
             // .git isn't shown: its config can hold credentials, and git's
             // own tools (git_status, git_diff) say what agents need.
@@ -228,7 +232,7 @@ impl Tools {
         let target = Some(args.path.clone());
         self.run("read_file", target, move |ports, root| {
             let path = workspace_relative(root, &args.path)?;
-            refuse_git_internal(&path)?;
+            refuse_git(root, &path, "read")?;
             let limits = ports.workbench.read_limits();
             match ports.fs.read_file(root, &path, limits).map_err(say)? {
                 ReadOutcome::Text { text, .. } => Ok(lines(&text, args.start_line, args.end_line)),
@@ -391,7 +395,7 @@ impl Tools {
         let target = Some(args.path.clone());
         self.run("git_diff", target, move |ports, root| {
             let path = workspace_relative(root, &args.path)?;
-            refuse_git_internal(&path)?;
+            refuse_git(root, &path, "read")?;
             let side = if args.staged {
                 DiffSide::Staged
             } else {
@@ -431,9 +435,7 @@ impl Tools {
                 return Err("edits aren't allowed: the person can allow them in the IDE".to_owned());
             }
             let path = workspace_relative(root, &args.path)?;
-            if is_git_internal(&path) {
-                return Err("files in .git can't be written".to_owned());
-            }
+            refuse_git(root, &path, "written")?;
             let stamp = ports.fs.write_file(root, &path, &args.text).map_err(say)?;
             Ok(format!("wrote {} ({} bytes)", path.as_str(), stamp.size))
         })
@@ -536,14 +538,49 @@ fn code(change: Option<GitChange>) -> char {
     }
 }
 
-/// Agents don't read or list `.git`: its config can hold credentials (a
-/// remote's URL with a token in it), and nothing there is theirs to change.
-fn refuse_git_internal(path: &RelPath) -> Result<(), String> {
+/// Agents don't list, read or write a git directory: its config can hold
+/// credentials (a remote's URL with a token in it), and a hook written there
+/// would run on the next commit. `path` is checked as written, then as what
+/// it names on disk (after symlinks, case and Windows short names such as
+/// `GIT~1`): every folder from the root down to it is refused when it's named
+/// `.git`, or is a git directory by another name (a bare repository, or where
+/// a `gitdir:` file points). A path that doesn't exist yet is checked by the
+/// part of it that does. Paths outside the workspace are left to the ports, which refuse them.
+pub(crate) fn refuse_git(root: &WorkspaceRoot, path: &RelPath, verb: &str) -> Result<(), String> {
+    let refused = || {
+        Err(format!(
+            "files in a git directory can't be {verb}: git_status and git_diff say what changed"
+        ))
+    };
     if is_git_internal(path) {
-        Err("files in .git can't be read: git_status and git_diff say what changed".to_owned())
-    } else {
-        Ok(())
+        return refused();
     }
+    let base = root.path();
+    let native = path.to_native(base);
+    // The nearest part of it that exists, after symlinks and aliases.
+    let Some(resolved) = native
+        .ancestors()
+        .find_map(|ancestor| std::fs::canonicalize(ancestor).ok())
+    else {
+        return Ok(());
+    };
+    let Ok(rest) = resolved.strip_prefix(base) else {
+        return Ok(());
+    };
+    let mut dir = base.to_path_buf();
+    for component in rest.components() {
+        dir.push(component);
+        if component.as_os_str().eq_ignore_ascii_case(".git") || looks_like_git_dir(&dir) {
+            return refused();
+        }
+    }
+    Ok(())
+}
+
+/// Whether `dir` is a git directory: `HEAD`, `objects` and `refs`, as git
+/// itself decides.
+pub(crate) fn looks_like_git_dir(dir: &std::path::Path) -> bool {
+    dir.join("HEAD").is_file() && dir.join("objects").is_dir() && dir.join("refs").is_dir()
 }
 
 fn say(error: IdeError) -> String {

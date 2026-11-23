@@ -463,7 +463,7 @@ fn writes_files_only_when_edits_are_allowed_and_never_in_git() {
         json!({ "path": ".git/hooks/pre-commit", "text": "x" }),
     );
     assert!(!ok);
-    assert!(message.contains(".git"), "{message}");
+    assert!(message.contains("git directory"), "{message}");
     assert!(server.fs.get(".git/hooks/pre-commit").is_none());
 }
 
@@ -708,5 +708,54 @@ impl GitClient for FakeGit {
     }
     fn init(&self, _root: &WorkspaceRoot) -> Result<(), IdeError> {
         Err(IdeError::Git("not here".to_owned()))
+    }
+}
+
+// ---- Git directories on disk ----
+
+#[test]
+fn refuses_git_directories_however_they_are_named() {
+    use crate::tools::{looks_like_git_dir, refuse_git};
+    let (dir, root) = root();
+    let base = dir.path();
+    let make =
+        |path: &str| std::fs::create_dir_all(base.join(path)).unwrap_or_else(|e| panic!("{e}"));
+    let file = |path: &str| std::fs::write(base.join(path), "x").unwrap_or_else(|e| panic!("{e}"));
+    make(".git/objects");
+    make(".git/refs");
+    file(".git/HEAD");
+    file(".git/config");
+    make("src");
+    // A git directory by another name: a bare repository, or a `gitdir:` target.
+    make("data/objects");
+    make("data/refs");
+    file("data/HEAD");
+    file("data/config");
+
+    let check = |path: &str| refuse_git(&root, &rel(path), "read");
+    assert!(check(".git/config").is_err());
+    assert!(check(".GIT/config").is_err());
+    assert!(check("data/config").is_err());
+    assert!(check("data").is_err());
+    assert!(check("data/hooks/pre-commit").is_err(), "a new file in it");
+    assert!(check("src/new.ts").is_ok());
+    assert!(check("src").is_ok());
+    assert!(check("missing/deep/file.ts").is_ok(), "left to the ports");
+    assert!(!looks_like_git_dir(root.path()));
+    assert!(looks_like_git_dir(&base.join("data")));
+
+    // A symlink to .git, as a repository can ship one (when this OS lets
+    // tests make one: Windows needs developer mode).
+    #[cfg(unix)]
+    let linked = std::os::unix::fs::symlink(base.join(".git"), base.join("link")).is_ok();
+    #[cfg(windows)]
+    let linked = std::os::windows::fs::symlink_dir(base.join(".git"), base.join("link")).is_ok();
+    if linked {
+        assert!(check("link/config").is_err());
+        assert!(check("link/hooks/pre-commit").is_err());
+    }
+    // Windows' short name for .git, where the volume makes them.
+    if std::fs::metadata(base.join("GIT~1")).is_ok() {
+        assert!(check("GIT~1/config").is_err());
     }
 }
