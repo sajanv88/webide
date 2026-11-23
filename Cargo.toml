@@ -19,6 +19,7 @@ ide-fs = { path = "crates/ide-fs" }
 ide-git = { path = "crates/ide-git" }
 ide-ipc = { path = "crates/ide-ipc" }
 ide-lsp = { path = "crates/ide-lsp" }
+ide-mcp = { path = "crates/ide-mcp" }
 ide-search = { path = "crates/ide-search" }
 ide-terminal = { path = "crates/ide-terminal" }
 ide-watcher = { path = "crates/ide-watcher" }
@@ -30,6 +31,14 @@ grep-matcher = "0.1.9"
 grep-regex = "0.1.14"
 grep-searcher = "0.1.17"
 ignore = "0.4.34"
+# The MCP server for AI agents (ide-mcp): the official Rust SDK, its HTTP
+# transport served by hyper on tokio, and the OS's randomness for its token.
+getrandom = "0.3.4"
+hyper = { version = "1.12.0", features = ["server", "http1"] }
+hyper-util = { version = "0.1.21", features = ["tokio"] }
+rmcp = { version = "3.11.0", default-features = false, features = ["server", "macros", "transport-streamable-http-server"] }
+schemars = "1.2.3"
+tokio = { version = "1.54.1", features = ["rt", "net", "sync", "macros", "time"] }
 # Pseudo-terminals (ConPTY, pty), for ide-terminal: wezterm's.
 portable-pty = "0.9.0"
 # notify 8.2 underneath. (notify 9.0 and debouncer 0.8 were released on
