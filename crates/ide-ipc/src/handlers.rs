@@ -6,7 +6,9 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
+use ide_core::agent::{AgentConfig, AgentHost, AgentServer, AgentSink, AgentWorkbench};
 use ide_core::debug::{DebugAdapters, DebugEvent, DebugSession};
+use ide_core::fs::ReadLimits;
 use ide_core::language::{LanguageServer, LanguageServers, LanguageStatus, TextPosition};
 use ide_core::terminal::{MAX_TERMINALS, MAX_WRITE_BYTES};
 use ide_core::workspace::display_path;
@@ -17,13 +19,13 @@ use ide_core::{
 };
 
 use crate::dto::{
-    AppInfoDto, BackendEventDto, BreakpointDto, CompletionsDto, DebugBreakpointsArgs,
-    DebugEvaluateArgs, DebugEventDto, DebugReferenceArgs, DebugStartArgs, DebugThreadArgs,
-    DefinitionDto, DirListingDto, FileListDto, FileStampDto, GitBranchDto, GitCommitArgs,
-    GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs, HoverDto, LanguageStatusDto,
-    LspDocumentArgs, LspPositionArgs, OpenRecentArgs, ProblemDto, ReadFileDto, RecentWorkspaceDto,
-    ScopeDto, SearchTextArgs, SettingsDto, SettingsPatchDto, StackFrameDto, TerminalDto,
-    TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs, TextSearchDto, VariableDto,
+    AgentConfigArgs, AgentStatusDto, AppInfoDto, BackendEventDto, BreakpointDto, CompletionsDto,
+    DebugBreakpointsArgs, DebugEvaluateArgs, DebugEventDto, DebugReferenceArgs, DebugStartArgs,
+    DebugThreadArgs, DefinitionDto, DirListingDto, FileListDto, FileStampDto, GitBranchDto,
+    GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs, HoverDto,
+    LanguageStatusDto, LspDocumentArgs, LspPositionArgs, OpenRecentArgs, ProblemDto, ReadFileDto,
+    RecentWorkspaceDto, ScopeDto, SearchTextArgs, SettingsDto, SettingsPatchDto, StackFrameDto,
+    TerminalDto, TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs, TextSearchDto, VariableDto,
     WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::IpcError;
@@ -39,6 +41,7 @@ pub struct Services {
     pub terminals: Arc<dyn TerminalHost>,
     pub languages: Arc<dyn LanguageServers>,
     pub debuggers: Arc<dyn DebugAdapters>,
+    pub agents: Arc<dyn AgentHost>,
 }
 
 impl std::fmt::Debug for Services {
@@ -66,7 +69,8 @@ pub type Emit = Arc<dyn Fn(BackendEventDto) + Send + Sync>;
 pub struct IpcState {
     services: Services,
     app_info: AppInfoDto,
-    open: RwLock<Option<OpenWorkspace>>,
+    /// Shared with the MCP server, which answers about the open workspace.
+    open: Arc<RwLock<Option<OpenWorkspace>>>,
     next_id: AtomicU64,
     emit: Emit,
     /// The watch on the open workspace; replacing it stops the old one.
@@ -82,6 +86,34 @@ pub struct IpcState {
     language: Mutex<Language>,
     /// The program running under the debugger, if any: one at a time.
     debug: Mutex<Option<DebugRun>>,
+    /// The MCP server for AI agents, while it runs, or why it couldn't start.
+    agent: Mutex<AgentRun>,
+}
+
+#[derive(Default)]
+struct AgentRun {
+    server: Option<Box<dyn AgentServer>>,
+    error: Option<String>,
+}
+
+/// What the MCP server reads: the workspace open now, and the read limits.
+struct Workbench {
+    open: Arc<RwLock<Option<OpenWorkspace>>>,
+    store: Arc<dyn WorkspaceStore>,
+}
+
+impl AgentWorkbench for Workbench {
+    fn root(&self) -> Option<WorkspaceRoot> {
+        self.open
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_ref()
+            .map(|open| open.root.clone())
+    }
+
+    fn read_limits(&self) -> ReadLimits {
+        self.store.settings().unwrap_or_default().read_limits()
+    }
 }
 
 struct DebugRun {
@@ -116,7 +148,7 @@ impl IpcState {
         Self {
             services,
             app_info,
-            open: RwLock::new(None),
+            open: Arc::new(RwLock::new(None)),
             next_id: AtomicU64::new(1),
             emit,
             watch: Mutex::new(None),
@@ -125,7 +157,58 @@ impl IpcState {
             next_terminal: AtomicU64::new(1),
             language: Mutex::new(Language::NotStarted),
             debug: Mutex::new(None),
+            agent: Mutex::new(AgentRun::default()),
         }
+    }
+
+    /// Starts the MCP server, if the person turned it on. At startup.
+    pub fn start_agents(&self) {
+        if let Ok(config) = self.services.agents.config() {
+            self.apply_agents(&config);
+        }
+    }
+
+    /// Stops the MCP server, then starts it again as `config` says. Why it
+    /// couldn't start is kept for `agent_status`.
+    fn apply_agents(&self, config: &AgentConfig) {
+        let mut run = self.agent.lock().unwrap_or_else(PoisonError::into_inner);
+        // Stopped first: the new one may want the same port.
+        run.server = None;
+        run.error = None;
+        if !config.enabled {
+            return;
+        }
+        let emit = Arc::clone(&self.emit);
+        let sink: AgentSink = Arc::new(move |call| {
+            emit(BackendEventDto::AgentCall { call: call.into() });
+        });
+        let workbench = Arc::new(Workbench {
+            open: Arc::clone(&self.open),
+            store: Arc::clone(&self.services.workspace),
+        });
+        let started = self
+            .services
+            .agents
+            .token()
+            .and_then(|token| self.services.agents.serve(config, &token, workbench, sink));
+        match started {
+            Ok(server) => run.server = Some(server),
+            Err(error) => run.error = Some(error.to_string()),
+        }
+    }
+
+    fn agent_status(&self) -> Result<AgentStatusDto, IdeError> {
+        let config = self.services.agents.config()?;
+        let token = self.services.agents.token()?;
+        let run = self.agent.lock().unwrap_or_else(PoisonError::into_inner);
+        Ok(AgentStatusDto {
+            enabled: config.enabled,
+            allow_edits: config.allow_edits,
+            port: config.port,
+            url: run.server.as_ref().map(|server| server.url()),
+            token,
+            error: run.error.clone(),
+        })
     }
 
     /// Ends the program running under the debugger, if any.
@@ -811,4 +894,28 @@ pub fn debug_evaluate(state: &IpcState, args: DebugEvaluateArgs) -> Result<Strin
     Ok(state
         .debugging(&args.workspace_id)?
         .evaluate(&args.expression, args.frame_id)?)
+}
+
+/// The MCP server for AI agents: its settings, token, and whether it runs.
+pub fn agent_status(state: &IpcState) -> Result<AgentStatusDto, IpcError> {
+    Ok(state.agent_status()?)
+}
+
+/// Saves the MCP server's settings, and starts, stops or restarts it to match.
+pub fn agent_configure(
+    state: &IpcState,
+    args: AgentConfigArgs,
+) -> Result<AgentStatusDto, IpcError> {
+    let config = AgentConfig::from(args);
+    state.services.agents.save_config(&config)?;
+    state.apply_agents(&config);
+    Ok(state.agent_status()?)
+}
+
+/// A new token for the MCP server; agents with the old one are refused from now on.
+pub fn agent_new_token(state: &IpcState) -> Result<AgentStatusDto, IpcError> {
+    state.services.agents.new_token()?;
+    let config = state.services.agents.config()?;
+    state.apply_agents(&config);
+    Ok(state.agent_status()?)
 }

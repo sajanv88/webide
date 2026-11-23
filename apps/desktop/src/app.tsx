@@ -26,6 +26,9 @@ import { DiffSurface, EditorSurface } from "@repo/editor-surface";
 import { Explorer, type ExplorerSource } from "@repo/explorer";
 import { BranchPicker, BranchStatus, createGitStore, SourceControlView } from "@repo/git";
 import {
+  agentConfigure,
+  agentNewToken,
+  agentStatus,
   appInfo,
   closeTerminal,
   closeWindow,
@@ -75,6 +78,7 @@ import {
 } from "@repo/ipc";
 import { createCommandRegistry, createEventBus } from "@repo/kernel";
 import { createLanguageClient, LanguageStatusItem } from "@repo/lsp";
+import { AgentStatusItem, AgentsDialog, createAgentStore } from "@repo/mcp";
 import { QuickOpen, SearchView } from "@repo/search";
 import { SettingsDialog } from "@repo/settings";
 import { type MenuSpec, Shell, type SidebarView } from "@repo/shell";
@@ -107,6 +111,12 @@ const applyTheme = (theme: string) => {
   document.documentElement.dataset.theme = theme;
 };
 bus.on("settings.changed", (settings) => applyTheme(settings.theme));
+
+// The MCP server for AI agents: one for the app, whatever folder is open.
+const agents = createAgentStore(
+  { status: agentStatus, configure: agentConfigure, newToken: agentNewToken },
+  bus,
+);
 
 const noSubscribe = () => () => {};
 const noState = () => null;
@@ -186,6 +196,9 @@ export function App() {
         case "languageStatus":
           if (event.workspaceId === current?.id) bus.emit("language.status", event.status);
           break;
+        case "agentCall":
+          bus.emit("agent.call", event.call);
+          break;
         case "closeRequested":
           void settleUnsaved().then(async (settled) => {
             if (!settled) return;
@@ -222,9 +235,11 @@ export function App() {
     return unsubscribe;
   }, [documents]);
 
-  // Startup: app info, the workspace that survives a reload, the recent list, the theme.
+  // Startup: app info, the workspace that survives a reload, the recent list,
+  // the theme, and whether agents are on.
   useEffect(() => {
     let live = true;
+    void agents.refresh();
     void Promise.all([appInfo(), currentWorkspace(), recentWorkspaces(), getSettings()]).then(
       ([nextInfo, current, nextRecent, settings]) => {
         if (!live) return;
@@ -523,6 +538,7 @@ export function App() {
           { kind: "command", command: "explorer.refresh" },
           { kind: "separator" },
           { kind: "command", command: "settings.open" },
+          { kind: "command", command: "agents.open" },
         ],
       },
       {
@@ -640,6 +656,7 @@ export function App() {
             {language ? (
               <LanguageStatusItem client={language} registry={registry} bus={bus} />
             ) : null}
+            <AgentStatusItem store={agents} registry={registry} />
             <span>{workspace ? workspace.path : "No folder open"}</span>
             {info ? <span>Version {info.version}</span> : null}
           </>
@@ -654,6 +671,7 @@ export function App() {
         <BranchPicker key={workspace.id} store={git} registry={registry} />
       ) : null}
       <SettingsDialog port={settingsPort} registry={registry} bus={bus} />
+      <AgentsDialog store={agents} registry={registry} />
       <Toaster />
     </>
   );

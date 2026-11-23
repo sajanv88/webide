@@ -92,7 +92,9 @@ where
                 name: app.package_info().name.clone(),
                 version: app.package_info().version.to_string(),
             };
-            app.manage(Arc::new(IpcState::new(services(&paths), info, emit)));
+            let state = Arc::new(IpcState::new(services(&paths), info, emit));
+            state.start_agents();
+            app.manage(state);
             set_main_window_title(app)?;
             Ok(())
         })

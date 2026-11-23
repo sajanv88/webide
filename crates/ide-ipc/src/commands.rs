@@ -11,12 +11,12 @@ use tauri::{AppHandle, State, Webview, WebviewWindow, Wry};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::dto::{
-    AppInfoDto, BreakpointDto, CloseGuardArgs, CompletionsDto, DebugBreakpointsArgs,
-    DebugEvaluateArgs, DebugReferenceArgs, DebugStartArgs, DebugThreadArgs, DefinitionDto,
-    DirListingDto, FileListDto, FileStampDto, GitBranchDto, GitCommitArgs, GitDiffArgs, GitDiffDto,
-    GitPathsArgs, GitStateDto, GitSwitchArgs, HoverDto, LspDocumentArgs, LspPositionArgs,
-    OpenRecentArgs, ProblemDto, ReadFileDto, RecentWorkspaceDto, ScopeDto, SearchTextArgs,
-    SettingsDto, SettingsPatchDto, StackFrameDto, SubscribeEventsArgs, TerminalDto,
+    AgentConfigArgs, AgentStatusDto, AppInfoDto, BreakpointDto, CloseGuardArgs, CompletionsDto,
+    DebugBreakpointsArgs, DebugEvaluateArgs, DebugReferenceArgs, DebugStartArgs, DebugThreadArgs,
+    DefinitionDto, DirListingDto, FileListDto, FileStampDto, GitBranchDto, GitCommitArgs,
+    GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs, HoverDto, LspDocumentArgs,
+    LspPositionArgs, OpenRecentArgs, ProblemDto, ReadFileDto, RecentWorkspaceDto, ScopeDto,
+    SearchTextArgs, SettingsDto, SettingsPatchDto, StackFrameDto, SubscribeEventsArgs, TerminalDto,
     TerminalEventDto, TerminalIdArgs, TerminalOpenArgs, TerminalResizeArgs, TerminalWriteArgs,
     TextSearchDto, VariableDto, WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
 };
@@ -105,6 +105,9 @@ ipc_commands! {
         debug_scopes(DebugReferenceArgs) -> Vec<ScopeDto>;
         debug_variables(DebugReferenceArgs) -> Vec<VariableDto>;
         debug_evaluate(DebugEvaluateArgs) -> String;
+        agent_status() -> AgentStatusDto;
+        agent_configure(AgentConfigArgs) -> AgentStatusDto;
+        agent_new_token() -> AgentStatusDto;
     }
     custom {
         pick_workspace() -> Option<WorkspaceDto>;
@@ -429,6 +432,24 @@ pub async fn debug_evaluate(
     args: DebugEvaluateArgs,
 ) -> Result<String, IpcError> {
     run_blocking(&state, move |state| handlers::debug_evaluate(state, args)).await
+}
+
+#[tauri::command]
+pub async fn agent_status(state: Shared<'_>) -> Result<AgentStatusDto, IpcError> {
+    run_blocking(&state, handlers::agent_status).await
+}
+
+#[tauri::command]
+pub async fn agent_configure(
+    state: Shared<'_>,
+    args: AgentConfigArgs,
+) -> Result<AgentStatusDto, IpcError> {
+    run_blocking(&state, move |state| handlers::agent_configure(state, args)).await
+}
+
+#[tauri::command]
+pub async fn agent_new_token(state: Shared<'_>) -> Result<AgentStatusDto, IpcError> {
+    run_blocking(&state, handlers::agent_new_token).await
 }
 
 /// Sends backend events (file changes, the close request) to the calling page,

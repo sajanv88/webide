@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use ide_core::agent::{AgentCall, AgentConfig, AgentHost, AgentServer, AgentSink, AgentWorkbench};
 use ide_core::debug::{
     Breakpoint, DebugAdapters, DebugEvent, DebugSession, DebugSink, Scope, StackFrame, Step,
     Variable,
@@ -26,11 +27,11 @@ use ide_core::{
 use serde_json::json;
 
 use crate::dto::{
-    AppInfoDto, BackendEventDto, CloseGuardArgs, DebugStartArgs, DebugThreadArgs, DiffSideDto,
-    FileBreakpoints, GitCommitArgs, GitDiffArgs, GitPathsArgs, GitSwitchArgs, LspDocumentArgs,
-    LspPositionArgs, OpenRecentArgs, ReadFileDto, SearchTextArgs, SettingsPatchDto, StepDto,
-    TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs, WorkspaceArgs, WorkspacePathArgs,
-    WriteFileArgs,
+    AgentConfigArgs, AppInfoDto, BackendEventDto, CloseGuardArgs, DebugStartArgs, DebugThreadArgs,
+    DiffSideDto, FileBreakpoints, GitCommitArgs, GitDiffArgs, GitPathsArgs, GitSwitchArgs,
+    LspDocumentArgs, LspPositionArgs, OpenRecentArgs, ReadFileDto, SearchTextArgs,
+    SettingsPatchDto, StepDto, TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs,
+    WorkspaceArgs, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::{IpcError, IpcErrorCode};
 use crate::handlers::{self, IpcState, Services};
@@ -527,6 +528,82 @@ impl Drop for FakeDebugSession {
     }
 }
 
+/// Keeps a configuration and token in memory; "serves" by logging, and
+/// refuses port 1999 as if it were taken.
+struct FakeAgents {
+    config: Mutex<AgentConfig>,
+    token: Mutex<String>,
+    log: Arc<Mutex<Vec<String>>>,
+    workbench: Mutex<Option<(Arc<dyn AgentWorkbench>, AgentSink)>>,
+}
+
+impl Default for FakeAgents {
+    fn default() -> Self {
+        Self {
+            config: Mutex::new(AgentConfig::default()),
+            token: Mutex::new("t1".to_owned()),
+            log: Arc::default(),
+            workbench: Mutex::new(None),
+        }
+    }
+}
+
+struct FakeAgentServer {
+    port: u16,
+    log: Arc<Mutex<Vec<String>>>,
+}
+
+impl AgentHost for FakeAgents {
+    fn config(&self) -> Result<AgentConfig, IdeError> {
+        Ok(*self.config.lock().unwrap())
+    }
+    fn save_config(&self, config: &AgentConfig) -> Result<(), IdeError> {
+        config.validate()?;
+        *self.config.lock().unwrap() = *config;
+        Ok(())
+    }
+    fn token(&self) -> Result<String, IdeError> {
+        Ok(self.token.lock().unwrap().clone())
+    }
+    fn new_token(&self) -> Result<String, IdeError> {
+        let mut token = self.token.lock().unwrap();
+        *token = format!("{token}+");
+        Ok(token.clone())
+    }
+    fn serve(
+        &self,
+        config: &AgentConfig,
+        token: &str,
+        workbench: Arc<dyn AgentWorkbench>,
+        sink: AgentSink,
+    ) -> Result<Box<dyn AgentServer>, IdeError> {
+        if config.port == 1999 {
+            return Err(IdeError::Io("port 1999 is in use".to_owned()));
+        }
+        self.log.lock().unwrap().push(format!(
+            "serve {} edits={} token={token}",
+            config.port, config.allow_edits
+        ));
+        *self.workbench.lock().unwrap() = Some((workbench, sink));
+        Ok(Box::new(FakeAgentServer {
+            port: config.port,
+            log: Arc::clone(&self.log),
+        }))
+    }
+}
+
+impl AgentServer for FakeAgentServer {
+    fn url(&self) -> String {
+        format!("http://127.0.0.1:{}/mcp", self.port)
+    }
+}
+
+impl Drop for FakeAgentServer {
+    fn drop(&mut self) {
+        self.log.lock().unwrap().push(format!("stop {}", self.port));
+    }
+}
+
 fn folder(name: &str) -> PathBuf {
     std::env::temp_dir().join(name)
 }
@@ -541,6 +618,7 @@ struct Fixture {
     terminals: Arc<FakeTerminals>,
     languages: Arc<FakeLanguages>,
     debuggers: Arc<FakeDebuggers>,
+    agents: Arc<FakeAgents>,
     /// What was sent to the webview.
     emitted: Arc<Mutex<Vec<BackendEventDto>>>,
 }
@@ -568,6 +646,7 @@ fn fixture() -> Fixture {
     let terminals = Arc::new(FakeTerminals::default());
     let languages = Arc::new(FakeLanguages::default());
     let debuggers = Arc::new(FakeDebuggers::default());
+    let agents = Arc::new(FakeAgents::default());
     let services = Services {
         fs: fs.clone(),
         workspace: store.clone(),
@@ -577,6 +656,7 @@ fn fixture() -> Fixture {
         terminals: terminals.clone(),
         languages: languages.clone(),
         debuggers: debuggers.clone(),
+        agents: agents.clone(),
     };
     let info = AppInfoDto {
         name: "test".to_owned(),
@@ -595,6 +675,7 @@ fn fixture() -> Fixture {
         terminals,
         languages,
         debuggers,
+        agents,
         emitted,
     }
 }
@@ -1377,5 +1458,102 @@ fn a_program_runs_under_the_debugger_until_stopped_or_the_workspace_changes() {
             r#"launch app.js in alpha with [(RelPath("app.js"), [2])]"#,
             "end",
         ]
+    );
+}
+
+fn agent_config(enabled: bool, allow_edits: bool, port: u16) -> AgentConfigArgs {
+    AgentConfigArgs {
+        enabled,
+        allow_edits,
+        port,
+    }
+}
+
+#[test]
+fn the_agent_server_starts_stops_and_restarts_as_configured() {
+    let fx = fixture();
+    // Off until turned on.
+    fx.state.start_agents();
+    let status = handlers::agent_status(&fx.state).unwrap();
+    assert!(!status.enabled && status.url.is_none() && status.error.is_none());
+    assert_eq!(status.token, "t1");
+    assert!(fx.agents.log.lock().unwrap().is_empty());
+
+    let status = handlers::agent_configure(&fx.state, agent_config(true, false, 7341)).unwrap();
+    assert_eq!(status.url.as_deref(), Some("http://127.0.0.1:7341/mcp"));
+    // Edits allowed: the old server goes before the new one starts.
+    handlers::agent_configure(&fx.state, agent_config(true, true, 7341)).unwrap();
+    // A new token restarts it with that token.
+    let status = handlers::agent_new_token(&fx.state).unwrap();
+    assert_eq!(status.token, "t1+");
+    handlers::agent_configure(&fx.state, agent_config(false, true, 7341)).unwrap();
+    assert_eq!(
+        *fx.agents.log.lock().unwrap(),
+        [
+            "serve 7341 edits=false token=t1",
+            "stop 7341",
+            "serve 7341 edits=true token=t1",
+            "stop 7341",
+            "serve 7341 edits=true token=t1+",
+            "stop 7341",
+        ]
+    );
+    let status = handlers::agent_status(&fx.state).unwrap();
+    assert!(!status.enabled && status.url.is_none());
+}
+
+#[test]
+fn the_agent_server_says_why_it_isnt_running() {
+    let fx = fixture();
+    let status = handlers::agent_configure(&fx.state, agent_config(true, false, 1999)).unwrap();
+    assert!(status.enabled);
+    assert!(status.url.is_none());
+    assert_eq!(status.error.as_deref(), Some("port 1999 is in use"));
+    let refused = handlers::agent_configure(&fx.state, agent_config(true, false, 80));
+    assert_eq!(code(refused), IpcErrorCode::InvalidSettings);
+    // Started again at launch, from what was saved.
+    *fx.agents.config.lock().unwrap() = AgentConfig {
+        enabled: true,
+        allow_edits: false,
+        port: 7400,
+    };
+    fx.state.start_agents();
+    assert!(handlers::agent_status(&fx.state).unwrap().error.is_none());
+}
+
+#[test]
+fn the_agent_server_answers_about_the_open_workspace_and_reports_calls() {
+    let fx = fixture();
+    handlers::agent_configure(&fx.state, agent_config(true, false, 7341)).unwrap();
+    let (workbench, sink) = fx.agents.workbench.lock().unwrap().clone().unwrap();
+    assert!(workbench.root().is_none());
+    handlers::open_picked(&fx.state, &folder("alpha")).unwrap();
+    assert_eq!(
+        workbench
+            .root()
+            .map(|root| root.name().to_owned())
+            .as_deref(),
+        Some("alpha")
+    );
+    handlers::open_picked(&fx.state, &folder("beta")).unwrap();
+    assert_eq!(
+        workbench
+            .root()
+            .map(|root| root.name().to_owned())
+            .as_deref(),
+        Some("beta")
+    );
+    assert_eq!(workbench.read_limits(), Settings::default().read_limits());
+
+    sink(AgentCall {
+        tool: "read_file".to_owned(),
+        target: Some("a.ts".to_owned()),
+        error: None,
+    });
+    let emitted = fx.emitted.lock().unwrap();
+    let json = serde_json::to_value(emitted.last().unwrap()).unwrap();
+    assert_eq!(
+        json,
+        json!({ "kind": "agentCall", "call": { "tool": "read_file", "target": "a.ts", "error": null } })
     );
 }

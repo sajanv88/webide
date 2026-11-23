@@ -1,6 +1,6 @@
 # ide-ipc
 
-**Status:** Milestone 6.
+**Status:** Milestone 7.
 
 ## Purpose
 
@@ -65,6 +65,9 @@ ts-rs.
 | `debug_scopes`           | `{ workspaceId, reference }` (a frame)   | `ScopeDto[]`                                           |
 | `debug_variables`        | `{ workspaceId, reference }`             | `VariableDto[]`                                        |
 | `debug_evaluate`         | `{ workspaceId, expression, frameId? }`  | the value, as text                                     |
+| `agent_status`           | none                                     | `AgentStatusDto`                                       |
+| `agent_configure`        | `{ enabled, allowEdits, port }`          | `AgentStatusDto`; saved, and the server restarted      |
+| `agent_new_token`        | none                                     | `AgentStatusDto`; agents with the old token refused    |
 | `subscribe_events`       | `{ channel }` (a Tauri `Channel`)        | nothing; `BackendEventDto`s arrive on the channel      |
 | `set_close_guard`        | `{ unsaved }`                            | nothing                                                |
 | `close_window`           | none                                     | nothing; closes the calling window without asking      |
@@ -85,6 +88,16 @@ loading drops the old one.
 - `debug { workspaceId, event }`: the program printed, stopped, continued or
   ended (`DebugEventDto`, switch on `kind`). The program is ended when another
   workspace opens and when the page reloads.
+- `agentCall { call }`: an AI agent used a tool of the MCP server
+  (`AgentCallDto`: the tool, what it was about, why it failed).
+
+## The MCP server
+
+Started at launch when the person turned it on, and restarted whenever its
+settings or token change (stopped first, so the new one can take the same
+port). It answers about whichever workspace is open at the time; a port
+that's taken is reported in `agent_status`, not as a failed command.
+
 - `closeRequested`: the window (or, on macOS, the app) is closing while the
   page has said `set_close_guard({ unsaved: true })`. The close is held; the
   page asks the person, then calls `close_window`. With nothing unsaved, or no

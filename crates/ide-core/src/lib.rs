@@ -3,6 +3,7 @@
 //! No Tauri, no IO, no async runtime. Feature crates implement the traits in
 //! [`ports`]; `ide-ipc` consumes them.
 
+pub mod agent;
 pub mod debug;
 pub mod error;
 pub mod fs;

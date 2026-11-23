@@ -1,6 +1,9 @@
 // Hand-written, frontend-only contracts: how modules talk to each other.
 // (The IPC types are generated from Rust, in ./generated.)
 import type {
+  AgentCallDto,
+  AgentConfigArgs,
+  AgentStatusDto,
   BreakpointDto,
   CompletionsDto,
   DebugEventDto,
@@ -79,6 +82,7 @@ export type AppCommandId =
   | "tabs.previous"
   | "commands.showPalette"
   | "settings.open"
+  | "agents.open"
   | "help.about";
 
 /** Events on the app's bus, by name, with their payloads. */
@@ -119,6 +123,8 @@ export interface AppEvents {
   "language.status": LanguageStatusDto;
   /** What the program running under the debugger reports. */
   "debug.event": DebugEventDto;
+  /** An AI agent used a tool of the MCP server. */
+  "agent.call": AgentCallDto;
 }
 
 /** What the explorer needs from the outside: one level of a folder in the open workspace. */
@@ -240,4 +246,13 @@ export interface DebugPort {
   scopes(frameId: number): Promise<IpcResult<ScopeDto[]>>;
   variables(reference: number): Promise<IpcResult<VariableDto[]>>;
   evaluate(expression: string, frameId?: number): Promise<IpcResult<string>>;
+}
+
+/** The MCP server that lets AI agents work in the open workspace. */
+export interface AgentPort {
+  status(): Promise<IpcResult<AgentStatusDto>>;
+  /** Saves the settings, and starts, stops or restarts the server to match. */
+  configure(config: AgentConfigArgs): Promise<IpcResult<AgentStatusDto>>;
+  /** Replaces the token: agents with the old one are refused from then on. */
+  newToken(): Promise<IpcResult<AgentStatusDto>>;
 }

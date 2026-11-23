@@ -1,5 +1,7 @@
 // Public entry of @repo/ipc: the only package that imports @tauri-apps/api.
 import type {
+  AgentConfigArgs,
+  AgentStatusDto,
   AppInfoDto,
   BreakpointDto,
   CompletionsDto,
@@ -159,3 +161,10 @@ export const debugVariables = (args: DebugReferenceArgs): Promise<IpcResult<Vari
 
 export const debugEvaluate = (args: DebugEvaluateArgs): Promise<IpcResult<string>> =>
   call("debug_evaluate", args);
+
+export const agentStatus = (): Promise<IpcResult<AgentStatusDto>> => call("agent_status");
+
+export const agentConfigure = (args: AgentConfigArgs): Promise<IpcResult<AgentStatusDto>> =>
+  call("agent_configure", args);
+
+export const agentNewToken = (): Promise<IpcResult<AgentStatusDto>> => call("agent_new_token");

@@ -24,6 +24,7 @@
     "@repo/ipc": "workspace:*",
     "@repo/kernel": "workspace:*",
     "@repo/lsp": "workspace:*",
+    "@repo/mcp": "workspace:*",
     "@repo/search": "workspace:*",
     "@repo/settings": "workspace:*",
     "@repo/shell": "workspace:*",

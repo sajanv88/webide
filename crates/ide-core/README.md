@@ -1,6 +1,6 @@
 # ide-core
 
-**Status:** Milestone 6.
+**Status:** Milestone 7.
 
 ## Purpose
 
@@ -50,6 +50,11 @@ runtime: everything here is data and pure functions.
   `Scope`, `Variable`, `Breakpoint`, `DebugEvent` (output, stopped,
   continued, terminated), `DebugSink`, `Step` (over, into, out), and the ports
   `DebugAdapters` and `DebugSession`.
+- `agent`: `AgentConfig` (on, edits allowed, the port: 7341 by default, at
+  least 1024), `AgentCall` and `AgentSink` (what an agent did), and the ports
+  `AgentHost` (the configuration, the token, serving), `AgentServer` (running;
+  dropping it stops it) and `AgentWorkbench` (what the server reads from the
+  app: the open folder, the read limits).
 - Ports: `WorkspaceFs`, `WorkspaceStore`, `FsWatcher`, `WorkspaceSearch`,
   `GitClient`.
 
