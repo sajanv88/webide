@@ -61,8 +61,9 @@ const SUGGESTIONS = [
 ] as const;
 
 /**
- * A link in a reply isn't followed: the app's window would leave the app.
- * Its address is shown beside its text instead.
+ * Nothing in a reply is followed or fetched. A link would take the app's
+ * window away from the app, and a picture's address can carry what a model
+ * was talked into putting there. Each is shown as text with its address.
  */
 const MARKDOWN_COMPONENTS = {
   a: ({ href, children }: ComponentProps<"a">) => (
@@ -71,6 +72,15 @@ const MARKDOWN_COMPONENTS = {
       {href && href !== children ? ` (${href})` : null}
     </span>
   ),
+  img: ({ src, alt }: ComponentProps<"img">) => {
+    const address = typeof src === "string" ? src : undefined;
+    return (
+      <span className="assistant__link" title={address}>
+        {alt || "Picture"}
+        {address ? ` (${address})` : null}
+      </span>
+    );
+  },
 };
 
 /**

