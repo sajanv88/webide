@@ -672,10 +672,17 @@ export function App() {
       <AboutDialog info={info} open={aboutOpen} onOpenChange={setAboutOpen} />
       <CommandPalette registry={registry} keybindings={keybindings} />
       {workspace && searchPort ? (
-        <QuickOpen key={workspace.id} port={searchPort} registry={registry} bus={bus} />
+        // Keys name the component too: siblings sharing the workspace's id
+        // would be mixed up when it changes, and register their commands twice.
+        <QuickOpen
+          key={`quick-open-${workspace.id}`}
+          port={searchPort}
+          registry={registry}
+          bus={bus}
+        />
       ) : null}
       {workspace && git ? (
-        <BranchPicker key={workspace.id} store={git} registry={registry} />
+        <BranchPicker key={`branch-picker-${workspace.id}`} store={git} registry={registry} />
       ) : null}
       <SettingsDialog port={settingsPort} registry={registry} bus={bus} />
       <AgentsDialog store={agents} registry={registry} />
