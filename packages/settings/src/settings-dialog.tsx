@@ -15,12 +15,23 @@ import {
   FieldDescription,
   FieldError,
   FieldLabel,
+  Fieldset,
+  FieldsetLegend,
   NumberField,
   RadioGroup,
   RadioGroupItem,
   Spinner,
+  Switch,
 } from "@nuvui/react";
-import type { AppCommandId, AppEvents, SettingsDto, SettingsPort, ThemeDto } from "@repo/contracts";
+import type {
+  AppCommandId,
+  AppEvents,
+  LineHighlightDto,
+  SettingsDto,
+  SettingsPort,
+  ThemeDto,
+  WhitespaceDto,
+} from "@repo/contracts";
 import type { CommandRegistry, EventBus } from "@repo/kernel";
 import { type FormEvent, useEffect, useState } from "react";
 
@@ -42,11 +53,31 @@ const THEMES: readonly { readonly value: ThemeDto; readonly label: string }[] = 
   { value: "dark", label: "Dark" },
 ];
 
+/** The ruler's columns; the backend checks the same. */
+const MIN_RULER = 10;
+const MAX_RULER = 500;
+const DEFAULT_RULER = 80;
+
+const WHITESPACE: readonly { readonly value: WhitespaceDto; readonly label: string }[] = [
+  { value: "none", label: "Never" },
+  { value: "selection", label: "In selected text" },
+  { value: "all", label: "Always" },
+];
+
+const LINE_HIGHLIGHT: readonly { readonly value: LineHighlightDto; readonly label: string }[] = [
+  { value: "border", label: "Outline" },
+  { value: "tint", label: "Tint" },
+  { value: "both", label: "Outline and tint" },
+  { value: "none", label: "Nothing" },
+];
+
 const toMb = (bytes: number): number => Math.round((bytes / MIB) * 100) / 100;
 const toBytes = (mb: number): number => Math.round(mb * MIB);
 
 /**
- * File → Settings…: the theme, and the size limits for opening files. It
+ * File → Settings…: the theme, the size limits for opening files, and how
+ * the editor draws its lines (indent guides, a ruler, whitespace, the
+ * cursor's line). It
  * registers `settings.open`, which opens it. Saving writes through the port
  * and announces `settings.changed`.
  */
@@ -142,22 +173,38 @@ function ReadyForm({ port, initial, onSaved }: FormProps & { readonly initial: S
   const [theme, setTheme] = useState<ThemeDto>(initial.theme);
   const [readOnlyMb, setReadOnlyMb] = useState<number | null>(toMb(initial.readOnlyAboveBytes));
   const [refuseMb, setRefuseMb] = useState<number | null>(toMb(initial.refuseAboveBytes));
-  const [errors, setErrors] = useState<{ readOnly?: string; refuse?: string }>({});
+  const [indentGuides, setIndentGuides] = useState(initial.editor.indentGuides);
+  const [rulerOn, setRulerOn] = useState(initial.editor.rulerColumn !== null);
+  const [rulerColumn, setRulerColumn] = useState<number | null>(
+    initial.editor.rulerColumn ?? DEFAULT_RULER,
+  );
+  const [whitespace, setWhitespace] = useState<WhitespaceDto>(initial.editor.whitespace);
+  const [lineHighlight, setLineHighlight] = useState<LineHighlightDto>(
+    initial.editor.lineHighlight,
+  );
+  const [errors, setErrors] = useState<{ readOnly?: string; refuse?: string; ruler?: string }>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const next: { readOnly?: string; refuse?: string } = {};
+    const next: { readOnly?: string; refuse?: string; ruler?: string } = {};
     if (readOnlyMb === null) next.readOnly = "Enter a size in megabytes.";
     if (refuseMb === null) next.refuse = "Enter a size in megabytes.";
     if (readOnlyMb !== null && refuseMb !== null && readOnlyMb > refuseMb) {
       next.refuse = `Enter at least ${readOnlyMb} MB, the read-only size above.`;
     }
+    if (rulerOn && rulerColumn === null) {
+      next.ruler = `Enter a column from ${MIN_RULER} to ${MAX_RULER}.`;
+    }
     setErrors(next);
-    if (next.readOnly || next.refuse || readOnlyMb === null || refuseMb === null) {
+    if (next.readOnly || next.refuse || next.ruler || readOnlyMb === null || refuseMb === null) {
       const first = event.currentTarget.querySelector<HTMLElement>(
-        next.readOnly ? "#settings-read-only" : "#settings-refuse",
+        next.readOnly
+          ? "#settings-read-only"
+          : next.refuse
+            ? "#settings-refuse"
+            : "#settings-ruler",
       );
       first?.focus();
       return;
@@ -168,6 +215,12 @@ function ReadyForm({ port, initial, onSaved }: FormProps & { readonly initial: S
       theme,
       readOnlyAboveBytes: toBytes(readOnlyMb),
       refuseAboveBytes: toBytes(refuseMb),
+      editor: {
+        indentGuides,
+        rulerColumn: rulerOn ? rulerColumn : null,
+        whitespace,
+        lineHighlight,
+      },
     });
     setSaving(false);
     if (!result.ok) {
@@ -193,13 +246,13 @@ function ReadyForm({ port, initial, onSaved }: FormProps & { readonly initial: S
         </FieldLabel>
         <FieldControl>
           <RadioGroup
-            className="settings-dialog__themes"
+            className="settings-dialog__choices"
             orientation="horizontal"
             value={theme}
             onValueChange={(value) => setTheme(value as ThemeDto)}
           >
             {THEMES.map((option) => (
-              <div key={option.value} className="settings-dialog__theme">
+              <div key={option.value} className="settings-dialog__choice">
                 <RadioGroupItem value={option.value} id={`settings-theme-${option.value}`} />
                 <label htmlFor={`settings-theme-${option.value}`}>{option.label}</label>
               </div>
@@ -246,6 +299,87 @@ function ReadyForm({ port, initial, onSaved }: FormProps & { readonly initial: S
         </FieldDescription>
         <FieldError>{errors.refuse}</FieldError>
       </Field>
+
+      <Fieldset className="settings-dialog__group">
+        <FieldsetLegend>Editor</FieldsetLegend>
+
+        <div className="settings-dialog__switch">
+          <Switch
+            id="settings-indent-guides"
+            checked={indentGuides}
+            onCheckedChange={setIndentGuides}
+          />
+          <label htmlFor="settings-indent-guides">Indent guides</label>
+        </div>
+
+        <div className="settings-dialog__switch">
+          <Switch id="settings-ruler-on" checked={rulerOn} onCheckedChange={setRulerOn} />
+          <label htmlFor="settings-ruler-on">A ruler down the editor</label>
+        </div>
+
+        <Field controlId="settings-ruler">
+          <FieldLabel>Ruler after column</FieldLabel>
+          <FieldControl>
+            <NumberField
+              className="settings-dialog__size"
+              value={rulerColumn}
+              onValueChange={setRulerColumn}
+              min={MIN_RULER}
+              max={MAX_RULER}
+              step={1}
+              disabled={!rulerOn}
+              format={{ maximumFractionDigits: 0, options: { useGrouping: false } }}
+            />
+          </FieldControl>
+          <FieldDescription>
+            From {MIN_RULER} to {MAX_RULER}: 80 and 100 are common line lengths.
+          </FieldDescription>
+          <FieldError>{errors.ruler}</FieldError>
+        </Field>
+
+        <Field>
+          <FieldLabel asChild>
+            <span>Show spaces and tabs</span>
+          </FieldLabel>
+          <FieldControl>
+            <RadioGroup
+              className="settings-dialog__choices"
+              orientation="horizontal"
+              value={whitespace}
+              onValueChange={(value) => setWhitespace(value as WhitespaceDto)}
+            >
+              {WHITESPACE.map((option) => (
+                <div key={option.value} className="settings-dialog__choice">
+                  <RadioGroupItem value={option.value} id={`settings-whitespace-${option.value}`} />
+                  <label htmlFor={`settings-whitespace-${option.value}`}>{option.label}</label>
+                </div>
+              ))}
+            </RadioGroup>
+          </FieldControl>
+          <FieldDescription>Spaces as dots, tabs as arrows.</FieldDescription>
+        </Field>
+
+        <Field>
+          <FieldLabel asChild>
+            <span>Mark the cursor's line with</span>
+          </FieldLabel>
+          <FieldControl>
+            <RadioGroup
+              className="settings-dialog__choices"
+              orientation="horizontal"
+              value={lineHighlight}
+              onValueChange={(value) => setLineHighlight(value as LineHighlightDto)}
+            >
+              {LINE_HIGHLIGHT.map((option) => (
+                <div key={option.value} className="settings-dialog__choice">
+                  <RadioGroupItem value={option.value} id={`settings-line-${option.value}`} />
+                  <label htmlFor={`settings-line-${option.value}`}>{option.label}</label>
+                </div>
+              ))}
+            </RadioGroup>
+          </FieldControl>
+        </Field>
+      </Fieldset>
 
       <DialogFooter>
         <DialogClose asChild>

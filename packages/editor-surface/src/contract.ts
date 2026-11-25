@@ -45,11 +45,25 @@ export interface EditorSurfaceProps {
   readonly onToggleBreakpoint?: ((line: number) => void) | undefined;
   /** The line (1-based) the debugger is paused on, highlighted. */
   readonly executionLine?: number | null | undefined;
+  /** How the lines are drawn: guides, a ruler, whitespace, the cursor's line. */
+  readonly display?: SurfaceDisplay | undefined;
   /** What a screen reader calls the text, such as the file's path. Required. */
   readonly "aria-label": string;
   /** The page's CSP nonce, for the styles the editor adds as it runs. */
   readonly styleNonce?: string | undefined;
   readonly ref?: Ref<EditorSurfaceHandle>;
+}
+
+/** How the editor draws the text's lines. */
+export interface SurfaceDisplay {
+  /** A thin line down each level of indentation (blank lines included). */
+  readonly indentGuides: boolean;
+  /** A line down the editor after this many columns; `null` for none. */
+  readonly rulerColumn: number | null;
+  /** Spaces as dots and tabs as arrows: never, in selected text, or always. */
+  readonly whitespace: "none" | "selection" | "all";
+  /** The cursor's line: unmarked, tinted, outlined, or both. */
+  readonly lineHighlight: "none" | "tint" | "border" | "both";
 }
 
 /** A place in the text: 0-based line, and column in UTF-16 units. */

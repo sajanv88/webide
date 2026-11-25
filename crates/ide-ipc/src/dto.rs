@@ -19,8 +19,8 @@ use ide_core::language::{
 };
 use ide_core::workspace::display_path;
 use ide_core::{
-    FileList, FileMatches, FsChange, LineMatch, RecentWorkspace, RelPath, Settings, SettingsPatch,
-    Span, TerminalEvent, TextSearchOutcome, Theme,
+    EditorSettings, FileList, FileMatches, FsChange, LineHighlight, LineMatch, RecentWorkspace,
+    RelPath, Settings, SettingsPatch, Span, TerminalEvent, TextSearchOutcome, Theme, Whitespace,
 };
 use serde::{Deserialize, Serialize};
 use tauri::ipc::JavaScriptChannelId;
@@ -170,6 +170,39 @@ pub struct SettingsDto {
     pub read_only_above_bytes: u64,
     /// Files larger than this don't open.
     pub refuse_above_bytes: u64,
+    pub editor: EditorSettingsDto,
+}
+
+/// Where spaces and tabs are drawn as marks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+pub enum WhitespaceDto {
+    None,
+    /// In selected text only.
+    Selection,
+    All,
+}
+
+/// How the cursor's line is marked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+pub enum LineHighlightDto {
+    None,
+    Tint,
+    Border,
+    Both,
+}
+
+/// How the editor draws the text's lines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EditorSettingsDto {
+    /// A thin line down each level of indentation.
+    pub indent_guides: bool,
+    /// A line down the editor at this column (10 to 500); `null` for none.
+    pub ruler_column: Option<u16>,
+    pub whitespace: WhitespaceDto,
+    pub line_highlight: LineHighlightDto,
 }
 
 // ---------- Events: backend → webview ----------
@@ -804,6 +837,10 @@ pub struct SettingsPatchDto {
     #[serde(default)]
     #[ts(optional)]
     pub refuse_above_bytes: Option<u64>,
+    /// All of the editor's settings, or none.
+    #[serde(default)]
+    #[ts(optional)]
+    pub editor: Option<EditorSettingsDto>,
 }
 
 /// Where backend events go: one channel per page, replaced when the page
@@ -1023,6 +1060,47 @@ impl From<Settings> for SettingsDto {
             theme: settings.theme.into(),
             read_only_above_bytes: settings.read_only_above_bytes,
             refuse_above_bytes: settings.refuse_above_bytes,
+            editor: settings.editor.into(),
+        }
+    }
+}
+
+impl From<EditorSettings> for EditorSettingsDto {
+    fn from(editor: EditorSettings) -> Self {
+        Self {
+            indent_guides: editor.indent_guides,
+            ruler_column: editor.ruler_column,
+            whitespace: match editor.whitespace {
+                Whitespace::None => WhitespaceDto::None,
+                Whitespace::Selection => WhitespaceDto::Selection,
+                Whitespace::All => WhitespaceDto::All,
+            },
+            line_highlight: match editor.line_highlight {
+                LineHighlight::None => LineHighlightDto::None,
+                LineHighlight::Tint => LineHighlightDto::Tint,
+                LineHighlight::Border => LineHighlightDto::Border,
+                LineHighlight::Both => LineHighlightDto::Both,
+            },
+        }
+    }
+}
+
+impl From<EditorSettingsDto> for EditorSettings {
+    fn from(editor: EditorSettingsDto) -> Self {
+        Self {
+            indent_guides: editor.indent_guides,
+            ruler_column: editor.ruler_column,
+            whitespace: match editor.whitespace {
+                WhitespaceDto::None => Whitespace::None,
+                WhitespaceDto::Selection => Whitespace::Selection,
+                WhitespaceDto::All => Whitespace::All,
+            },
+            line_highlight: match editor.line_highlight {
+                LineHighlightDto::None => LineHighlight::None,
+                LineHighlightDto::Tint => LineHighlight::Tint,
+                LineHighlightDto::Border => LineHighlight::Border,
+                LineHighlightDto::Both => LineHighlight::Both,
+            },
         }
     }
 }
@@ -1033,6 +1111,7 @@ impl From<SettingsPatchDto> for SettingsPatch {
             theme: patch.theme.map(Into::into),
             read_only_above_bytes: patch.read_only_above_bytes,
             refuse_above_bytes: patch.refuse_above_bytes,
+            editor: patch.editor.map(Into::into),
         }
     }
 }

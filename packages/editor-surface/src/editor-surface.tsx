@@ -9,6 +9,7 @@ import {
 import { type KeyboardEvent, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import type { EditorSurfaceProps, SurfaceLanguage } from "./contract";
 import { debugExtensions, setDebugMarks } from "./debug-gutter";
+import { DEFAULT_DISPLAY, displayExtensions } from "./display";
 import { languageExtensions } from "./language";
 
 const isSave = (event: KeyboardEvent): boolean =>
@@ -41,6 +42,7 @@ export function EditorSurface({
   breakpoints,
   onToggleBreakpoint,
   executionLine,
+  display = DEFAULT_DISPLAY,
   "aria-label": label,
   styleNonce,
   ref,
@@ -52,12 +54,15 @@ export function EditorSurface({
   currentLanguage.current = language;
   const currentToggle = useRef(onToggleBreakpoint);
   currentToggle.current = onToggleBreakpoint;
+  const { indentGuides, rulerColumn, whitespace, lineHighlight } = display;
+  // Made again only when the display changes: the editor then reconfigures them.
   const extensions = useMemo(
     () => [
       ...languageExtensions(() => currentLanguage.current),
       ...debugExtensions(() => currentToggle.current),
+      ...displayExtensions({ indentGuides, rulerColumn, whitespace, lineHighlight }),
     ],
-    [],
+    [indentGuides, rulerColumn, whitespace, lineHighlight],
   );
 
   // The document's breakpoints and paused line, put in the editor once it's
@@ -108,7 +113,7 @@ export function EditorSurface({
 
   return (
     <CodeEditor
-      className="editor-surface"
+      className={`editor-surface editor-surface--line-${lineHighlight}`}
       editorRef={editor}
       aria-label={label}
       // The editor keeps a document's state by its path. The id makes the key

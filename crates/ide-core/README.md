@@ -19,7 +19,9 @@ runtime: everything here is data and pure functions.
 - `fs`: `FileNode`, `DirListing`, `ReadOutcome`, `ReadLimits`, `FileStamp`,
   `LineEnding`, `ReadOnlyReason`, `sort_nodes`, `detect_line_ending`,
   `looks_binary`, `TEMP_FILE_PREFIX`, `MAX_DIR_ENTRIES`.
-- `Settings`, `SettingsPatch`, `Theme`, with `Settings::apply` validating limits.
+- `Settings`, `SettingsPatch`, `Theme`, `EditorSettings` (`indent_guides`,
+  `ruler_column`, `Whitespace`, `LineHighlight`), with `Settings::apply`
+  validating limits (the ruler from column 10 to 500).
 - `watch`: `FsChange` (created, modified, removed, renamed), `WatchEvent`
   (changes, possibly `rescan`; or failed), `WatchSink`, `WatchGuard` (dropping
   it stops the watch), `coalesce` (one change per path; over

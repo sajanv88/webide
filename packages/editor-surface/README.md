@@ -38,6 +38,22 @@ change the editor, change this package only.
   breakpoint, drawn as a dot. Without `onToggleBreakpoint` the gutter does
   nothing. **The paused line** (`executionLine`) is tinted, and outlined in
   forced colors.
+- **How lines are drawn** (`display`, from the settings; defaults until the
+  app passes it):
+  - **Indent guides:** a thin line down each level of indentation. A blank
+    line takes the smaller indentation around it, so guides run through it.
+    The step is the document's smallest indentation (1 to 8 columns), so a
+    file indented by 4 gets a guide every 4 columns.
+  - **A ruler:** a line after a column, from 10 to 500; none by default.
+  - **Whitespace:** spaces as dots and tabs as arrows: never, in selected
+    text (the default), or always.
+  - **The cursor's line:** outlined (the default), tinted (nuvui's own),
+    both, or nothing. The outline shows while the editor has focus.
+
+  The guides and the ruler are markers in a CodeMirror layer, which places
+  them through the CSSOM. The whitespace marks are classes whose text comes
+  from a `data-` attribute. Nothing sets a style attribute or loads an image,
+  so the strict CSP holds.
 - `DiffSurface`: read only (a review), side by side or in one column when
   narrow, unchanged lines folded away; the language from the extension, for
   the ones the editor colors. Loaded lazily too.
@@ -54,7 +70,9 @@ nuvui (a way to drop a path).
 - `EditorSurface` with `EditorSurfaceProps`: `documentId`, `path`,
   `languageId?`, `initialValue`, `readOnly`, `onChange(value)`, `onSave()`,
   `diagnostics?`, `language?`, `breakpoints?`, `onToggleBreakpoint?`,
-  `executionLine?`, `aria-label` (required), `styleNonce?`, `ref`.
+  `executionLine?`, `display?` (`SurfaceDisplay`: `indentGuides`,
+  `rulerColumn`, `whitespace`, `lineHighlight`), `aria-label` (required),
+  `styleNonce?`, `ref`.
 - `SurfaceLanguage` (`completions`, `hover`, `goToDefinition`), `SurfacePosition`,
   `SurfaceCompletion`.
 - `EditorSurfaceHandle` (through `ref`): `getValue()`, `setValue(value)` (calls
