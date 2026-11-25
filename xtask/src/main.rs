@@ -38,6 +38,7 @@ const FEATURES: &[&str] = &[
     "ide-git",
     "ide-debug",
     "ide-mcp",
+    "ide-assistant",
     "ide-search",
 ];
 const TAURI_ALLOWED: &[&str] = &[IPC, APP];

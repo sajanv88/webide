@@ -11,14 +11,16 @@ use tauri::{AppHandle, State, Webview, WebviewWindow, Wry};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::dto::{
-    AgentConfigArgs, AgentStatusDto, AppInfoDto, BreakpointDto, CloseGuardArgs, CompletionsDto,
-    DebugBreakpointsArgs, DebugEvaluateArgs, DebugReferenceArgs, DebugStartArgs, DebugThreadArgs,
-    DefinitionDto, DirListingDto, FileListDto, FileStampDto, GitBranchDto, GitCommitArgs,
-    GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs, HoverDto, LspDocumentArgs,
-    LspPositionArgs, OpenRecentArgs, ProblemDto, ReadFileDto, RecentWorkspaceDto, ScopeDto,
-    SearchTextArgs, SettingsDto, SettingsPatchDto, StackFrameDto, SubscribeEventsArgs, TerminalDto,
-    TerminalEventDto, TerminalIdArgs, TerminalOpenArgs, TerminalResizeArgs, TerminalWriteArgs,
-    TextSearchDto, VariableDto, WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
+    AgentConfigArgs, AgentStatusDto, AppInfoDto, AssistantConversationArgs, AssistantDecideArgs,
+    AssistantSendArgs, AssistantSetupArgs, AssistantStatusDto, BreakpointDto, CloseGuardArgs,
+    CompletionsDto, DebugBreakpointsArgs, DebugEvaluateArgs, DebugReferenceArgs, DebugStartArgs,
+    DebugThreadArgs, DefinitionDto, DirListingDto, FileListDto, FileStampDto, GitBranchDto,
+    GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs, HoverDto,
+    LspDocumentArgs, LspPositionArgs, ModelInfoDto, OpenRecentArgs, ProblemDto, ReadFileDto,
+    RecentWorkspaceDto, ScopeDto, SearchTextArgs, SettingsDto, SettingsPatchDto, StackFrameDto,
+    SubscribeEventsArgs, TerminalDto, TerminalEventDto, TerminalIdArgs, TerminalOpenArgs,
+    TerminalResizeArgs, TerminalWriteArgs, TextSearchDto, VariableDto, WorkspaceArgs, WorkspaceDto,
+    WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::IpcError;
 use crate::events::EventHub;
@@ -108,6 +110,15 @@ ipc_commands! {
         agent_status() -> AgentStatusDto;
         agent_configure(AgentConfigArgs) -> AgentStatusDto;
         agent_new_token() -> AgentStatusDto;
+        assistant_status() -> AssistantStatusDto;
+        assistant_save(AssistantSetupArgs) -> AssistantStatusDto;
+        assistant_forget() -> AssistantStatusDto;
+        assistant_models(AssistantSetupArgs) -> Vec<ModelInfoDto>;
+        assistant_check(AssistantSetupArgs) -> String;
+        assistant_send(AssistantSendArgs) -> ();
+        assistant_stop(AssistantConversationArgs) -> ();
+        assistant_decide(AssistantDecideArgs) -> ();
+        assistant_clear(AssistantConversationArgs) -> ();
     }
     custom {
         pick_workspace() -> Option<WorkspaceDto>;
@@ -450,6 +461,69 @@ pub async fn agent_configure(
 #[tauri::command]
 pub async fn agent_new_token(state: Shared<'_>) -> Result<AgentStatusDto, IpcError> {
     run_blocking(&state, handlers::agent_new_token).await
+}
+
+#[tauri::command]
+pub async fn assistant_status(state: Shared<'_>) -> Result<AssistantStatusDto, IpcError> {
+    run_blocking(&state, handlers::assistant_status).await
+}
+
+#[tauri::command]
+pub async fn assistant_save(
+    state: Shared<'_>,
+    args: AssistantSetupArgs,
+) -> Result<AssistantStatusDto, IpcError> {
+    run_blocking(&state, move |state| handlers::assistant_save(state, args)).await
+}
+
+#[tauri::command]
+pub async fn assistant_forget(state: Shared<'_>) -> Result<AssistantStatusDto, IpcError> {
+    run_blocking(&state, handlers::assistant_forget).await
+}
+
+#[tauri::command]
+pub async fn assistant_models(
+    state: Shared<'_>,
+    args: AssistantSetupArgs,
+) -> Result<Vec<ModelInfoDto>, IpcError> {
+    run_blocking(&state, move |state| handlers::assistant_models(state, args)).await
+}
+
+#[tauri::command]
+pub async fn assistant_check(
+    state: Shared<'_>,
+    args: AssistantSetupArgs,
+) -> Result<String, IpcError> {
+    run_blocking(&state, move |state| handlers::assistant_check(state, args)).await
+}
+
+#[tauri::command]
+pub async fn assistant_send(state: Shared<'_>, args: AssistantSendArgs) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::assistant_send(state, args)).await
+}
+
+#[tauri::command]
+pub async fn assistant_stop(
+    state: Shared<'_>,
+    args: AssistantConversationArgs,
+) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::assistant_stop(state, args)).await
+}
+
+#[tauri::command]
+pub async fn assistant_decide(
+    state: Shared<'_>,
+    args: AssistantDecideArgs,
+) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::assistant_decide(state, args)).await
+}
+
+#[tauri::command]
+pub async fn assistant_clear(
+    state: Shared<'_>,
+    args: AssistantConversationArgs,
+) -> Result<(), IpcError> {
+    run_blocking(&state, move |state| handlers::assistant_clear(state, args)).await
 }
 
 /// Sends backend events (file changes, the close request) to the calling page,

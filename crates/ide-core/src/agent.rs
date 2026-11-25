@@ -86,10 +86,40 @@ pub trait AgentHost: Send + Sync {
         workbench: Arc<dyn AgentWorkbench>,
         sink: AgentSink,
     ) -> Result<Box<dyn AgentServer>, IdeError>;
+    /// The same tools for the IDE's own assistant, on what `workbench` says
+    /// is open. Not reported as agents' calls.
+    fn workspace_tools(&self, workbench: Arc<dyn AgentWorkbench>) -> Arc<dyn WorkspaceTools>;
 }
 
 /// A running server. Dropping it stops it.
 pub trait AgentServer: Send + Sync {
     /// Where agents connect: `http://127.0.0.1:7341/mcp`.
     fn url(&self) -> String;
+}
+
+/// A tool the IDE's assistant may call: what a model is told about it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolSpec {
+    pub name: String,
+    pub description: String,
+    /// The JSON Schema of its arguments: an object.
+    pub input_schema: String,
+}
+
+/// The workspace's tools for the IDE's own assistant: the read tools agents
+/// get over MCP, with the same refusals (nothing in `.git`, nothing outside
+/// the folder). Every call blocks on IO: run it off an async runtime's threads.
+pub trait WorkspaceTools: Send + Sync {
+    /// The tools that only read.
+    fn read_tools(&self) -> Vec<ToolSpec>;
+    /// Runs a read tool with its arguments, a JSON object: the text for the
+    /// model, or why it failed.
+    fn call(&self, name: &str, arguments: &str) -> Result<String, String>;
+    /// The file `path` names, relative to the open folder (`./a`, `a\b` and
+    /// absolute paths inside it are accepted), and its text, or `None` when it
+    /// doesn't exist yet.
+    fn read_text(&self, path: &str) -> Result<(String, Option<String>), String>;
+    /// Writes `text` to `path` once the person accepted it: refused in a git
+    /// directory, as agents' writes are.
+    fn write_text(&self, path: &str, text: &str) -> Result<(), String>;
 }

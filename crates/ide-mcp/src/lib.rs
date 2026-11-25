@@ -23,7 +23,9 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use ide_core::agent::{AgentConfig, AgentHost, AgentServer, AgentSink, AgentWorkbench};
+use ide_core::agent::{
+    AgentConfig, AgentHost, AgentServer, AgentSink, AgentWorkbench, WorkspaceTools,
+};
 use ide_core::{GitClient, IdeError, WorkspaceFs, WorkspaceSearch};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
@@ -207,6 +209,17 @@ impl AgentHost for McpHost {
             }
         })?;
         self.serve_on(listener, config.allow_edits, token, workbench, sink)
+    }
+
+    fn workspace_tools(&self, workbench: Arc<dyn AgentWorkbench>) -> Arc<dyn WorkspaceTools> {
+        Arc::new(tools::Toolbox::new(tools::Ports {
+            fs: Arc::clone(&self.fs),
+            search: Arc::clone(&self.search),
+            git: Arc::clone(&self.git),
+            workbench,
+            sink: Arc::new(|_| {}),
+            allow_edits: false,
+        }))
     }
 }
 

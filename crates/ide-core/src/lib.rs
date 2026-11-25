@@ -4,6 +4,7 @@
 //! [`ports`]; `ide-ipc` consumes them.
 
 pub mod agent;
+pub mod assistant;
 pub mod debug;
 pub mod error;
 pub mod fs;

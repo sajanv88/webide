@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 use ide_core::agent::{AgentConfig, AgentHost, AgentServer, AgentSink, AgentWorkbench};
+use ide_core::assistant::{AssistantHost, AssistantSink, ChatContext};
 use ide_core::debug::{DebugAdapters, DebugEvent, DebugSession};
 use ide_core::fs::ReadLimits;
 use ide_core::language::{LanguageServer, LanguageServers, LanguageStatus, TextPosition};
@@ -19,14 +20,16 @@ use ide_core::{
 };
 
 use crate::dto::{
-    AgentConfigArgs, AgentStatusDto, AppInfoDto, BackendEventDto, BreakpointDto, CompletionsDto,
-    DebugBreakpointsArgs, DebugEvaluateArgs, DebugEventDto, DebugReferenceArgs, DebugStartArgs,
-    DebugThreadArgs, DefinitionDto, DirListingDto, FileListDto, FileStampDto, GitBranchDto,
-    GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs, HoverDto,
-    LanguageStatusDto, LspDocumentArgs, LspPositionArgs, OpenRecentArgs, ProblemDto, ReadFileDto,
-    RecentWorkspaceDto, ScopeDto, SearchTextArgs, SettingsDto, SettingsPatchDto, StackFrameDto,
-    TerminalDto, TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs, TextSearchDto, VariableDto,
-    WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
+    AgentConfigArgs, AgentStatusDto, AppInfoDto, AssistantConversationArgs, AssistantDecideArgs,
+    AssistantSendArgs, AssistantSetupArgs, AssistantStatusDto, BackendEventDto, BreakpointDto,
+    CompletionsDto, DebugBreakpointsArgs, DebugEvaluateArgs, DebugEventDto, DebugReferenceArgs,
+    DebugStartArgs, DebugThreadArgs, DefinitionDto, DirListingDto, FileListDto, FileStampDto,
+    GitBranchDto, GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs,
+    HoverDto, LanguageStatusDto, LspDocumentArgs, LspPositionArgs, ModelInfoDto, OpenRecentArgs,
+    ProblemDto, ReadFileDto, RecentWorkspaceDto, ScopeDto, SearchTextArgs, SettingsDto,
+    SettingsPatchDto, StackFrameDto, TerminalDto, TerminalIdArgs, TerminalResizeArgs,
+    TerminalWriteArgs, TextSearchDto, VariableDto, WorkspaceArgs, WorkspaceDto, WorkspacePathArgs,
+    WriteFileArgs,
 };
 use crate::error::IpcError;
 
@@ -42,6 +45,7 @@ pub struct Services {
     pub languages: Arc<dyn LanguageServers>,
     pub debuggers: Arc<dyn DebugAdapters>,
     pub agents: Arc<dyn AgentHost>,
+    pub assistant: Arc<dyn AssistantHost>,
 }
 
 impl std::fmt::Debug for Services {
@@ -182,10 +186,7 @@ impl IpcState {
         let sink: AgentSink = Arc::new(move |call| {
             emit(BackendEventDto::AgentCall { call: call.into() });
         });
-        let workbench = Arc::new(Workbench {
-            open: Arc::clone(&self.open),
-            store: Arc::clone(&self.services.workspace),
-        });
+        let workbench = self.workbench();
         let started = self
             .services
             .agents
@@ -195,6 +196,14 @@ impl IpcState {
             Ok(server) => run.server = Some(server),
             Err(error) => run.error = Some(error.to_string()),
         }
+    }
+
+    /// What the MCP server and the assistant read: the workspace open now.
+    fn workbench(&self) -> Arc<Workbench> {
+        Arc::new(Workbench {
+            open: Arc::clone(&self.open),
+            store: Arc::clone(&self.services.workspace),
+        })
     }
 
     fn agent_status(&self) -> Result<AgentStatusDto, IdeError> {
@@ -918,4 +927,127 @@ pub fn agent_new_token(state: &IpcState) -> Result<AgentStatusDto, IpcError> {
     let config = state.services.agents.config()?;
     state.apply_agents(&config);
     Ok(state.agent_status()?)
+}
+
+/// The most of a message, and of a conversation's id, that's taken.
+const MAX_MESSAGE_CHARS: usize = 200_000;
+const MAX_CONVERSATION_ID: usize = 100;
+
+fn conversation_id(id: &str) -> Result<&str, IpcError> {
+    let valid = !id.is_empty()
+        && id.len() <= MAX_CONVERSATION_ID
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if valid {
+        Ok(id)
+    } else {
+        Err(IdeError::InvalidArgument("not a conversation's id".to_owned()).into())
+    }
+}
+
+/// The assistant's setup, and whether a key is kept for it.
+pub fn assistant_status(state: &IpcState) -> Result<AssistantStatusDto, IpcError> {
+    Ok(state.services.assistant.status()?.into())
+}
+
+/// Saves the setup, and the key typed in it (into the system's credential store).
+pub fn assistant_save(
+    state: &IpcState,
+    args: AssistantSetupArgs,
+) -> Result<AssistantStatusDto, IpcError> {
+    let setup = args.setup.into();
+    Ok(state
+        .services
+        .assistant
+        .save(&setup, args.secret.as_deref())?
+        .into())
+}
+
+/// Forgets the setup and every key kept.
+pub fn assistant_forget(state: &IpcState) -> Result<AssistantStatusDto, IpcError> {
+    Ok(state.services.assistant.forget()?.into())
+}
+
+/// The models the provider offers, for the setup to choose from.
+pub fn assistant_models(
+    state: &IpcState,
+    args: AssistantSetupArgs,
+) -> Result<Vec<ModelInfoDto>, IpcError> {
+    let setup = args.setup.into();
+    Ok(state
+        .services
+        .assistant
+        .list_models(&setup, args.secret.as_deref())?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+/// Asks the model for a word: the setup works when it answers.
+pub fn assistant_check(state: &IpcState, args: AssistantSetupArgs) -> Result<String, IpcError> {
+    let setup = args.setup.into();
+    Ok(state
+        .services
+        .assistant
+        .check(&setup, args.secret.as_deref())?)
+}
+
+/// Sends the person's message; the reply comes as `assistant` events.
+pub fn assistant_send(state: &IpcState, args: AssistantSendArgs) -> Result<(), IpcError> {
+    let id = conversation_id(&args.conversation_id)?;
+    if args.text.chars().count() > MAX_MESSAGE_CHARS {
+        return Err(IdeError::InvalidArgument(format!(
+            "a message can be at most {MAX_MESSAGE_CHARS} characters"
+        ))
+        .into());
+    }
+    let workspace = state
+        .open
+        .read()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_ref()
+        .map(|open| open.root.name().to_owned());
+    let context = ChatContext {
+        workspace,
+        active_path: args.active_path.filter(|path| !path.is_empty()),
+    };
+    let tools = state.services.agents.workspace_tools(state.workbench());
+    let emit = Arc::clone(&state.emit);
+    let sink: AssistantSink = Arc::new(move |event| {
+        emit(BackendEventDto::Assistant {
+            event: event.into(),
+        });
+    });
+    Ok(state
+        .services
+        .assistant
+        .send(id, &args.text, context, tools, sink)?)
+}
+
+/// Stops the reply coming in a conversation.
+pub fn assistant_stop(state: &IpcState, args: AssistantConversationArgs) -> Result<(), IpcError> {
+    state
+        .services
+        .assistant
+        .stop(conversation_id(&args.conversation_id)?);
+    Ok(())
+}
+
+/// Accepts (writes) or rejects a change the assistant proposed.
+pub fn assistant_decide(state: &IpcState, args: AssistantDecideArgs) -> Result<(), IpcError> {
+    Ok(state.services.assistant.decide(
+        conversation_id(&args.conversation_id)?,
+        &args.call_id,
+        args.accept,
+    )?)
+}
+
+/// Forgets a conversation.
+pub fn assistant_clear(state: &IpcState, args: AssistantConversationArgs) -> Result<(), IpcError> {
+    state
+        .services
+        .assistant
+        .clear(conversation_id(&args.conversation_id)?);
+    Ok(())
 }

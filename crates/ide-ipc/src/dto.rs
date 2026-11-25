@@ -6,6 +6,10 @@
 //! here is far below 2^53).
 
 use ide_core::agent::{AgentCall, AgentConfig};
+use ide_core::assistant::{
+    AssistantEvent, AssistantStatus, BedrockAuth, ModelInfo, ProviderKind, ProviderSetup,
+    ToolStatus,
+};
 use ide_core::debug::{Breakpoint, DebugEvent, FrameSource, Scope, StackFrame, Step, Variable};
 use ide_core::fs::{
     DirListing, FileNode, FileStamp, LineEnding, NodeKind, ReadOnlyReason, ReadOutcome,
@@ -265,6 +269,8 @@ pub enum BackendEventDto {
     },
     /// An AI agent used a tool of the MCP server.
     AgentCall { call: AgentCallDto },
+    /// What a conversation with the IDE's assistant reports.
+    Assistant { event: AssistantEventDto },
 }
 
 /// The MCP server for AI agents: what the person chose, and whether it runs.
@@ -1447,6 +1453,325 @@ impl From<StepDto> for Step {
             StepDto::Over => Self::Over,
             StepDto::Into => Self::Into,
             StepDto::Out => Self::Out,
+        }
+    }
+}
+
+// ---------- The AI assistant ----------
+
+/// Where the assistant's model is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub enum ProviderKindDto {
+    #[serde(rename = "anthropic")]
+    Anthropic,
+    #[serde(rename = "openai")]
+    OpenAi,
+    /// Azure AI Foundry (Azure OpenAI).
+    #[serde(rename = "azure")]
+    AzureFoundry,
+    #[serde(rename = "gemini")]
+    Gemini,
+    #[serde(rename = "ollama")]
+    Ollama,
+    /// Amazon Bedrock.
+    #[serde(rename = "bedrock")]
+    Bedrock,
+}
+
+/// How Bedrock requests are authorized.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum BedrockAuthDto {
+    /// The AWS credentials on this machine, from a profile (SSO included).
+    Profile,
+    /// A Bedrock API key.
+    ApiKey,
+}
+
+/// The assistant's setup. No secret is in it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderSetupDto {
+    pub kind: ProviderKindDto,
+    /// The model's id, or for Azure the deployment's name. Empty while it's being chosen.
+    pub model: String,
+    /// Azure: the resource's endpoint. Ollama: the server (`http://127.0.0.1:11434` when null).
+    #[serde(default)]
+    pub endpoint: Option<String>,
+    /// Bedrock: the AWS region (`us-east-1` when null).
+    #[serde(default)]
+    pub region: Option<String>,
+    /// Bedrock with a profile: its name (the default profile when null).
+    #[serde(default)]
+    pub profile: Option<String>,
+    pub bedrock_auth: BedrockAuthDto,
+}
+
+/// The saved setup, and whether a key is kept for it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AssistantStatusDto {
+    /// Null until the assistant is set up.
+    pub setup: Option<ProviderSetupDto>,
+    /// A key is kept for the setup's provider, in the system's credential store.
+    pub has_secret: bool,
+}
+
+/// A model to pick.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelInfoDto {
+    pub id: String,
+    pub name: Option<String>,
+}
+
+/// A setup, with a key typed in the setup (it's kept only by `assistant_save`).
+#[derive(Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistantSetupArgs {
+    pub setup: ProviderSetupDto,
+    /// Left out: the key already kept, if any.
+    #[serde(default)]
+    #[ts(optional)]
+    pub secret: Option<String>,
+}
+
+impl std::fmt::Debug for AssistantSetupArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AssistantSetupArgs")
+            .field("setup", &self.setup)
+            .field("secret", &self.secret.as_ref().map(|_| "…"))
+            .finish()
+    }
+}
+
+/// The person's message in a conversation; a new id starts one.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistantSendArgs {
+    pub conversation_id: String,
+    pub text: String,
+    /// The file in front of the person, relative to the workspace.
+    #[serde(default)]
+    #[ts(optional)]
+    pub active_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistantConversationArgs {
+    pub conversation_id: String,
+}
+
+/// Accepts or rejects a change the assistant proposed.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistantDecideArgs {
+    pub conversation_id: String,
+    pub call_id: String,
+    pub accept: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum ToolStatusDto {
+    Running,
+    Done,
+    Failed,
+}
+
+/// What a conversation reports as it goes. Switch on `kind`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum AssistantEventDto {
+    /// More of the reply's text (Markdown).
+    #[serde(rename_all = "camelCase")]
+    Text {
+        conversation_id: String,
+        delta: String,
+    },
+    /// A read tool started, finished or failed.
+    #[serde(rename_all = "camelCase")]
+    Tool {
+        conversation_id: String,
+        call_id: String,
+        name: String,
+        /// Its arguments, as JSON.
+        input: String,
+        status: ToolStatusDto,
+        /// The result (shortened), or why it failed.
+        output: Option<String>,
+    },
+    /// A change waiting for the person: `assistant_decide` accepts or rejects it.
+    #[serde(rename_all = "camelCase")]
+    Proposal {
+        conversation_id: String,
+        call_id: String,
+        path: String,
+        /// The file's text now; null for a new file.
+        original: Option<String>,
+        proposed: String,
+        summary: Option<String>,
+    },
+    /// The person decided; `error` says why an accepted change wasn't written.
+    #[serde(rename_all = "camelCase")]
+    ProposalDecided {
+        conversation_id: String,
+        call_id: String,
+        accepted: bool,
+        error: Option<String>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Done { conversation_id: String },
+    /// The reply stopped: the provider failed, or the person stopped it.
+    #[serde(rename_all = "camelCase")]
+    Failed {
+        conversation_id: String,
+        message: String,
+    },
+}
+
+impl From<ProviderKind> for ProviderKindDto {
+    fn from(kind: ProviderKind) -> Self {
+        match kind {
+            ProviderKind::Anthropic => Self::Anthropic,
+            ProviderKind::OpenAi => Self::OpenAi,
+            ProviderKind::AzureFoundry => Self::AzureFoundry,
+            ProviderKind::Gemini => Self::Gemini,
+            ProviderKind::Ollama => Self::Ollama,
+            ProviderKind::Bedrock => Self::Bedrock,
+        }
+    }
+}
+
+impl From<ProviderKindDto> for ProviderKind {
+    fn from(kind: ProviderKindDto) -> Self {
+        match kind {
+            ProviderKindDto::Anthropic => Self::Anthropic,
+            ProviderKindDto::OpenAi => Self::OpenAi,
+            ProviderKindDto::AzureFoundry => Self::AzureFoundry,
+            ProviderKindDto::Gemini => Self::Gemini,
+            ProviderKindDto::Ollama => Self::Ollama,
+            ProviderKindDto::Bedrock => Self::Bedrock,
+        }
+    }
+}
+
+impl From<ProviderSetup> for ProviderSetupDto {
+    fn from(setup: ProviderSetup) -> Self {
+        Self {
+            kind: setup.kind.into(),
+            model: setup.model,
+            endpoint: setup.endpoint,
+            region: setup.region,
+            profile: setup.profile,
+            bedrock_auth: match setup.bedrock_auth {
+                BedrockAuth::Profile => BedrockAuthDto::Profile,
+                BedrockAuth::ApiKey => BedrockAuthDto::ApiKey,
+            },
+        }
+    }
+}
+
+impl From<ProviderSetupDto> for ProviderSetup {
+    fn from(setup: ProviderSetupDto) -> Self {
+        Self {
+            kind: setup.kind.into(),
+            model: setup.model,
+            endpoint: setup.endpoint,
+            region: setup.region,
+            profile: setup.profile,
+            bedrock_auth: match setup.bedrock_auth {
+                BedrockAuthDto::Profile => BedrockAuth::Profile,
+                BedrockAuthDto::ApiKey => BedrockAuth::ApiKey,
+            },
+        }
+    }
+}
+
+impl From<AssistantStatus> for AssistantStatusDto {
+    fn from(status: AssistantStatus) -> Self {
+        Self {
+            setup: status.setup.map(Into::into),
+            has_secret: status.has_secret,
+        }
+    }
+}
+
+impl From<ModelInfo> for ModelInfoDto {
+    fn from(model: ModelInfo) -> Self {
+        Self {
+            id: model.id,
+            name: model.name,
+        }
+    }
+}
+
+impl From<AssistantEvent> for AssistantEventDto {
+    fn from(event: AssistantEvent) -> Self {
+        match event {
+            AssistantEvent::Text {
+                conversation,
+                delta,
+            } => Self::Text {
+                conversation_id: conversation,
+                delta,
+            },
+            AssistantEvent::Tool {
+                conversation,
+                call_id,
+                name,
+                input,
+                status,
+                output,
+            } => Self::Tool {
+                conversation_id: conversation,
+                call_id,
+                name,
+                input,
+                status: match status {
+                    ToolStatus::Running => ToolStatusDto::Running,
+                    ToolStatus::Done => ToolStatusDto::Done,
+                    ToolStatus::Failed => ToolStatusDto::Failed,
+                },
+                output,
+            },
+            AssistantEvent::Proposal {
+                conversation,
+                call_id,
+                path,
+                original,
+                proposed,
+                summary,
+            } => Self::Proposal {
+                conversation_id: conversation,
+                call_id,
+                path,
+                original,
+                proposed,
+                summary,
+            },
+            AssistantEvent::ProposalDecided {
+                conversation,
+                call_id,
+                accepted,
+                error,
+            } => Self::ProposalDecided {
+                conversation_id: conversation,
+                call_id,
+                accepted,
+                error,
+            },
+            AssistantEvent::Done { conversation } => Self::Done {
+                conversation_id: conversation,
+            },
+            AssistantEvent::Failed {
+                conversation,
+                message,
+            } => Self::Failed {
+                conversation_id: conversation,
+                message,
+            },
         }
     }
 }

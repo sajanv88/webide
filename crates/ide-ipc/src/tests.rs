@@ -1,7 +1,14 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use ide_core::agent::{AgentCall, AgentConfig, AgentHost, AgentServer, AgentSink, AgentWorkbench};
+use ide_core::agent::{
+    AgentCall, AgentConfig, AgentHost, AgentServer, AgentSink, AgentWorkbench, ToolSpec,
+    WorkspaceTools,
+};
+use ide_core::assistant::{
+    AssistantEvent, AssistantHost, AssistantSink, AssistantStatus, ChatContext, ModelInfo,
+    ProviderSetup,
+};
 use ide_core::debug::{
     Breakpoint, DebugAdapters, DebugEvent, DebugSession, DebugSink, Scope, StackFrame, Step,
     Variable,
@@ -27,11 +34,12 @@ use ide_core::{
 use serde_json::json;
 
 use crate::dto::{
-    AgentConfigArgs, AppInfoDto, BackendEventDto, CloseGuardArgs, DebugStartArgs, DebugThreadArgs,
-    DiffSideDto, FileBreakpoints, GitCommitArgs, GitDiffArgs, GitPathsArgs, GitSwitchArgs,
-    LspDocumentArgs, LspPositionArgs, OpenRecentArgs, ReadFileDto, SearchTextArgs,
-    SettingsPatchDto, StepDto, TerminalIdArgs, TerminalResizeArgs, TerminalWriteArgs,
-    WorkspaceArgs, WorkspacePathArgs, WriteFileArgs,
+    AgentConfigArgs, AppInfoDto, AssistantConversationArgs, AssistantDecideArgs, AssistantSendArgs,
+    AssistantSetupArgs, BackendEventDto, BedrockAuthDto, CloseGuardArgs, DebugStartArgs,
+    DebugThreadArgs, DiffSideDto, FileBreakpoints, GitCommitArgs, GitDiffArgs, GitPathsArgs,
+    GitSwitchArgs, LspDocumentArgs, LspPositionArgs, OpenRecentArgs, ProviderKindDto,
+    ProviderSetupDto, ReadFileDto, SearchTextArgs, SettingsPatchDto, StepDto, TerminalIdArgs,
+    TerminalResizeArgs, TerminalWriteArgs, WorkspaceArgs, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::{IpcError, IpcErrorCode};
 use crate::handlers::{self, IpcState, Services};
@@ -590,6 +598,113 @@ impl AgentHost for FakeAgents {
             log: Arc::clone(&self.log),
         }))
     }
+    fn workspace_tools(&self, workbench: Arc<dyn AgentWorkbench>) -> Arc<dyn WorkspaceTools> {
+        Arc::new(FakeTools { workbench })
+    }
+}
+
+/// Tools that say which folder they work in.
+struct FakeTools {
+    workbench: Arc<dyn AgentWorkbench>,
+}
+
+impl WorkspaceTools for FakeTools {
+    fn read_tools(&self) -> Vec<ToolSpec> {
+        Vec::new()
+    }
+    fn call(&self, _: &str, _: &str) -> Result<String, String> {
+        Ok(self
+            .workbench
+            .root()
+            .map(|root| root.name().to_owned())
+            .unwrap_or_default())
+    }
+    fn read_text(&self, path: &str) -> Result<(String, Option<String>), String> {
+        Ok((path.to_owned(), None))
+    }
+    fn write_text(&self, _: &str, _: &str) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+/// What a message was sent with.
+type Sent = (ChatContext, Arc<dyn WorkspaceTools>, AssistantSink);
+
+/// What the IPC layer asked the assistant, and the last sink and tools it gave.
+#[derive(Default)]
+struct FakeAssistant {
+    log: Mutex<Vec<String>>,
+    sent: Mutex<Option<Sent>>,
+}
+
+impl AssistantHost for FakeAssistant {
+    fn status(&self) -> Result<AssistantStatus, IdeError> {
+        Ok(AssistantStatus {
+            setup: None,
+            has_secret: false,
+        })
+    }
+    fn save(
+        &self,
+        setup: &ProviderSetup,
+        secret: Option<&str>,
+    ) -> Result<AssistantStatus, IdeError> {
+        self.log.lock().unwrap().push(format!(
+            "save {} {} {secret:?}",
+            setup.kind.id(),
+            setup.model
+        ));
+        Ok(AssistantStatus {
+            setup: Some(setup.clone()),
+            has_secret: secret.is_some(),
+        })
+    }
+    fn forget(&self) -> Result<AssistantStatus, IdeError> {
+        self.status()
+    }
+    fn list_models(&self, _: &ProviderSetup, _: Option<&str>) -> Result<Vec<ModelInfo>, IdeError> {
+        Ok(vec![ModelInfo {
+            id: "m1".to_owned(),
+            name: Some("Model one".to_owned()),
+        }])
+    }
+    fn check(&self, _: &ProviderSetup, _: Option<&str>) -> Result<String, IdeError> {
+        Ok("ready".to_owned())
+    }
+    fn send(
+        &self,
+        conversation: &str,
+        text: &str,
+        context: ChatContext,
+        tools: Arc<dyn WorkspaceTools>,
+        sink: AssistantSink,
+    ) -> Result<(), IdeError> {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("send {conversation} {text}"));
+        *self.sent.lock().unwrap() = Some((context, tools, sink));
+        Ok(())
+    }
+    fn stop(&self, conversation: &str) {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("stop {conversation}"));
+    }
+    fn decide(&self, conversation: &str, call_id: &str, accept: bool) -> Result<(), IdeError> {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("decide {conversation} {call_id} {accept}"));
+        Ok(())
+    }
+    fn clear(&self, conversation: &str) {
+        self.log
+            .lock()
+            .unwrap()
+            .push(format!("clear {conversation}"));
+    }
 }
 
 impl AgentServer for FakeAgentServer {
@@ -619,6 +734,7 @@ struct Fixture {
     languages: Arc<FakeLanguages>,
     debuggers: Arc<FakeDebuggers>,
     agents: Arc<FakeAgents>,
+    assistant: Arc<FakeAssistant>,
     /// What was sent to the webview.
     emitted: Arc<Mutex<Vec<BackendEventDto>>>,
 }
@@ -647,6 +763,7 @@ fn fixture() -> Fixture {
     let languages = Arc::new(FakeLanguages::default());
     let debuggers = Arc::new(FakeDebuggers::default());
     let agents = Arc::new(FakeAgents::default());
+    let assistant = Arc::new(FakeAssistant::default());
     let services = Services {
         fs: fs.clone(),
         workspace: store.clone(),
@@ -657,6 +774,7 @@ fn fixture() -> Fixture {
         languages: languages.clone(),
         debuggers: debuggers.clone(),
         agents: agents.clone(),
+        assistant: assistant.clone(),
     };
     let info = AppInfoDto {
         name: "test".to_owned(),
@@ -676,6 +794,7 @@ fn fixture() -> Fixture {
         languages,
         debuggers,
         agents,
+        assistant,
         emitted,
     }
 }
@@ -1555,5 +1674,99 @@ fn the_agent_server_answers_about_the_open_workspace_and_reports_calls() {
     assert_eq!(
         json,
         json!({ "kind": "agentCall", "call": { "tool": "read_file", "target": "a.ts", "error": null } })
+    );
+}
+
+fn setup_args(secret: Option<&str>) -> AssistantSetupArgs {
+    AssistantSetupArgs {
+        setup: ProviderSetupDto {
+            kind: ProviderKindDto::Anthropic,
+            model: "claude".to_owned(),
+            endpoint: None,
+            region: None,
+            profile: None,
+            bedrock_auth: BedrockAuthDto::Profile,
+        },
+        secret: secret.map(str::to_owned),
+    }
+}
+
+#[test]
+fn the_assistant_is_set_up_with_a_key_that_never_comes_back() {
+    let fx = fixture();
+    let status = handlers::assistant_save(&fx.state, setup_args(Some("sk-1"))).unwrap();
+    assert!(status.has_secret);
+    let json = serde_json::to_value(&status).unwrap();
+    assert_eq!(json["setup"]["kind"], "anthropic");
+    assert!(!json.to_string().contains("sk-1"), "{json}");
+    assert!(!format!("{:?}", setup_args(Some("sk-1"))).contains("sk-1"));
+    let models = handlers::assistant_models(&fx.state, setup_args(None)).unwrap();
+    assert_eq!(models[0].id, "m1");
+    assert_eq!(
+        handlers::assistant_check(&fx.state, setup_args(None)).unwrap(),
+        "ready"
+    );
+    assert_eq!(
+        fx.assistant.log.lock().unwrap().as_slice(),
+        ["save anthropic claude Some(\"sk-1\")"]
+    );
+}
+
+#[test]
+fn assistant_messages_carry_the_workspace_and_replies_reach_the_webview() {
+    let fx = fixture();
+    handlers::open_picked(&fx.state, &folder("alpha")).unwrap();
+    let send = |id: &str| {
+        handlers::assistant_send(
+            &fx.state,
+            AssistantSendArgs {
+                conversation_id: id.to_owned(),
+                text: "hello".to_owned(),
+                active_path: Some("src/a.ts".to_owned()),
+            },
+        )
+    };
+    assert_eq!(code(send("not an id!")), IpcErrorCode::InvalidArgument);
+    send("chat-1").unwrap();
+    let (context, tools, sink) = fx.assistant.sent.lock().unwrap().clone().unwrap();
+    assert_eq!(context.workspace.as_deref(), Some("alpha"));
+    assert_eq!(context.active_path.as_deref(), Some("src/a.ts"));
+    // The tools work in the folder open now.
+    assert_eq!(tools.call("workspace_info", "{}").unwrap(), "alpha");
+    handlers::open_picked(&fx.state, &folder("beta")).unwrap();
+    assert_eq!(tools.call("workspace_info", "{}").unwrap(), "beta");
+
+    sink(AssistantEvent::Text {
+        conversation: "chat-1".to_owned(),
+        delta: "Hi".to_owned(),
+    });
+    let json = serde_json::to_value(fx.emitted.lock().unwrap().last().unwrap()).unwrap();
+    assert_eq!(
+        json,
+        json!({ "kind": "assistant", "event": { "kind": "text", "conversationId": "chat-1", "delta": "Hi" } })
+    );
+
+    let conversation = || AssistantConversationArgs {
+        conversation_id: "chat-1".to_owned(),
+    };
+    handlers::assistant_decide(
+        &fx.state,
+        AssistantDecideArgs {
+            conversation_id: "chat-1".to_owned(),
+            call_id: "c1".to_owned(),
+            accept: true,
+        },
+    )
+    .unwrap();
+    handlers::assistant_stop(&fx.state, conversation()).unwrap();
+    handlers::assistant_clear(&fx.state, conversation()).unwrap();
+    assert_eq!(
+        fx.assistant.log.lock().unwrap().as_slice(),
+        [
+            "send chat-1 hello",
+            "decide chat-1 c1 true",
+            "stop chat-1",
+            "clear chat-1"
+        ]
     );
 }
