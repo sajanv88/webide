@@ -12,12 +12,16 @@ Ctrl+, (Cmd+, on macOS). A nuvui `Dialog` with a form:
   fields, 0.1 to 256). The second must be at least the first; the form says
   so on the field and moves focus there. Both apply to files opened from then
   on.
+- **Editor** (a fieldset): indent guides (a switch, on by default), a ruler
+  (a switch, and the column, 10 to 500), show spaces and tabs (never, in
+  selected text, always), and how the cursor's line is marked (outline, tint,
+  both, nothing). They apply as soon as the settings are saved.
 
 It reads the settings each time it opens and saves them through the
 `SettingsPort` the app gives it. The backend checks them again and keeps
 them in the app's config folder. A failed save keeps the dialog open with the
 reason. After a save it emits `settings.changed` on the bus; the app applies
-the theme from it.
+the theme and the editor's settings from it.
 
 ## Public API
 

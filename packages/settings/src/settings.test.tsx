@@ -12,10 +12,17 @@ import { describe, expect, it } from "vitest";
 import { SettingsDialog } from "./settings-dialog";
 
 const MIB = 1024 * 1024;
+const editor = {
+  indentGuides: true,
+  rulerColumn: null,
+  whitespace: "selection",
+  lineHighlight: "border",
+} as const;
 const initial: SettingsDto = {
   theme: "system",
   readOnlyAboveBytes: MIB,
   refuseAboveBytes: 20 * MIB,
+  editor,
 };
 
 function setup(update?: (patch: SettingsPatchDto) => IpcResult<SettingsDto>) {
@@ -88,11 +95,42 @@ describe("SettingsDialog", () => {
       theme: "dark",
       readOnlyAboveBytes: 2.5 * MIB,
       refuseAboveBytes: 20 * MIB,
+      editor,
     });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(changed).toEqual([
-      { theme: "dark", readOnlyAboveBytes: 2.5 * MIB, refuseAboveBytes: 20 * MIB },
+      { theme: "dark", readOnlyAboveBytes: 2.5 * MIB, refuseAboveBytes: 20 * MIB, editor },
     ]);
+  });
+
+  it("saves how the editor draws its lines", async () => {
+    const { open, patches } = setup();
+    const dialog = await open();
+    const editorGroup = await within(dialog).findByRole("group", { name: "Editor" });
+    const ruler = within(editorGroup).getByRole("spinbutton", { name: "Ruler after column" });
+    expect(ruler.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(within(editorGroup).getByRole("switch", { name: "Indent guides" }));
+    fireEvent.click(within(editorGroup).getByRole("switch", { name: "A ruler down the editor" }));
+    expect(ruler.hasAttribute("disabled")).toBe(false);
+    enter(ruler, "100");
+    fireEvent.click(
+      within(
+        within(editorGroup).getByRole("radiogroup", { name: "Show spaces and tabs" }),
+      ).getByRole("radio", { name: "Always" }),
+    );
+    fireEvent.click(
+      within(
+        within(editorGroup).getByRole("radiogroup", { name: "Mark the cursor's line with" }),
+      ).getByRole("radio", { name: "Tint" }),
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]?.editor).toEqual({
+      indentGuides: false,
+      rulerColumn: 100,
+      whitespace: "all",
+      lineHighlight: "tint",
+    });
   });
 
   it("won't save a read-only size above the don't-open size, and says why on the field", async () => {

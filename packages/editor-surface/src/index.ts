@@ -6,6 +6,7 @@ export type {
   EditorSurfaceProps,
   SurfaceCompletion,
   SurfaceDiagnostic,
+  SurfaceDisplay,
   SurfaceLanguage,
   SurfacePosition,
 } from "./contract";

@@ -4,7 +4,10 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use ide_core::{IdeError, RecentWorkspace, Settings, SettingsPatch, Theme};
+use ide_core::{
+    EditorSettings, IdeError, LineHighlight, RecentWorkspace, Settings, SettingsPatch, Theme,
+    Whitespace,
+};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -64,6 +67,34 @@ pub(crate) struct SettingsFile {
     version: Option<u32>,
     theme: Option<ThemeName>,
     files: FilesSection,
+    editor: EditorSection,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct EditorSection {
+    indent_guides: Option<bool>,
+    /// `null` or absent: no ruler.
+    ruler_column: Option<u16>,
+    whitespace: Option<WhitespaceName>,
+    line_highlight: Option<LineHighlightName>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum WhitespaceName {
+    None,
+    Selection,
+    All,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum LineHighlightName {
+    None,
+    Tint,
+    Border,
+    Both,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -94,10 +125,47 @@ impl SettingsFile {
                 read_only_above_bytes: Some(settings.read_only_above_bytes),
                 refuse_above_bytes: Some(settings.refuse_above_bytes),
             },
+            editor: EditorSection {
+                indent_guides: Some(settings.editor.indent_guides),
+                ruler_column: settings.editor.ruler_column,
+                whitespace: Some(match settings.editor.whitespace {
+                    Whitespace::None => WhitespaceName::None,
+                    Whitespace::Selection => WhitespaceName::Selection,
+                    Whitespace::All => WhitespaceName::All,
+                }),
+                line_highlight: Some(match settings.editor.line_highlight {
+                    LineHighlight::None => LineHighlightName::None,
+                    LineHighlight::Tint => LineHighlightName::Tint,
+                    LineHighlight::Border => LineHighlightName::Border,
+                    LineHighlight::Both => LineHighlightName::Both,
+                }),
+            },
         }
     }
 
     pub(crate) fn into_domain(self) -> Result<Settings, IdeError> {
+        let defaults = EditorSettings::default();
+        let editor = EditorSettings {
+            indent_guides: self.editor.indent_guides.unwrap_or(defaults.indent_guides),
+            ruler_column: self.editor.ruler_column,
+            whitespace: self
+                .editor
+                .whitespace
+                .map_or(defaults.whitespace, |name| match name {
+                    WhitespaceName::None => Whitespace::None,
+                    WhitespaceName::Selection => Whitespace::Selection,
+                    WhitespaceName::All => Whitespace::All,
+                }),
+            line_highlight: self
+                .editor
+                .line_highlight
+                .map_or(defaults.line_highlight, |name| match name {
+                    LineHighlightName::None => LineHighlight::None,
+                    LineHighlightName::Tint => LineHighlight::Tint,
+                    LineHighlightName::Border => LineHighlight::Border,
+                    LineHighlightName::Both => LineHighlight::Both,
+                }),
+        };
         let patch = SettingsPatch {
             theme: self.theme.map(|theme| match theme {
                 ThemeName::System => Theme::System,
@@ -106,6 +174,7 @@ impl SettingsFile {
             }),
             read_only_above_bytes: self.files.read_only_above_bytes,
             refuse_above_bytes: self.files.refuse_above_bytes,
+            editor: Some(editor),
         };
         Settings::default().apply(&patch)
     }

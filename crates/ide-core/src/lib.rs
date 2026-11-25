@@ -23,7 +23,7 @@ pub use ports::{FsWatcher, GitClient, WorkspaceFs, WorkspaceSearch, WorkspaceSto
 pub use search::{
     CancelFlag, FileList, FileMatches, LineMatch, Span, TextQuery, TextSearchOutcome,
 };
-pub use settings::{Settings, SettingsPatch, Theme};
+pub use settings::{EditorSettings, LineHighlight, Settings, SettingsPatch, Theme, Whitespace};
 pub use terminal::{TerminalEvent, TerminalHost, TerminalSession, TerminalSink, TerminalSize};
 pub use watch::{FsChange, WatchEvent, WatchGuard, WatchSink};
 pub use workspace::{RecentWorkspace, WorkspaceRoot};

@@ -4,7 +4,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use ide_core::settings::MIB;
 use ide_core::workspace::MAX_RECENT;
-use ide_core::{IdeError, Settings, SettingsPatch, Theme, WorkspaceStore};
+use ide_core::{
+    EditorSettings, IdeError, Settings, SettingsPatch, Theme, Whitespace, WorkspaceStore,
+};
 
 use crate::JsonWorkspaceStore;
 
@@ -136,6 +138,7 @@ fn settings_default_then_persist_patches() {
     let json = fs::read_to_string(fx.config("settings.json")).unwrap();
     assert!(json.contains("\"theme\": \"dark\""), "{json}");
     assert!(json.contains("\"readOnlyAboveBytes\": 2097152"), "{json}");
+    assert!(json.contains("\"lineHighlight\": \"border\""), "{json}");
 }
 
 #[test]
@@ -175,6 +178,23 @@ fn settings_files_are_read_leniently_or_set_aside() {
                 refuse_above_bytes: 30 * MIB,
                 ..Settings::default()
             }),
+        ),
+        (
+            "editor settings",
+            r#"{"editor":{"rulerColumn":100,"whitespace":"all"}}"#,
+            Some(Settings {
+                editor: EditorSettings {
+                    ruler_column: Some(100),
+                    whitespace: Whitespace::All,
+                    ..EditorSettings::default()
+                },
+                ..Settings::default()
+            }),
+        ),
+        (
+            "ruler out of range",
+            r#"{"editor":{"rulerColumn":2}}"#,
+            None,
         ),
         ("bad JSON", "{ theme: dark", None),
         ("bad value type", r#"{"theme":3}"#, None),

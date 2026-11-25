@@ -22,7 +22,7 @@ import type {
   WorkspaceDto,
 } from "@repo/contracts";
 import { createDebugStore, DebugView, debuggable } from "@repo/debug";
-import { DiffSurface, EditorSurface } from "@repo/editor-surface";
+import { DiffSurface, EditorSurface, type SurfaceDisplay } from "@repo/editor-surface";
 import { Explorer, type ExplorerSource } from "@repo/explorer";
 import { BranchPicker, BranchStatus, createGitStore, SourceControlView } from "@repo/git";
 import {
@@ -136,6 +136,9 @@ export function App() {
   const [workspace, setWorkspace] = useState<WorkspaceDto | null>(null);
   const [recent, setRecent] = useState<readonly RecentWorkspaceDto[]>([]);
   const [aboutOpen, setAboutOpen] = useState(false);
+  // How the editor draws its lines, from the settings; its own default until read.
+  const [display, setDisplay] = useState<SurfaceDisplay | undefined>(undefined);
+  useEffect(() => bus.on("settings.changed", (settings) => setDisplay(settings.editor)), []);
 
   // The open files of the open folder. A new folder starts with none.
   const documents = useMemo<Documents | null>(
@@ -247,7 +250,10 @@ export function App() {
         else console.error("Could not read the app info", nextInfo.error);
         if (current.ok) setWorkspace(current.value);
         if (nextRecent.ok) setRecent(nextRecent.value);
-        if (settings.ok) applyTheme(settings.value.theme);
+        if (settings.ok) {
+          applyTheme(settings.value.theme);
+          setDisplay(settings.value.editor);
+        }
       },
     );
     return () => {
@@ -631,6 +637,7 @@ export function App() {
                   {...document}
                   aria-label={`Text of ${document.path}`}
                   styleNonce={styleNonce}
+                  display={display}
                   diagnostics={problems.get(document.path) ?? []}
                   language={
                     language?.handles(document.path) ? language.features(document.path) : undefined

@@ -5,13 +5,24 @@
     gap: calc(var(--spacing) * 5);
   }
 
-  &__themes {
+  &__choices {
     display: flex;
     flex-wrap: wrap;
     gap: calc(var(--spacing) * 2) calc(var(--spacing) * 5);
   }
 
-  &__theme {
+  &__choice {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2);
+  }
+
+  &__group {
+    display: grid;
+    gap: calc(var(--spacing) * 4);
+  }
+
+  &__switch {
     display: flex;
     align-items: center;
     gap: calc(var(--spacing) * 2);

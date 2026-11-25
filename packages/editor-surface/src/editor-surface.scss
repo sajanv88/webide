@@ -74,3 +74,53 @@
     outline: 2px solid Highlight;
   }
 }
+
+// The cursor's line, by the setting: nuvui tints it while the editor has
+// focus; "border" and "none" take the tint away, "border" and "both" outline it.
+.editor-surface--line-none,
+.editor-surface--line-border {
+  --nuv-code-editor-active-line-bg: transparent;
+}
+
+.editor-surface__code .cm-focused .editor-surface-cursor-line {
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-foreground) 22%, transparent);
+}
+
+// Indent guides and the ruler: markers in a layer under the text, placed by
+// CodeMirror. A marker has no width of its own; its border is the line.
+.editor-surface-guide {
+  border-inline-start: 1px solid color-mix(in oklch, var(--color-foreground) 14%, transparent);
+  pointer-events: none;
+}
+
+.editor-surface-ruler {
+  border-inline-start: 1px solid color-mix(in oklch, var(--color-foreground) 20%, transparent);
+  pointer-events: none;
+}
+
+// Spaces as dots and tabs as arrows, drawn over the blank they stand for.
+// A run of spaces is one mark, with one dot per space in `data-marks`.
+.editor-surface-space,
+.editor-surface-tab {
+  position: relative;
+}
+
+.editor-surface-space {
+  &::before {
+    position: absolute;
+    inset-inline-start: 0;
+    color: var(--color-muted-foreground);
+    content: attr(data-marks);
+    pointer-events: none;
+  }
+}
+
+.editor-surface-tab {
+  &::before {
+    position: absolute;
+    inset-inline-start: 0;
+    color: var(--color-muted-foreground);
+    content: "→";
+    pointer-events: none;
+  }
+}
