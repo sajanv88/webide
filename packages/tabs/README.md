@@ -89,5 +89,5 @@ works from the keyboard.
 ## May depend on
 
 `@repo/contracts` (`DocumentsPort`, the DTOs, `AppEvents`, `AppCommandId`),
-`@repo/kernel`, `react`, `@nuvui/react`, `@nuvui/icons`. Never another feature
-package (the editor included), `@repo/ipc` or `@tauri-apps/*`.
+`@repo/kernel`, `@repo/file-icons` (a file's icon by its type), `react`,
+`@nuvui/react`, `@nuvui/icons`. Never another feature package (the editor included), `@repo/ipc` or `@tauri-apps/*`.

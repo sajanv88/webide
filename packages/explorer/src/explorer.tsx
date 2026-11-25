@@ -1,13 +1,6 @@
 import "./explorer.scss";
 import "./explorer-node.scss";
-import {
-  CollapseIcon,
-  FileIcon,
-  FolderIcon,
-  FolderOpenIcon,
-  LinkIcon,
-  RefreshIcon,
-} from "@nuvui/icons";
+import { CollapseIcon, FolderIcon, FolderOpenIcon, LinkIcon, RefreshIcon } from "@nuvui/icons";
 import {
   Button,
   ContextMenu,
@@ -25,6 +18,7 @@ import type {
   FileNodeDto,
   WorkspaceDto,
 } from "@repo/contracts";
+import { FileTypeIcon } from "@repo/file-icons";
 import type { CommandRegistry, EventBus } from "@repo/kernel";
 import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { DEFAULT_PAGE_SIZE, useDirectoryTree } from "./use-directory-tree";
@@ -227,10 +221,14 @@ function placeholder(id: string, label: string): ReactNode {
 }
 
 function NodeLabel({ entry, open }: { readonly entry: FileNodeDto; readonly open: boolean }) {
-  const Icon = entry.kind === "directory" ? (open ? FolderOpenIcon : FolderIcon) : FileIcon;
+  const FolderGlyph = open ? FolderOpenIcon : FolderIcon;
   return (
     <span className="explorer-node">
-      <Icon size={16} className="explorer-node__icon" />
+      {entry.kind === "directory" ? (
+        <FolderGlyph size={16} className="explorer-node__icon" />
+      ) : (
+        <FileTypeIcon name={entry.name} className="explorer-node__icon" />
+      )}
       <span className="explorer-node__name">{entry.name}</span>
       {entry.isSymlink ? (
         <LinkIcon size={12} className="explorer-node__link" title="Symbolic link" />

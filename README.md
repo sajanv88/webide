@@ -70,7 +70,7 @@ crates/            Rust: ide-core, ide-fs, ide-watcher, ide-workspace, ide-searc
 apps/desktop/      The Vite frontend (src/) and the Tauri composition root (src-tauri/)
 packages/          Frontend modules: contracts, kernel, ipc, shell, explorer, tabs,
                    editor-surface, commands, settings, search, git, terminal, lsp, debug,
-                   mcp, and the shared tsconfig
+                   mcp, file-icons, and the shared tsconfig
 xtask/             cargo xtask check-boundaries, check-csp, check-contracts
 ```
 
@@ -81,9 +81,10 @@ Each module has a README with its purpose, public API and allowed dependencies.
 - Rust: only `ide-ipc` (and the composition root) may reach `tauri`. Feature
   crates depend on `ide-core` only. `ide-core` has no IO and no async runtime.
 - Frontend: only `@repo/ipc` imports `@tauri-apps/*`. A feature package never
-  imports another feature package or `@repo/ipc`. Every package is imported
-  through its public entry. CodeMirror only in `@repo/editor-surface`,
-  xterm only in `@repo/terminal`.
+  imports another feature package or `@repo/ipc`; a shared building block
+  (`@repo/file-icons`) depends on no other `@repo/*` package. Every package
+  is imported through its public entry. CodeMirror only in
+  `@repo/editor-surface`, xterm only in `@repo/terminal`.
 
 ## AI agents
 

@@ -12,7 +12,7 @@ catalog:
   "@codemirror/view": 6.43.15
   "@nuvui/backgrounds": 0.1.2
   "@nuvui/editor": 0.2.0
-  "@nuvui/icons": 0.1.0
+  "@nuvui/icons": 0.3.0
   "@nuvui/react": 0.10.0
   "@tauri-apps/api": 2.12.5
   "@tauri-apps/cli": 2.12.5

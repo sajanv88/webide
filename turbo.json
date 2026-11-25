@@ -23,12 +23,17 @@
     "tags": {
       "foundation": {
         "dependencies": {
-          "deny": ["infra", "feature", "app"]
+          "deny": ["infra", "ui", "feature", "app"]
         }
       },
       "infra": {
         "dependencies": {
-          "deny": ["feature", "app"]
+          "deny": ["ui", "feature", "app"]
+        }
+      },
+      "ui": {
+        "dependencies": {
+          "deny": ["foundation", "infra", "ui", "feature", "app"]
         }
       },
       "feature": {

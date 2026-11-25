@@ -1,6 +1,6 @@
 import "./document-tabs.scss";
 import "./document-tab.scss";
-import { CloseIcon, FileIcon } from "@nuvui/icons";
+import { CloseIcon } from "@nuvui/icons";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -14,6 +14,7 @@ import {
   VisuallyHidden,
 } from "@nuvui/react";
 import type { AppCommandId, AppEvents } from "@repo/contracts";
+import { FileTypeIcon } from "@repo/file-icons";
 import type { CommandRegistry, EventBus } from "@repo/kernel";
 import {
   type DragEvent,
@@ -481,7 +482,7 @@ function DocumentTab({ tab, label, index, count, documents, onClose }: DocumentT
               onClose([tab.id], true);
             }}
           >
-            <FileIcon size={14} aria-hidden="true" />
+            <FileTypeIcon name={tab.name} size={16} />
             <span className="document-tab__name">{label}</span>
             {tab.dirty ? <VisuallyHidden>, unsaved changes</VisuallyHidden> : null}
             {tab.disk === "deleted" ? <VisuallyHidden>, deleted on disk</VisuallyHidden> : null}
