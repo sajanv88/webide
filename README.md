@@ -62,6 +62,26 @@ exist).
 | `pnpm test`                                                                                                    | Frontend tests (vitest)                                                 |
 | `cargo fmt --all --check` · `cargo clippy --workspace --all-targets -- -D warnings` · `cargo test --workspace` | Rust checks                                                             |
 
+## Releasing
+
+The Release workflow (`.github/workflows/release.yaml`) builds the installers:
+Windows (NSIS `-setup.exe` and `.msi`), macOS (`.dmg`, Apple silicon and
+Intel) and Linux (`.deb`, `.rpm`, `.AppImage`).
+
+- **To try them:** run it by hand (Actions → Release → Run workflow). The
+  installers are kept as the run's artifacts for 14 days, and nothing is
+  published. A pull request that changes the workflow runs it too.
+- **To release:** set the version in `apps/desktop/src-tauri/tauri.conf.json`,
+  then push a tag `v` + that version (`v0.1.0`). The workflow checks they
+  match, builds, and drafts a GitHub release with the installers and
+  `SHA256SUMS.txt`. Only the repository's writers see a draft; publish it
+  from the Releases page once it's tested.
+- **On your own machine:** `pnpm tauri build --bundles nsis` writes
+  `target/release/bundle/nsis/webide_<version>_x64-setup.exe`.
+
+The installers aren't signed yet, so Windows SmartScreen and macOS Gatekeeper
+warn before they open one.
+
 ## Layout
 
 ```
