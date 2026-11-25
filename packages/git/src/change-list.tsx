@@ -1,7 +1,8 @@
 import "./change-list.scss";
-import { FileIcon, MinusIcon, PlusIcon, UndoIcon } from "@nuvui/icons";
+import { MinusIcon, PlusIcon, UndoIcon } from "@nuvui/icons";
 import { Button, ListView, ListViewItem, VisuallyHidden } from "@nuvui/react";
 import type { GitChangeDto, GitFileDto } from "@repo/contracts";
+import { FileTypeIcon } from "@repo/file-icons";
 import { useId } from "react";
 
 /** Which list a file is in: it decides its change, and its buttons. */
@@ -115,7 +116,7 @@ export function ChangeList({
           const folder = folderOf(file.path);
           return (
             <ListViewItem key={file.path} value={file.path} textValue={name}>
-              <FileIcon size={16} className="change-list__file-icon" />
+              <FileTypeIcon name={name} className="change-list__file-icon" />
               <span className="change-list__name">
                 {name}
                 {folder ? <span className="change-list__folder">{folder}</span> : null}

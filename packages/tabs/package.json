@@ -25,6 +25,7 @@
     "@nuvui/icons": "catalog:",
     "@nuvui/react": "catalog:",
     "@repo/contracts": "workspace:*",
+    "@repo/file-icons": "workspace:*",
     "@repo/kernel": "workspace:*",
     "react": "catalog:"
   }

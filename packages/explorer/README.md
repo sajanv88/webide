@@ -46,5 +46,5 @@ backend lists at most 10,000 entries per folder.
 ## May depend on
 
 `@repo/contracts` (`ExplorerPort`, the DTOs, `AppEvents`, `AppCommandId`),
-`@repo/kernel`, `react`, `@nuvui/react`, `@nuvui/icons`. Never another
-feature package, `@repo/ipc` or `@tauri-apps/*`.
+`@repo/kernel`, `@repo/file-icons` (a file's icon by its type), `react`,
+`@nuvui/react`, `@nuvui/icons`. Never another feature package, `@repo/ipc` or `@tauri-apps/*`.

@@ -143,7 +143,8 @@
                       "@repo/terminal",
                       "@repo/lsp",
                       "@repo/debug",
-                      "@repo/mcp"
+                      "@repo/mcp",
+                      "@repo/file-icons"
                     ],
                     "message": "@repo/ipc is infrastructure: it may depend on @repo/contracts only."
                   },
@@ -209,6 +210,7 @@
                       "@repo/lsp",
                       "@repo/debug",
                       "@repo/mcp",
+                      "@repo/file-icons",
                       "react",
                       "react-dom",
                       "react/**",
@@ -296,6 +298,26 @@
                   {
                     "group": ["@xterm/**"],
                     "message": "The terminal's renderer lives behind @repo/terminal: only it may import @xterm/*."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/file-icons/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@repo/**", "@tauri-apps/**", "@nuvui/react", "@nuvui/react/**"],
+                    "message": "@repo/file-icons is a shared building block: it depends on react and @nuvui/icons only."
                   }
                 ]
               }

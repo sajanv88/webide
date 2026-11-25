@@ -192,8 +192,8 @@ catalogs:
       specifier: 0.2.0
       version: 0.2.0
     '@nuvui/icons':
-      specifier: 0.1.0
-      version: 0.1.0
+      specifier: 0.3.0
+      version: 0.3.0
     '@nuvui/react':
       specifier: 0.10.0
       version: 0.10.0
@@ -282,7 +282,7 @@ importers:
         version: 0.1.2(@nuvui/react@0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@nuvui/icons':
         specifier: 'catalog:'
-        version: 0.1.0(react@19.3.1)
+        version: 0.3.0(react@19.3.1)
       '@nuvui/react':
         specifier: 'catalog:'
         version: 0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -422,7 +422,7 @@ importers:
     dependencies:
       '@nuvui/icons':
         specifier: 'catalog:'
-        version: 0.1.0(react@19.3.1)
+        version: 0.3.0(react@19.3.1)
       '@nuvui/react':
         specifier: 'catalog:'
         version: 0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -517,16 +517,56 @@ importers:
     dependencies:
       '@nuvui/icons':
         specifier: 'catalog:'
-        version: 0.1.0(react@19.3.1)
+        version: 0.3.0(react@19.3.1)
       '@nuvui/react':
         specifier: 'catalog:'
         version: 0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@repo/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@repo/file-icons':
+        specifier: workspace:*
+        version: link:../file-icons
       '@repo/kernel':
         specifier: workspace:*
         version: link:../kernel
+      react:
+        specifier: 'catalog:'
+        version: 19.3.1
+    devDependencies:
+      '@repo/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@testing-library/dom':
+        specifier: 'catalog:'
+        version: 10.4.2
+      '@testing-library/react':
+        specifier: 'catalog:'
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.3.0(@types/react@19.3.0)
+      jsdom:
+        specifier: 'catalog:'
+        version: 31.0.1
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.3.1(react@19.3.1)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.1.1(@types/node@24.19.2)(jsdom@31.0.1)(vite@8.3.8(@types/node@24.19.2)(sass@1.108.2))
+
+  packages/file-icons:
+    dependencies:
+      '@nuvui/icons':
+        specifier: 'catalog:'
+        version: 0.3.0(react@19.3.1)
       react:
         specifier: 'catalog:'
         version: 19.3.1
@@ -563,13 +603,16 @@ importers:
     dependencies:
       '@nuvui/icons':
         specifier: 'catalog:'
-        version: 0.1.0(react@19.3.1)
+        version: 0.3.0(react@19.3.1)
       '@nuvui/react':
         specifier: 'catalog:'
         version: 0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@repo/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@repo/file-icons':
+        specifier: workspace:*
+        version: link:../file-icons
       '@repo/kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -643,7 +686,7 @@ importers:
     dependencies:
       '@nuvui/icons':
         specifier: 'catalog:'
-        version: 0.1.0(react@19.3.1)
+        version: 0.3.0(react@19.3.1)
       '@nuvui/react':
         specifier: 'catalog:'
         version: 0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -689,7 +732,7 @@ importers:
     dependencies:
       '@nuvui/icons':
         specifier: 'catalog:'
-        version: 0.1.0(react@19.3.1)
+        version: 0.3.0(react@19.3.1)
       '@nuvui/react':
         specifier: 'catalog:'
         version: 0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -735,13 +778,16 @@ importers:
     dependencies:
       '@nuvui/icons':
         specifier: 'catalog:'
-        version: 0.1.0(react@19.3.1)
+        version: 0.3.0(react@19.3.1)
       '@nuvui/react':
         specifier: 'catalog:'
         version: 0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@repo/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@repo/file-icons':
+        specifier: workspace:*
+        version: link:../file-icons
       '@repo/kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -781,7 +827,7 @@ importers:
     dependencies:
       '@nuvui/icons':
         specifier: 'catalog:'
-        version: 0.1.0(react@19.3.1)
+        version: 0.3.0(react@19.3.1)
       '@nuvui/react':
         specifier: 'catalog:'
         version: 0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -827,7 +873,7 @@ importers:
     dependencies:
       '@nuvui/icons':
         specifier: 'catalog:'
-        version: 0.1.0(react@19.3.1)
+        version: 0.3.0(react@19.3.1)
       '@nuvui/react':
         specifier: 'catalog:'
         version: 0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -873,13 +919,16 @@ importers:
     dependencies:
       '@nuvui/icons':
         specifier: 'catalog:'
-        version: 0.1.0(react@19.3.1)
+        version: 0.3.0(react@19.3.1)
       '@nuvui/react':
         specifier: 'catalog:'
         version: 0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@repo/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@repo/file-icons':
+        specifier: workspace:*
+        version: link:../file-icons
       '@repo/kernel':
         specifier: workspace:*
         version: link:../kernel
@@ -919,7 +968,7 @@ importers:
     dependencies:
       '@nuvui/icons':
         specifier: 'catalog:'
-        version: 0.1.0(react@19.3.1)
+        version: 0.3.0(react@19.3.1)
       '@nuvui/react':
         specifier: 'catalog:'
         version: 0.10.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -1309,8 +1358,8 @@ packages:
       react: ^18.2.0 || ^19.0.0
       react-dom: ^18.2.0 || ^19.0.0
 
-  '@nuvui/icons@0.1.0':
-    resolution: {integrity: sha512-cdmo5ogEDjza9qjZFnmkdndcDbfAMx1jbsuFHyMVp09Ev7876lGV50ulHEAPhIN8VK2MYinHZCnXGrj35iYNYw==}
+  '@nuvui/icons@0.3.0':
+    resolution: {integrity: sha512-G0S17nLGPj1gRE53gVmZA+PQx8t55mLED47KIhKZ6O7Xd8GfMMxlfDk+9owVxmuu/XzrkxphAl13l4UvVvb/sQ==}
     engines: {node: '>=18'}
     peerDependencies:
       react: ^18.2.0 || ^19.0.0
@@ -3934,7 +3983,7 @@ snapshots:
       - '@types/react'
       - '@types/react-dom'
 
-  '@nuvui/icons@0.1.0(react@19.3.1)':
+  '@nuvui/icons@0.3.0(react@19.3.1)':
     dependencies:
       react: 19.3.1
 

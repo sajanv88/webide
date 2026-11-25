@@ -1,5 +1,5 @@
 import "./search-view.scss";
-import { FileIcon, FilterIcon, RefreshIcon } from "@nuvui/icons";
+import { FilterIcon, RefreshIcon } from "@nuvui/icons";
 import {
   Button,
   Field,
@@ -20,6 +20,7 @@ import type {
   SearchPort,
   TextSearchDto,
 } from "@repo/contracts";
+import { FileTypeIcon } from "@repo/file-icons";
 import type { CommandRegistry, EventBus } from "@repo/kernel";
 import {
   type FormEvent,
@@ -417,7 +418,7 @@ function FileRow({ file, lines }: { readonly file: FileMatchesDto; readonly line
       textValue={name}
       label={
         <span className="search-file">
-          <FileIcon size={16} className="search-file__icon" />
+          <FileTypeIcon name={name} className="search-file__icon" />
           <span className="search-file__name">{name}</span>
           {folder ? <span className="search-file__folder">{folder}</span> : null}
           <span className="search-file__count">

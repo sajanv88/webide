@@ -55,5 +55,6 @@ Both search through the `SearchPort` the app binds to the open workspace.
 ## May depend on
 
 `@repo/contracts` (`SearchPort`, the DTOs, `AppEvents`), `@repo/kernel`,
-`react`, `@nuvui/react`, `@nuvui/icons`. Never another feature package,
+`@repo/file-icons` (a file's icon by its type), `react`, `@nuvui/react`,
+`@nuvui/icons`. Never another feature package,
 `@repo/ipc` or `@tauri-apps/*`.

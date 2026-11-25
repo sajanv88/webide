@@ -57,5 +57,6 @@ Commands: `git.refresh`, `git.commit`, `git.stageAll`, `git.unstageAll`,
 ## May depend on
 
 `@repo/contracts` (`GitPort`, the DTOs, `AppEvents`), `@repo/kernel`,
-`react`, `@nuvui/react`, `@nuvui/icons`. Never another feature package,
+`@repo/file-icons` (a file's icon by its type), `react`, `@nuvui/react`,
+`@nuvui/icons`. Never another feature package,
 `@repo/ipc` or `@tauri-apps/*`.
