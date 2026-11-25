@@ -56,7 +56,16 @@ runtime: everything here is data and pure functions.
   least 1024), `AgentCall` and `AgentSink` (what an agent did), and the ports
   `AgentHost` (the configuration, the token, serving), `AgentServer` (running;
   dropping it stops it) and `AgentWorkbench` (what the server reads from the
-  app: the open folder, the read limits).
+  app: the open folder, the read limits). `WorkspaceTools` (with `ToolSpec`):
+  the same read tools for the IDE's own assistant, called by name, and a
+  write the person accepted; `AgentHost::workspace_tools` makes them.
+- `assistant`: `ProviderKind` (Anthropic, OpenAI, Azure AI Foundry, Gemini,
+  Ollama, Bedrock), `ProviderSetup` (the model, an endpoint, a region, a
+  profile, `BedrockAuth`), `AssistantStatus`, `ModelInfo`, `ChatContext`,
+  `AssistantEvent` (text, a tool's status, a proposed change and the
+  person's decision, done, failed) and `AssistantSink`, and the port
+  `AssistantHost` (the setup and its key, the models, a check, sending,
+  stopping, deciding, clearing).
 - Ports: `WorkspaceFs`, `WorkspaceStore`, `FsWatcher`, `WorkspaceSearch`,
   `GitClient`.
 

@@ -40,7 +40,8 @@ Types only (`export type *`):
 - `AppEvents`: `workspace.opened`, `explorer.fileActivated`, `file.openRequested`
   (a path, and optionally where to put the cursor), `workspace.filesChanged`,
   `settings.changed`, `document.opened` / `document.changed` / `document.closed`
-  (an open file's text), `language.problems`, `language.status`, `debug.event`, `agent.call`.
+  (an open file's text), `language.problems`, `language.status`, `debug.event`, `agent.call`,
+  `assistant.event`.
 - `EditorProblem`: a problem placed by character offset, and by line.
 - `ExplorerPort`: `listDirectory(path)`, bound to the open workspace by the app.
 - `DocumentsPort`: `readFile(path)`, `writeFile(path, text)`, the same way, for `@repo/tabs`.
@@ -55,6 +56,8 @@ Types only (`export type *`):
   `resume(threadId, step?)`, `pause`, `stack`, `scopes`, `variables`, `evaluate`,
   for `@repo/debug`.
 - `AgentPort`: `status()`, `configure(config)`, `newToken()`, for `@repo/mcp`.
+- `AssistantPort`: `status`, `save`, `forget`, `models`, `check`, `send`,
+  `stop`, `decide`, `clear`, for `@repo/assistant`.
 
 ## May depend on
 

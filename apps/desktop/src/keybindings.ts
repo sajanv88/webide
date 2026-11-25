@@ -27,6 +27,8 @@ export const DEFAULT_KEYBINDINGS: readonly KeybindingSpec<AppCommandId>[] = [
   { key: "F11", command: "debug.stepInto" },
   { key: "Shift+F11", command: "debug.stepOut" },
   { key: "Mod+,", command: "settings.open" },
+  { key: "Mod+Alt+I", command: "assistant.focus" },
+  { key: "Mod+Alt+B", command: "view.toggleAside" },
 ];
 
 /**
@@ -41,6 +43,8 @@ const TERMINAL_PASSES: ReadonlySet<AppCommandId> = new Set<AppCommandId>([
   "view.showExplorer",
   "view.showSourceControl",
   "view.toggleSidebar",
+  "view.toggleAside",
+  "assistant.focus",
   "terminal.focus",
   "terminal.new",
   "tabs.next",

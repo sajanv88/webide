@@ -1,6 +1,7 @@
 // The composition root: the only place that wires modules together.
-import { BugIcon, FolderIcon, GitBranchIcon, SearchIcon } from "@nuvui/icons";
+import { BugIcon, FolderIcon, GitBranchIcon, SearchIcon, SparklesIcon } from "@nuvui/icons";
 import { Toaster, toast } from "@nuvui/react";
+import { AssistantPanel, createAssistantStore, SetupDialog } from "@repo/assistant";
 import {
   attachKeybindings,
   CommandPalette,
@@ -11,6 +12,7 @@ import type {
   AppCommandId,
   AppEvents,
   AppInfoDto,
+  AssistantPort,
   DebugPort,
   EditorProblem,
   GitPort,
@@ -30,6 +32,15 @@ import {
   agentNewToken,
   agentStatus,
   appInfo,
+  assistantCheck,
+  assistantClear,
+  assistantDecide,
+  assistantForget,
+  assistantModels,
+  assistantSave,
+  assistantSend,
+  assistantStatus,
+  assistantStop,
   closeTerminal,
   closeWindow,
   currentWorkspace,
@@ -113,6 +124,20 @@ const applyTheme = (theme: string) => {
 bus.on("settings.changed", (settings) => applyTheme(settings.theme));
 
 // The MCP server for AI agents: one for the app, whatever folder is open.
+// The AI assistant: one for the app; its conversation is about the folder open.
+const assistantPort: AssistantPort = {
+  status: assistantStatus,
+  save: assistantSave,
+  forget: assistantForget,
+  models: assistantModels,
+  check: assistantCheck,
+  send: assistantSend,
+  stop: assistantStop,
+  decide: assistantDecide,
+  clear: assistantClear,
+};
+const assistant = createAssistantStore(assistantPort, bus);
+
 const agents = createAgentStore(
   { status: agentStatus, configure: agentConfigure, newToken: agentNewToken },
   bus,
@@ -202,6 +227,9 @@ export function App() {
         case "agentCall":
           bus.emit("agent.call", event.call);
           break;
+        case "assistant":
+          bus.emit("assistant.event", event.event);
+          break;
         case "closeRequested":
           void settleUnsaved().then(async (settled) => {
             if (!settled) return;
@@ -243,6 +271,7 @@ export function App() {
   useEffect(() => {
     let live = true;
     void agents.refresh();
+    void assistant.refresh();
     void Promise.all([appInfo(), currentWorkspace(), recentWorkspaces(), getSettings()]).then(
       ([nextInfo, current, nextRecent, settings]) => {
         if (!live) return;
@@ -545,6 +574,7 @@ export function App() {
           { kind: "separator" },
           { kind: "command", command: "settings.open" },
           { kind: "command", command: "agents.open" },
+          { kind: "command", command: "assistant.setup" },
         ],
       },
       {
@@ -557,6 +587,10 @@ export function App() {
           { kind: "command", command: "view.showSourceControl" },
           { kind: "command", command: "view.toggleSidebar" },
           { kind: "command", command: "view.togglePanel" },
+          { kind: "command", command: "view.toggleAside" },
+          { kind: "separator" },
+          { kind: "command", command: "assistant.focus" },
+          { kind: "command", command: "assistant.newChat" },
           { kind: "separator" },
           { kind: "command", command: "terminal.focus" },
           { kind: "command", command: "terminal.new" },
@@ -624,6 +658,29 @@ export function App() {
               },
             }
           : {})}
+        aside={{
+          title: "Assistant",
+          icon: <SparklesIcon size={18} />,
+          content: (
+            <AssistantPanel
+              store={assistant}
+              registry={registry}
+              activePath={() => {
+                const state = documents?.getState();
+                return state?.tabs.find((tab) => tab.id === state.activeId)?.path;
+              }}
+              renderDiff={(path, original, proposed) => (
+                <DiffSurface
+                  path={path}
+                  original={original}
+                  modified={proposed}
+                  aria-label={`The assistant's change to ${path}`}
+                  styleNonce={styleNonce}
+                />
+              )}
+            />
+          ),
+        }}
         main={
           workspace && documents ? (
             <DocumentTabs
@@ -679,6 +736,12 @@ export function App() {
       ) : null}
       <SettingsDialog port={settingsPort} registry={registry} bus={bus} />
       <AgentsDialog store={agents} registry={registry} />
+      <SetupDialog
+        store={assistant}
+        port={assistantPort}
+        registry={registry}
+        onSaved={() => void registry.execute("assistant.focus")}
+      />
       <Toaster />
     </>
   );

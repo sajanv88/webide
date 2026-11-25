@@ -11,6 +11,7 @@ catalog:
   "@codemirror/state": 6.7.6
   "@codemirror/view": 6.43.15
   "@nuvui/backgrounds": 0.1.2
+  "@nuvui/chat": 0.2.2
   "@nuvui/editor": 0.2.0
   "@nuvui/icons": 0.3.0
   "@nuvui/react": 0.10.0

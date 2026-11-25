@@ -13,8 +13,10 @@
   },
   "dependencies": {
     "@nuvui/backgrounds": "catalog:",
+    "@nuvui/chat": "catalog:",
     "@nuvui/icons": "catalog:",
     "@nuvui/react": "catalog:",
+    "@repo/assistant": "workspace:*",
     "@repo/commands": "workspace:*",
     "@repo/contracts": "workspace:*",
     "@repo/debug": "workspace:*",

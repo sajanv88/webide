@@ -1,0 +1,123 @@
+// The assistant in the secondary side bar: a header, the conversation that
+// scrolls, and the prompt box pinned under it.
+.assistant {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  block-size: 100%;
+  min-inline-size: 0;
+  background-color: var(--color-surface);
+  color: var(--color-surface-foreground);
+
+  &__header {
+    display: flex;
+    gap: calc(var(--spacing) * 2);
+    align-items: center;
+    min-inline-size: 0;
+    padding-block: calc(var(--spacing) * 2);
+    padding-inline: calc(var(--spacing) * 4) calc(var(--spacing) * 2);
+    border-block-end: var(--nuv-border-width) solid var(--color-border);
+  }
+
+  &__title {
+    flex: none;
+    margin: 0;
+    font-size: var(--text-sm);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--text-sm--line-height);
+  }
+
+  &__model {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    overflow: hidden;
+    color: var(--color-muted-foreground);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__tools {
+    display: flex;
+    flex: none;
+    gap: var(--spacing);
+    margin-inline-start: auto;
+  }
+
+  // Square, as the button holds only an icon.
+  &__icon {
+    aspect-ratio: 1;
+    padding: 0;
+  }
+
+  &__alert {
+    margin: calc(var(--spacing) * 2);
+  }
+
+  &__empty {
+    grid-row: 3;
+    align-self: center;
+    padding: calc(var(--spacing) * 4);
+  }
+
+  &__conversation {
+    grid-row: 3;
+    min-block-size: 0;
+  }
+
+  &__suggestions {
+    padding-block: calc(var(--spacing) * 4);
+  }
+
+  &__reply {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+
+  &__link {
+    text-decoration: underline;
+    overflow-wrap: anywhere;
+  }
+
+  &__tool,
+  &__proposal {
+    min-inline-size: 0;
+  }
+
+  &__file {
+    display: inline-flex;
+    gap: calc(var(--spacing) * 2);
+    align-items: center;
+    min-inline-size: 0;
+    overflow-wrap: break-word;
+  }
+
+  &__summary {
+    margin: 0;
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+  }
+
+  // The diff scrolls inside a box of its own, so a long file doesn't push
+  // the conversation away.
+  &__diff {
+    block-size: 18rem;
+    min-inline-size: 0;
+    overflow: hidden;
+    border: var(--nuv-border-width) solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+
+  &__note {
+    margin: 0;
+    color: var(--color-muted-foreground);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+  }
+
+  &__prompt {
+    grid-row: 4;
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3) calc(var(--spacing) * 3);
+    border-block-start: var(--nuv-border-width) solid var(--color-border);
+  }
+}

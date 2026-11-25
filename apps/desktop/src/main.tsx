@@ -1,5 +1,6 @@
 import "@nuvui/react/styles.css";
 import "@nuvui/backgrounds/styles.css";
+import "@nuvui/chat/styles.css";
 import "./styles/globals.scss";
 import { getStyleNonce } from "@repo/ipc";
 import { StrictMode } from "react";

@@ -4,6 +4,11 @@ import type {
   AgentCallDto,
   AgentConfigArgs,
   AgentStatusDto,
+  AssistantDecideArgs,
+  AssistantEventDto,
+  AssistantSendArgs,
+  AssistantSetupArgs,
+  AssistantStatusDto,
   BreakpointDto,
   CompletionsDto,
   DebugEventDto,
@@ -18,6 +23,7 @@ import type {
   HoverDto,
   IpcError,
   LanguageStatusDto,
+  ModelInfoDto,
   ProblemDto,
   ReadFileDto,
   ScopeDto,
@@ -83,6 +89,11 @@ export type AppCommandId =
   | "commands.showPalette"
   | "settings.open"
   | "agents.open"
+  | "view.toggleAside"
+  | "view.showAside"
+  | "assistant.focus"
+  | "assistant.setup"
+  | "assistant.newChat"
   | "help.about";
 
 /** Events on the app's bus, by name, with their payloads. */
@@ -125,6 +136,8 @@ export interface AppEvents {
   "debug.event": DebugEventDto;
   /** An AI agent used a tool of the MCP server. */
   "agent.call": AgentCallDto;
+  /** What a conversation with the IDE's assistant reports. */
+  "assistant.event": AssistantEventDto;
 }
 
 /** What the explorer needs from the outside: one level of a folder in the open workspace. */
@@ -255,4 +268,26 @@ export interface AgentPort {
   configure(config: AgentConfigArgs): Promise<IpcResult<AgentStatusDto>>;
   /** Replaces the token: agents with the old one are refused from then on. */
   newToken(): Promise<IpcResult<AgentStatusDto>>;
+}
+
+/**
+ * The IDE's AI assistant: its setup (the key goes to the system's
+ * credential store, never back), and conversations, whose replies arrive as
+ * `assistant.event`.
+ */
+export interface AssistantPort {
+  status(): Promise<IpcResult<AssistantStatusDto>>;
+  save(args: AssistantSetupArgs): Promise<IpcResult<AssistantStatusDto>>;
+  /** Forgets the setup and every key kept. */
+  forget(): Promise<IpcResult<AssistantStatusDto>>;
+  /** The models the provider offers. */
+  models(args: AssistantSetupArgs): Promise<IpcResult<ModelInfoDto[]>>;
+  /** Asks the model for a word: its answer, when the setup works. */
+  check(args: AssistantSetupArgs): Promise<IpcResult<string>>;
+  send(args: AssistantSendArgs): Promise<IpcResult<null>>;
+  stop(conversationId: string): Promise<IpcResult<null>>;
+  /** Accepts (writes) or rejects a change it proposed. */
+  decide(args: AssistantDecideArgs): Promise<IpcResult<null>>;
+  /** Forgets a conversation. */
+  clear(conversationId: string): Promise<IpcResult<null>>;
 }
