@@ -144,6 +144,7 @@
                       "@repo/lsp",
                       "@repo/debug",
                       "@repo/mcp",
+                      "@repo/assistant",
                       "@repo/file-icons"
                     ],
                     "message": "@repo/ipc is infrastructure: it may depend on @repo/contracts only."
@@ -210,6 +211,7 @@
                       "@repo/lsp",
                       "@repo/debug",
                       "@repo/mcp",
+                      "@repo/assistant",
                       "@repo/file-icons",
                       "react",
                       "react-dom",
@@ -241,7 +243,8 @@
         "packages/git/**",
         "packages/lsp/**",
         "packages/debug/**",
-        "packages/mcp/**"
+        "packages/mcp/**",
+        "packages/assistant/**"
       ],
       "linter": {
         "rules": {
@@ -291,6 +294,7 @@
                       "@repo/git",
                       "@repo/debug",
                       "@repo/mcp",
+                      "@repo/assistant",
                       "@repo/search"
                     ],
                     "message": "A feature package never imports another feature package or @repo/ipc. Use @repo/kernel (commands, events), @repo/contracts (types, ports), and let apps/desktop wire them."
@@ -376,6 +380,7 @@
                       "@repo/git",
                       "@repo/debug",
                       "@repo/mcp",
+                      "@repo/assistant",
                       "@repo/search"
                     ],
                     "message": "A feature package never imports another feature package or @repo/ipc. Use @repo/kernel (commands, events), @repo/contracts (types, ports), and let apps/desktop wire them."
@@ -432,6 +437,7 @@
                       "@repo/git",
                       "@repo/debug",
                       "@repo/mcp",
+                      "@repo/assistant",
                       "@repo/search"
                     ],
                     "message": "A feature package never imports another feature package or @repo/ipc. Use @repo/kernel (commands, events), @repo/contracts (types, ports), and let apps/desktop wire them."

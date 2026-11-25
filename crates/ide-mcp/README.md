@@ -53,7 +53,10 @@ The configuration (on, edits, port) is kept beside the settings, in
 ## Public API
 
 - `McpHost::new(config_dir, fs, search, git)` (implements
-  `ide_core::agent::AgentHost`).
+  `ide_core::agent::AgentHost`). Its `workspace_tools` gives the IDE's own
+  assistant the read tools (the same bodies, refusals and limits) and a
+  write for changes the person accepted; those calls aren't reported as
+  agents' calls.
 - `unified_diff(path, original, modified)`, `workspace_relative(root, path)`.
 
 ## May depend on

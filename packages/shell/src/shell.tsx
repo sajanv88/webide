@@ -14,11 +14,13 @@ import {
 } from "@nuvui/react";
 import type { AppCommandId } from "@repo/contracts";
 import type { CommandRegistry } from "@repo/kernel";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { AppMenubar, type MenuShortcut, type MenuSpec } from "./app-menubar";
 
 /** DOM id of the side pane, which the toggle button controls. */
 const SIDEBAR_ID = "app-shell-sidebar";
+/** DOM id of the pane at the end, which its button controls. */
+const ASIDE_ID = "app-shell-aside";
 
 /** One view of the side pane (the explorer, search…), chosen in the activity bar. */
 export interface SidebarView {
@@ -52,8 +54,73 @@ export interface ShellProps {
    * resizable, named `title`. It stays mounted while it's hidden.
    */
   readonly panel?: { readonly title: string; readonly content: ReactNode };
+  /**
+   * Slot: a pane at the end of the work area (the assistant), hidden until
+   * shown, resizable, named `title`. It stays mounted while it's hidden.
+   * The shell registers `view.toggleAside` and `view.showAside` for it.
+   */
+  readonly aside?: {
+    readonly title: string;
+    /** On the button in the top bar that shows and hides it. */
+    readonly icon: ReactNode;
+    readonly content: ReactNode;
+  };
   /** Slot: items in the status bar. */
   readonly statusBar?: ReactNode;
+}
+
+/**
+ * A pane that can hide: it starts hidden unless its size was kept from
+ * before, opens at its last size (or `size`, when that was barely there),
+ * and gives focus back to where it was when it hides with focus inside.
+ */
+function useHidingPane(enabled: boolean, kept: unknown, size: `${number}%`) {
+  const panel = useResizablePanelRef();
+  const section = useRef<HTMLElement>(null);
+  // Where focus was before it went into the pane, to give back when it's hidden.
+  const before = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const element = section.current;
+    if (!enabled || !element) return;
+    const entered = (event: FocusEvent) => {
+      const from = event.relatedTarget;
+      if (from instanceof HTMLElement && !element.contains(from)) before.current = from;
+    };
+    element.addEventListener("focusin", entered);
+    return () => element.removeEventListener("focusin", entered);
+  }, [enabled]);
+
+  const start = useRef(kept);
+  useEffect(() => {
+    if (enabled && !start.current) panel.current?.collapse();
+  }, [enabled, panel]);
+
+  const open = useCallback(() => {
+    const now = panel.current;
+    if (!now?.isCollapsed()) return;
+    now.expand();
+    if (now.getSize().asPercentage < 15) now.resize(size);
+  }, [panel, size]);
+
+  const toggle = useCallback(() => {
+    const now = panel.current;
+    if (!now) return;
+    if (now.isCollapsed()) {
+      open();
+      return;
+    }
+    const hadFocus = section.current?.contains(document.activeElement) ?? false;
+    now.collapse();
+    // Focus mustn't stay in a hidden pane: back where it was before.
+    if (hadFocus) {
+      const back = before.current;
+      if (back?.isConnected) back.focus();
+      else (document.activeElement as HTMLElement | null)?.blur();
+    }
+  }, [panel, open]);
+
+  return { panel, section: section as RefObject<HTMLElement | null>, open, toggle };
 }
 
 /**
@@ -70,6 +137,7 @@ export function Shell({
   views = [],
   main,
   panel,
+  aside,
   statusBar,
 }: ShellProps) {
   const first = views[0];
@@ -82,74 +150,57 @@ export function Shell({
   const { defaultLayout, onLayoutChanged } = useResizableLayout({ id: "shell" });
   // Whether the view under the pointer was already shown when it was pressed.
   const pressedActive = useRef(false);
-  const bottomPanel = useResizablePanelRef();
-  const panelSection = useRef<HTMLElement>(null);
-  // Where focus was before it went into the panel, to give back when it's hidden.
-  const beforePanel = useRef<HTMLElement | null>(null);
   const panelLayout = useResizableLayout({ id: "shell-panel" });
   const hasPanel = panel !== undefined;
-
-  // Remember where focus came from when it enters the panel.
-  useEffect(() => {
-    const section = panelSection.current;
-    if (!hasPanel || !section) return;
-    const entered = (event: FocusEvent) => {
-      const from = event.relatedTarget;
-      if (from instanceof HTMLElement && !section.contains(from)) beforePanel.current = from;
-    };
-    section.addEventListener("focusin", entered);
-    return () => section.removeEventListener("focusin", entered);
-  }, [hasPanel]);
-
-  // The panel starts hidden, unless its size was kept from before.
-  const panelStart = useRef(panelLayout.defaultLayout);
-  useEffect(() => {
-    if (hasPanel && !panelStart.current) bottomPanel.current?.collapse();
-  }, [hasPanel, bottomPanel]);
+  const bottom = useHidingPane(hasPanel, panelLayout.defaultLayout, "30%");
+  const asideLayout = useResizableLayout({ id: "shell-aside" });
+  const hasAside = aside !== undefined;
+  const end = useHidingPane(hasAside, asideLayout.defaultLayout, "30%");
+  const [asideOpen, setAsideOpen] = useState(false);
 
   useEffect(() => {
     if (!hasPanel) return;
-    // Opened at its last size, or at 30% when that was barely there.
-    const open = () => {
-      const now = bottomPanel.current;
-      if (!now?.isCollapsed()) return;
-      now.expand();
-      if (now.getSize().asPercentage < 15) now.resize("30%");
-    };
     const disposers = [
       registry.register({
         id: "view.togglePanel",
         title: "Toggle Panel",
         category: "View",
-        run: () => {
-          const now = bottomPanel.current;
-          if (!now) return;
-          if (now.isCollapsed()) {
-            open();
-            return;
-          }
-          const hadFocus = panelSection.current?.contains(document.activeElement) ?? false;
-          now.collapse();
-          // Focus mustn't stay in a hidden panel: back where it was before.
-          if (hadFocus) {
-            const back = beforePanel.current;
-            if (back?.isConnected) back.focus();
-            else (document.activeElement as HTMLElement | null)?.blur();
-          }
-        },
+        run: bottom.toggle,
       }),
       registry.register({
         id: "view.showPanel",
         title: "Show Panel",
         category: "View",
         palette: false,
-        run: open,
+        run: bottom.open,
       }),
     ];
     return () => {
       for (const dispose of disposers) dispose();
     };
-  }, [registry, bottomPanel, hasPanel]);
+  }, [registry, hasPanel, bottom.toggle, bottom.open]);
+
+  useEffect(() => {
+    if (!hasAside) return;
+    const disposers = [
+      registry.register({
+        id: "view.toggleAside",
+        title: "Toggle Secondary Side Bar",
+        category: "View",
+        run: end.toggle,
+      }),
+      registry.register({
+        id: "view.showAside",
+        title: "Show Secondary Side Bar",
+        category: "View",
+        palette: false,
+        run: end.open,
+      }),
+    ];
+    return () => {
+      for (const dispose of disposers) dispose();
+    };
+  }, [registry, hasAside, end.toggle, end.open]);
 
   const viewIds = views.map((view) => `${view.id}:${view.command ?? ""}`).join(" ");
   // biome-ignore lint/correctness/useExhaustiveDependencies: `viewIds` stands for `views`, which is a new array on each render
@@ -217,20 +268,48 @@ export function Shell({
       <ResizableHandle aria-label="Resize panel" />
       <ResizablePanel
         id="app-shell-panel"
-        panelRef={bottomPanel}
+        panelRef={bottom.panel}
         collapsible
         defaultSize="30%"
         minSize="6rem"
         maxSize="80%"
         className="app-shell__pane"
       >
-        <section ref={panelSection} className="app-shell__panel" aria-label={panel.title}>
+        <section ref={bottom.section} className="app-shell__panel" aria-label={panel.title}>
           {panel.content}
         </section>
       </ResizablePanel>
     </Resizable>
   ) : (
     workArea
+  );
+  const centre = aside ? (
+    <Resizable
+      className="app-shell__row"
+      {...(asideLayout.defaultLayout ? { defaultLayout: asideLayout.defaultLayout } : {})}
+      onLayoutChanged={asideLayout.onLayoutChanged}
+    >
+      <ResizablePanel id="app-shell-centre" minSize="30%" className="app-shell__pane">
+        {mainArea}
+      </ResizablePanel>
+      <ResizableHandle aria-label={`Resize ${aside.title}`} />
+      <ResizablePanel
+        id={ASIDE_ID}
+        panelRef={end.panel}
+        onResize={(size) => setAsideOpen(size.asPercentage > 0)}
+        collapsible
+        defaultSize="30%"
+        minSize="18rem"
+        maxSize="60%"
+        className="app-shell__pane"
+      >
+        <aside ref={end.section} className="app-shell__aside" aria-label={aside.title}>
+          {aside.content}
+        </aside>
+      </ResizablePanel>
+    </Resizable>
+  ) : (
+    mainArea
   );
 
   return (
@@ -251,6 +330,20 @@ export function Shell({
               onClick={() => void registry.execute("view.toggleSidebar")}
             >
               <SidebarIcon size={18} />
+            </Button>
+          ) : null}
+          {aside ? (
+            <Button
+              intent="ghost"
+              size="sm"
+              className="app-shell__icon"
+              aria-label={`Show ${aside.title}`}
+              title={aside.title}
+              aria-expanded={asideOpen}
+              aria-controls={ASIDE_ID}
+              onClick={() => void registry.execute("view.toggleAside")}
+            >
+              {aside.icon}
             </Button>
           ) : null}
         </div>
@@ -317,12 +410,12 @@ export function Shell({
             </ResizablePanel>
             <ResizableHandle aria-label="Resize side bar" />
             <ResizablePanel id="app-shell-main" minSize="30%" className="app-shell__pane">
-              {mainArea}
+              {centre}
             </ResizablePanel>
           </Resizable>
         </Tabs>
       ) : (
-        <div className="app-shell__body">{mainArea}</div>
+        <div className="app-shell__body">{centre}</div>
       )}
       {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: a top-level <footer> is the contentinfo landmark (HTML-AAM), which takes a name; Biome can't see that it's top-level */}
       <footer className="app-shell__status" aria-label="Status bar">

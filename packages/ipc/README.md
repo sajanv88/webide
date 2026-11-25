@@ -24,8 +24,11 @@ The only package that imports `@tauri-apps/api`. It turns the commands in
 - `debugStart`, `debugStop`, `debugBreakpoints`, `debugResume`, `debugPause`,
   `debugStack`, `debugScopes`, `debugVariables`, `debugEvaluate`.
 - `agentStatus`, `agentConfigure`, `agentNewToken`.
+- `assistantStatus`, `assistantSave`, `assistantForget`, `assistantModels`,
+  `assistantCheck`, `assistantSend`, `assistantStop`, `assistantDecide`,
+  `assistantClear`.
 - `subscribeEvents(onEvent)`: hears `BackendEventDto`s (file changes, the
-  window closing, the debugger, AI agents' calls) over a Tauri `Channel`; resolves to the function that stops.
+  window closing, the debugger, AI agents' calls, the assistant) over a Tauri `Channel`; resolves to the function that stops.
 - `setCloseGuard(unsaved)`, `closeWindow()`: the window asks before closing
   while there are unsaved changes.
 - `IpcResult<T>`: `{ ok: true, value }` or `{ ok: false, error: IpcError }`. Calls

@@ -91,6 +91,18 @@
     block-size: 100%;
   }
 
+  &__row {
+    block-size: 100%;
+  }
+
+  &__aside {
+    box-sizing: border-box;
+    block-size: 100%;
+    overflow: hidden;
+    border-inline-start: var(--nuv-border-width) solid var(--color-border);
+    background-color: var(--color-surface);
+  }
+
   &__panel {
     box-sizing: border-box;
     block-size: 100%;

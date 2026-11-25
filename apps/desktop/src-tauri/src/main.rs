@@ -6,6 +6,7 @@
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use ide_assistant::AssistantService;
 use ide_debug::NodeDebugger;
 use ide_fs::LocalFs;
 use ide_git::LocalGit;
@@ -30,6 +31,9 @@ fn main() -> ExitCode {
                 search.clone(),
                 git.clone(),
             )),
+            // The AI assistant: its setup beside the settings, keys in the
+            // system's credential store; it reads through the agents' tools.
+            assistant: Arc::new(AssistantService::new(paths.config_dir.clone())),
             fs,
             workspace: Arc::new(JsonWorkspaceStore::new(paths.config_dir.clone())),
             watcher: Arc::new(LocalWatcher::new()),

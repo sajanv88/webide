@@ -86,11 +86,11 @@ warn before they open one.
 
 ```
 crates/            Rust: ide-core, ide-fs, ide-watcher, ide-workspace, ide-search, ide-git,
-                   ide-terminal, ide-lsp, ide-debug, ide-mcp, ide-ipc
+                   ide-terminal, ide-lsp, ide-debug, ide-mcp, ide-assistant, ide-ipc
 apps/desktop/      The Vite frontend (src/) and the Tauri composition root (src-tauri/)
 packages/          Frontend modules: contracts, kernel, ipc, shell, explorer, tabs,
                    editor-surface, commands, settings, search, git, terminal, lsp, debug,
-                   mcp, file-icons, and the shared tsconfig
+                   mcp, assistant, file-icons, and the shared tsconfig
 xtask/             cargo xtask check-boundaries, check-csp, check-contracts
 ```
 
@@ -115,3 +115,16 @@ Agents read files, search, and see git's changes; they write files only when
 "Allow agents to edit files" is on, never in `.git`, and never run commands.
 The dialog has the `claude mcp add …` command to copy, and lists what agents
 did. Details: [crates/ide-mcp](crates/ide-mcp/README.md).
+
+## AI assistant
+
+View → Open the AI Assistant (Ctrl+Alt+I, Cmd+Alt+I on macOS) opens it in
+the secondary side bar; File → Set Up the AI Assistant… is a step guide:
+the provider (Anthropic, OpenAI, Azure AI Foundry, Gemini, Ollama or Amazon
+Bedrock), how to reach it, the model, and a check that it answers. Keys go
+to the system's credential store, and every request goes from the app's
+own process. The assistant reads the folder with the same tools as agents,
+and each change it proposes is shown as a diff that's written only when
+you accept it. It runs no commands. Details:
+[crates/ide-assistant](crates/ide-assistant/README.md),
+[packages/assistant](packages/assistant/README.md).

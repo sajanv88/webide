@@ -4,7 +4,7 @@
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-use ide_core::agent::{AgentCall, AgentSink, AgentWorkbench};
+use ide_core::agent::{AgentCall, AgentSink, AgentWorkbench, ToolSpec, WorkspaceTools};
 use ide_core::fs::{NodeKind, ReadOutcome, is_git_internal};
 use ide_core::git::{DiffSide, DiffTexts, GitChange, GitState};
 use ide_core::{
@@ -65,19 +65,9 @@ impl Tools {
         work: impl FnOnce(&Ports, &WorkspaceRoot) -> Result<String, String> + Send + 'static,
     ) -> Result<String, String> {
         let ports = Arc::clone(&self.ports);
-        let result = tokio::task::spawn_blocking(move || {
-            let root = ports
-                .workbench
-                .root()
-                .ok_or_else(|| "no folder is open in the IDE".to_owned())?;
-            // A bare repository (or another git directory) opened as the folder.
-            if looks_like_git_dir(root.path()) {
-                return Err("the open folder is a git directory: agents can't use it".to_owned());
-            }
-            work(&ports, &root)
-        })
-        .await
-        .unwrap_or_else(|_| Err("the IDE failed while doing this".to_owned()));
+        let result = tokio::task::spawn_blocking(move || run_now(&ports, work))
+            .await
+            .unwrap_or_else(|_| Err("the IDE failed while doing this".to_owned()));
         (self.ports.sink)(AgentCall {
             tool: tool.to_owned(),
             target,
@@ -85,6 +75,22 @@ impl Tools {
         });
         result
     }
+}
+
+/// Runs `work` on the open workspace, on this thread.
+fn run_now(
+    ports: &Ports,
+    work: impl FnOnce(&Ports, &WorkspaceRoot) -> Result<String, String>,
+) -> Result<String, String> {
+    let root = ports
+        .workbench
+        .root()
+        .ok_or_else(|| "no folder is open in the IDE".to_owned())?;
+    // A bare repository (or another git directory) opened as the folder.
+    if looks_like_git_dir(root.path()) {
+        return Err("the open folder is a git directory: agents can't use it".to_owned());
+    }
+    work(ports, &root)
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -164,14 +170,7 @@ impl Tools {
         annotations(read_only_hint = true)
     )]
     async fn workspace_info(&self) -> Result<String, String> {
-        self.run("workspace_info", None, |_, root| {
-            Ok(format!(
-                "name: {}\npath: {}",
-                root.name(),
-                root.display_path()
-            ))
-        })
-        .await
+        self.run("workspace_info", None, workspace_info).await
     }
 
     #[tool(
@@ -184,42 +183,7 @@ impl Tools {
     ) -> Result<String, String> {
         let target = args.path.clone();
         self.run("list_directory", target, move |ports, root| {
-            let path = match args.path.as_deref() {
-                Some(path) => workspace_relative(root, path)?,
-                None => RelPath::root(),
-            };
-            refuse_git(root, &path, "read")?;
-            let listing = ports.fs.list_dir(root, &path).map_err(say)?;
-            // .git isn't shown: its config can hold credentials, and git's
-            // own tools (git_status, git_diff) say what agents need.
-            let entries: Vec<_> = listing
-                .entries
-                .iter()
-                .filter(|entry| !is_git_internal(&entry.path))
-                .collect();
-            let mut out = String::new();
-            for entry in &entries {
-                match entry.kind {
-                    NodeKind::Directory => {
-                        let _ = writeln!(out, "{}/", entry.name);
-                    }
-                    _ => match entry.size {
-                        Some(size) => {
-                            let _ = writeln!(out, "{} ({size} bytes)", entry.name);
-                        }
-                        None => {
-                            let _ = writeln!(out, "{}", entry.name);
-                        }
-                    },
-                }
-            }
-            if entries.is_empty() {
-                out.push_str("(empty)\n");
-            }
-            if listing.truncated {
-                out.push_str("(more entries not listed)\n");
-            }
-            Ok(out)
+            list_directory(ports, root, args)
         })
         .await
     }
@@ -231,17 +195,7 @@ impl Tools {
     async fn read_file(&self, Parameters(args): Parameters<ReadArgs>) -> Result<String, String> {
         let target = Some(args.path.clone());
         self.run("read_file", target, move |ports, root| {
-            let path = workspace_relative(root, &args.path)?;
-            refuse_git(root, &path, "read")?;
-            let limits = ports.workbench.read_limits();
-            match ports.fs.read_file(root, &path, limits).map_err(say)? {
-                ReadOutcome::Text { text, .. } => Ok(lines(&text, args.start_line, args.end_line)),
-                ReadOutcome::TooLarge { limit, .. } => Err(format!(
-                    "the file is larger than {limit} bytes, the most the IDE opens"
-                )),
-                ReadOutcome::Binary { .. } => Err("the file isn't text".to_owned()),
-                ReadOutcome::NotUtf8 { .. } => Err("the file isn't UTF-8 text".to_owned()),
-            }
+            read_file(ports, root, args)
         })
         .await
     }
@@ -253,27 +207,7 @@ impl Tools {
     async fn find_files(&self, Parameters(args): Parameters<FindArgs>) -> Result<String, String> {
         let target = args.query.clone();
         self.run("find_files", target, move |ports, root| {
-            let list = ports
-                .search
-                .list_files(root, &CancelFlag::new())
-                .map_err(say)?;
-            let limit = args.limit.unwrap_or(DEFAULT_FILES).clamp(1, MAX_FILES);
-            let query = args.query.unwrap_or_default().to_lowercase();
-            let mut matched = list
-                .files
-                .iter()
-                .filter(|path| in_order(&path.as_str().to_lowercase(), &query));
-            let mut out = String::new();
-            for path in matched.by_ref().take(limit) {
-                let _ = writeln!(out, "{}", path.as_str());
-            }
-            if matched.next().is_some() || list.truncated {
-                out.push_str("(more files not listed: narrow the query)\n");
-            }
-            if out.is_empty() {
-                out.push_str("(no files match)\n");
-            }
-            Ok(out)
+            find_files(ports, root, args)
         })
         .await
     }
@@ -288,50 +222,7 @@ impl Tools {
     ) -> Result<String, String> {
         let target = Some(args.pattern.clone());
         self.run("search_text", target, move |ports, root| {
-            let limit = args
-                .limit
-                .unwrap_or(DEFAULT_MATCH_LINES)
-                .clamp(1, MAX_MATCH_LINES);
-            let query = TextQuery {
-                pattern: args.pattern,
-                is_regex: args.is_regex,
-                match_case: args.match_case,
-                whole_word: args.whole_word,
-                include: args.include,
-                exclude: args.exclude,
-                max_file_bytes: ports.workbench.read_limits().refuse_above,
-            };
-            let outcome = ports
-                .search
-                .search_text(root, &query, &CancelFlag::new())
-                .map_err(say)?;
-            let mut out = String::new();
-            let mut shown = 0;
-            let mut more = outcome.truncated;
-            'files: for file in &outcome.files {
-                for line in &file.lines {
-                    if shown == limit {
-                        more = true;
-                        break 'files;
-                    }
-                    let _ = writeln!(
-                        out,
-                        "{}:{}:{}: {}",
-                        file.path.as_str(),
-                        line.line,
-                        line.column,
-                        line.preview
-                    );
-                    shown += 1;
-                }
-            }
-            if shown == 0 {
-                out.push_str("(no matches)\n");
-            }
-            if more {
-                out.push_str("(more matches not listed: narrow the search)\n");
-            }
-            Ok(out)
+            search_text(ports, root, args)
         })
         .await
     }
@@ -341,50 +232,7 @@ impl Tools {
         annotations(read_only_hint = true)
     )]
     async fn git_status(&self) -> Result<String, String> {
-        self.run("git_status", None, |ports, root| {
-            match ports.git.state(root).map_err(say)? {
-                GitState::Unavailable => Err("git isn't installed".to_owned()),
-                GitState::NotARepository => Ok("not a git repository\n".to_owned()),
-                GitState::Repository(status) => {
-                    let head = &status.head;
-                    let mut out = match (&head.branch, &head.commit) {
-                        (Some(branch), _) => format!("on branch {branch}"),
-                        (None, Some(commit)) => format!("detached at {commit}"),
-                        (None, None) => "no commits yet".to_owned(),
-                    };
-                    if let Some(upstream) = &head.upstream {
-                        let _ = write!(
-                            out,
-                            " (tracking {upstream}: {} ahead, {} behind)",
-                            head.ahead, head.behind
-                        );
-                    }
-                    out.push('\n');
-                    for file in &status.files {
-                        // Untracked is "??", as git writes it.
-                        let (x, y) = match (file.staged, file.unstaged) {
-                            (_, Some(GitChange::Untracked)) | (Some(GitChange::Untracked), _) => {
-                                ('?', '?')
-                            }
-                            (staged, unstaged) => (code(staged), code(unstaged)),
-                        };
-                        let _ = write!(out, "{x}{y} {}", file.path.as_str());
-                        if let Some(from) = &file.from {
-                            let _ = write!(out, " (from {})", from.as_str());
-                        }
-                        out.push('\n');
-                    }
-                    if status.files.is_empty() {
-                        out.push_str("nothing changed\n");
-                    }
-                    if status.truncated {
-                        out.push_str("(more changed files not listed)\n");
-                    }
-                    Ok(out)
-                }
-            }
-        })
-        .await
+        self.run("git_status", None, git_status).await
     }
 
     #[tool(
@@ -394,32 +242,7 @@ impl Tools {
     async fn git_diff(&self, Parameters(args): Parameters<DiffArgs>) -> Result<String, String> {
         let target = Some(args.path.clone());
         self.run("git_diff", target, move |ports, root| {
-            let path = workspace_relative(root, &args.path)?;
-            refuse_git(root, &path, "read")?;
-            let side = if args.staged {
-                DiffSide::Staged
-            } else {
-                DiffSide::Unstaged
-            };
-            let limit = ports.workbench.read_limits().refuse_above;
-            match ports
-                .git
-                .diff_texts(root, &path, side, limit)
-                .map_err(say)?
-            {
-                DiffTexts::Text { original, modified } => {
-                    let diff = unified_diff(path.as_str(), &original, &modified);
-                    Ok(if diff.is_empty() {
-                        "no changes\n".to_owned()
-                    } else {
-                        diff
-                    })
-                }
-                DiffTexts::Binary => Ok("binary files differ\n".to_owned()),
-                DiffTexts::TooLarge { limit } => Err(format!(
-                    "a version is larger than {limit} bytes, the most the IDE opens"
-                )),
-            }
+            git_diff(ports, root, args)
         })
         .await
     }
@@ -431,16 +254,227 @@ impl Tools {
     async fn write_file(&self, Parameters(args): Parameters<WriteArgs>) -> Result<String, String> {
         let target = Some(args.path.clone());
         self.run("write_file", target, move |ports, root| {
-            if !ports.allow_edits {
-                return Err("edits aren't allowed: the person can allow them in the IDE".to_owned());
-            }
-            let path = workspace_relative(root, &args.path)?;
-            refuse_git(root, &path, "written")?;
-            let stamp = ports.fs.write_file(root, &path, &args.text).map_err(say)?;
-            Ok(format!("wrote {} ({} bytes)", path.as_str(), stamp.size))
+            write_file(ports, root, args)
         })
         .await
     }
+}
+
+fn workspace_info(_: &Ports, root: &WorkspaceRoot) -> Result<String, String> {
+    Ok(format!(
+        "name: {}\npath: {}",
+        root.name(),
+        root.display_path()
+    ))
+}
+
+fn list_directory(
+    ports: &Ports,
+    root: &WorkspaceRoot,
+    args: DirectoryArgs,
+) -> Result<String, String> {
+    let path = match args.path.as_deref() {
+        Some(path) => workspace_relative(root, path)?,
+        None => RelPath::root(),
+    };
+    refuse_git(root, &path, "read")?;
+    let listing = ports.fs.list_dir(root, &path).map_err(say)?;
+    // .git isn't shown: its config can hold credentials, and git's
+    // own tools (git_status, git_diff) say what agents need.
+    let entries: Vec<_> = listing
+        .entries
+        .iter()
+        .filter(|entry| !is_git_internal(&entry.path))
+        .collect();
+    let mut out = String::new();
+    for entry in &entries {
+        match entry.kind {
+            NodeKind::Directory => {
+                let _ = writeln!(out, "{}/", entry.name);
+            }
+            _ => match entry.size {
+                Some(size) => {
+                    let _ = writeln!(out, "{} ({size} bytes)", entry.name);
+                }
+                None => {
+                    let _ = writeln!(out, "{}", entry.name);
+                }
+            },
+        }
+    }
+    if entries.is_empty() {
+        out.push_str("(empty)\n");
+    }
+    if listing.truncated {
+        out.push_str("(more entries not listed)\n");
+    }
+    Ok(out)
+}
+
+fn read_file(ports: &Ports, root: &WorkspaceRoot, args: ReadArgs) -> Result<String, String> {
+    let path = workspace_relative(root, &args.path)?;
+    refuse_git(root, &path, "read")?;
+    let limits = ports.workbench.read_limits();
+    match ports.fs.read_file(root, &path, limits).map_err(say)? {
+        ReadOutcome::Text { text, .. } => Ok(lines(&text, args.start_line, args.end_line)),
+        ReadOutcome::TooLarge { limit, .. } => Err(format!(
+            "the file is larger than {limit} bytes, the most the IDE opens"
+        )),
+        ReadOutcome::Binary { .. } => Err("the file isn't text".to_owned()),
+        ReadOutcome::NotUtf8 { .. } => Err("the file isn't UTF-8 text".to_owned()),
+    }
+}
+
+fn find_files(ports: &Ports, root: &WorkspaceRoot, args: FindArgs) -> Result<String, String> {
+    let list = ports
+        .search
+        .list_files(root, &CancelFlag::new())
+        .map_err(say)?;
+    let limit = args.limit.unwrap_or(DEFAULT_FILES).clamp(1, MAX_FILES);
+    let query = args.query.unwrap_or_default().to_lowercase();
+    let mut matched = list
+        .files
+        .iter()
+        .filter(|path| in_order(&path.as_str().to_lowercase(), &query));
+    let mut out = String::new();
+    for path in matched.by_ref().take(limit) {
+        let _ = writeln!(out, "{}", path.as_str());
+    }
+    if matched.next().is_some() || list.truncated {
+        out.push_str("(more files not listed: narrow the query)\n");
+    }
+    if out.is_empty() {
+        out.push_str("(no files match)\n");
+    }
+    Ok(out)
+}
+
+fn search_text(ports: &Ports, root: &WorkspaceRoot, args: SearchArgs) -> Result<String, String> {
+    let limit = args
+        .limit
+        .unwrap_or(DEFAULT_MATCH_LINES)
+        .clamp(1, MAX_MATCH_LINES);
+    let query = TextQuery {
+        pattern: args.pattern,
+        is_regex: args.is_regex,
+        match_case: args.match_case,
+        whole_word: args.whole_word,
+        include: args.include,
+        exclude: args.exclude,
+        max_file_bytes: ports.workbench.read_limits().refuse_above,
+    };
+    let outcome = ports
+        .search
+        .search_text(root, &query, &CancelFlag::new())
+        .map_err(say)?;
+    let mut out = String::new();
+    let mut shown = 0;
+    let mut more = outcome.truncated;
+    'files: for file in &outcome.files {
+        for line in &file.lines {
+            if shown == limit {
+                more = true;
+                break 'files;
+            }
+            let _ = writeln!(
+                out,
+                "{}:{}:{}: {}",
+                file.path.as_str(),
+                line.line,
+                line.column,
+                line.preview
+            );
+            shown += 1;
+        }
+    }
+    if shown == 0 {
+        out.push_str("(no matches)\n");
+    }
+    if more {
+        out.push_str("(more matches not listed: narrow the search)\n");
+    }
+    Ok(out)
+}
+
+fn git_status(ports: &Ports, root: &WorkspaceRoot) -> Result<String, String> {
+    match ports.git.state(root).map_err(say)? {
+        GitState::Unavailable => Err("git isn't installed".to_owned()),
+        GitState::NotARepository => Ok("not a git repository\n".to_owned()),
+        GitState::Repository(status) => {
+            let head = &status.head;
+            let mut out = match (&head.branch, &head.commit) {
+                (Some(branch), _) => format!("on branch {branch}"),
+                (None, Some(commit)) => format!("detached at {commit}"),
+                (None, None) => "no commits yet".to_owned(),
+            };
+            if let Some(upstream) = &head.upstream {
+                let _ = write!(
+                    out,
+                    " (tracking {upstream}: {} ahead, {} behind)",
+                    head.ahead, head.behind
+                );
+            }
+            out.push('\n');
+            for file in &status.files {
+                // Untracked is "??", as git writes it.
+                let (x, y) = match (file.staged, file.unstaged) {
+                    (_, Some(GitChange::Untracked)) | (Some(GitChange::Untracked), _) => ('?', '?'),
+                    (staged, unstaged) => (code(staged), code(unstaged)),
+                };
+                let _ = write!(out, "{x}{y} {}", file.path.as_str());
+                if let Some(from) = &file.from {
+                    let _ = write!(out, " (from {})", from.as_str());
+                }
+                out.push('\n');
+            }
+            if status.files.is_empty() {
+                out.push_str("nothing changed\n");
+            }
+            if status.truncated {
+                out.push_str("(more changed files not listed)\n");
+            }
+            Ok(out)
+        }
+    }
+}
+
+fn git_diff(ports: &Ports, root: &WorkspaceRoot, args: DiffArgs) -> Result<String, String> {
+    let path = workspace_relative(root, &args.path)?;
+    refuse_git(root, &path, "read")?;
+    let side = if args.staged {
+        DiffSide::Staged
+    } else {
+        DiffSide::Unstaged
+    };
+    let limit = ports.workbench.read_limits().refuse_above;
+    match ports
+        .git
+        .diff_texts(root, &path, side, limit)
+        .map_err(say)?
+    {
+        DiffTexts::Text { original, modified } => {
+            let diff = unified_diff(path.as_str(), &original, &modified);
+            Ok(if diff.is_empty() {
+                "no changes\n".to_owned()
+            } else {
+                diff
+            })
+        }
+        DiffTexts::Binary => Ok("binary files differ\n".to_owned()),
+        DiffTexts::TooLarge { limit } => Err(format!(
+            "a version is larger than {limit} bytes, the most the IDE opens"
+        )),
+    }
+}
+
+fn write_file(ports: &Ports, root: &WorkspaceRoot, args: WriteArgs) -> Result<String, String> {
+    if !ports.allow_edits {
+        return Err("edits aren't allowed: the person can allow them in the IDE".to_owned());
+    }
+    let path = workspace_relative(root, &args.path)?;
+    refuse_git(root, &path, "written")?;
+    let stamp = ports.fs.write_file(root, &path, &args.text).map_err(say)?;
+    Ok(format!("wrote {} ({} bytes)", path.as_str(), stamp.size))
 }
 
 #[tool_handler(router = self.tool_router)]
@@ -458,6 +492,117 @@ impl ServerHandler for Tools {
                  its root, with '/' between names; workspace_info says where it is. \
                  Files are read from the disk. {edits}"
             ))
+    }
+}
+
+/// The same tools for the IDE's own assistant: the read tools, called by
+/// name, and writes the person accepted. Nothing is reported as an agent's call.
+pub struct Toolbox {
+    ports: Ports,
+}
+
+impl Toolbox {
+    /// `ports` with edits refused: a write comes only through `write_text`.
+    pub fn new(mut ports: Ports) -> Self {
+        ports.allow_edits = false;
+        Self { ports }
+    }
+}
+
+fn parse<T: serde::de::DeserializeOwned>(arguments: &str) -> Result<T, String> {
+    let arguments = if arguments.trim().is_empty() {
+        "{}"
+    } else {
+        arguments
+    };
+    serde_json::from_str(arguments).map_err(|error| format!("the arguments don't fit: {error}"))
+}
+
+impl WorkspaceTools for Toolbox {
+    fn read_tools(&self) -> Vec<ToolSpec> {
+        Tools::tool_router()
+            .list_all()
+            .into_iter()
+            .filter(|tool| {
+                tool.annotations
+                    .as_ref()
+                    .and_then(|annotations| annotations.read_only_hint)
+                    == Some(true)
+            })
+            .map(|tool| ToolSpec {
+                name: tool.name.into_owned(),
+                description: tool
+                    .description
+                    .map(|text| text.into_owned())
+                    .unwrap_or_default(),
+                input_schema: serde_json::to_string(&*tool.input_schema)
+                    .unwrap_or_else(|_| r#"{"type":"object"}"#.to_owned()),
+            })
+            .collect()
+    }
+
+    fn call(&self, name: &str, arguments: &str) -> Result<String, String> {
+        let ports = &self.ports;
+        match name {
+            "workspace_info" => run_now(ports, workspace_info),
+            "list_directory" => {
+                let args = parse(arguments)?;
+                run_now(ports, |ports, root| list_directory(ports, root, args))
+            }
+            "read_file" => {
+                let args = parse(arguments)?;
+                run_now(ports, |ports, root| read_file(ports, root, args))
+            }
+            "find_files" => {
+                let args = parse(arguments)?;
+                run_now(ports, |ports, root| find_files(ports, root, args))
+            }
+            "search_text" => {
+                let args = parse(arguments)?;
+                run_now(ports, |ports, root| search_text(ports, root, args))
+            }
+            "git_status" => run_now(ports, git_status),
+            "git_diff" => {
+                let args = parse(arguments)?;
+                run_now(ports, |ports, root| git_diff(ports, root, args))
+            }
+            other => Err(format!("there's no tool called {other}")),
+        }
+    }
+
+    fn read_text(&self, path: &str) -> Result<(String, Option<String>), String> {
+        let mut found = (String::new(), None);
+        run_now(&self.ports, |ports, root| {
+            let path = workspace_relative(root, path)?;
+            refuse_git(root, &path, "read")?;
+            let limits = ports.workbench.read_limits();
+            found.0 = path.as_str().to_owned();
+            found.1 = match ports.fs.read_file(root, &path, limits) {
+                Ok(ReadOutcome::Text { text, .. }) => Some(text),
+                Ok(ReadOutcome::TooLarge { limit, .. }) => {
+                    return Err(format!(
+                        "the file is larger than {limit} bytes, the most the IDE opens"
+                    ));
+                }
+                Ok(ReadOutcome::Binary { .. } | ReadOutcome::NotUtf8 { .. }) => {
+                    return Err("the file isn't UTF-8 text".to_owned());
+                }
+                Err(IdeError::NotFound) => None,
+                Err(error) => return Err(say(error)),
+            };
+            Ok(String::new())
+        })?;
+        Ok(found)
+    }
+
+    fn write_text(&self, path: &str, text: &str) -> Result<(), String> {
+        run_now(&self.ports, |ports, root| {
+            let path = workspace_relative(root, path)?;
+            refuse_git(root, &path, "written")?;
+            ports.fs.write_file(root, &path, text).map_err(say)?;
+            Ok(String::new())
+        })
+        .map(|_| ())
     }
 }
 

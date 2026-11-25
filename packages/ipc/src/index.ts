@@ -3,6 +3,10 @@ import type {
   AgentConfigArgs,
   AgentStatusDto,
   AppInfoDto,
+  AssistantDecideArgs,
+  AssistantSendArgs,
+  AssistantSetupArgs,
+  AssistantStatusDto,
   BreakpointDto,
   CompletionsDto,
   DebugBreakpointsArgs,
@@ -24,6 +28,7 @@ import type {
   HoverDto,
   LspDocumentArgs,
   LspPositionArgs,
+  ModelInfoDto,
   OpenRecentArgs,
   ProblemDto,
   ReadFileDto,
@@ -168,3 +173,31 @@ export const agentConfigure = (args: AgentConfigArgs): Promise<IpcResult<AgentSt
   call("agent_configure", args);
 
 export const agentNewToken = (): Promise<IpcResult<AgentStatusDto>> => call("agent_new_token");
+
+// The AI assistant. Its key goes in with `assistantSave` and never comes back.
+export const assistantStatus = (): Promise<IpcResult<AssistantStatusDto>> =>
+  call("assistant_status");
+
+export const assistantSave = (args: AssistantSetupArgs): Promise<IpcResult<AssistantStatusDto>> =>
+  call("assistant_save", args);
+
+export const assistantForget = (): Promise<IpcResult<AssistantStatusDto>> =>
+  call("assistant_forget");
+
+export const assistantModels = (args: AssistantSetupArgs): Promise<IpcResult<ModelInfoDto[]>> =>
+  call("assistant_models", args);
+
+export const assistantCheck = (args: AssistantSetupArgs): Promise<IpcResult<string>> =>
+  call("assistant_check", args);
+
+export const assistantSend = (args: AssistantSendArgs): Promise<IpcResult<null>> =>
+  call("assistant_send", args);
+
+export const assistantStop = (conversationId: string): Promise<IpcResult<null>> =>
+  call("assistant_stop", { conversationId });
+
+export const assistantDecide = (args: AssistantDecideArgs): Promise<IpcResult<null>> =>
+  call("assistant_decide", args);
+
+export const assistantClear = (conversationId: string): Promise<IpcResult<null>> =>
+  call("assistant_clear", { conversationId });

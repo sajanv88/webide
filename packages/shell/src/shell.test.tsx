@@ -182,4 +182,25 @@ describe("Shell", () => {
     unmount();
     expect(registry.get("view.togglePanel")).toBeUndefined();
   });
+
+  it("puts the aside after the work area, named, with a button and its commands", () => {
+    const registry = createCommandRegistry<AppCommandId>();
+    const { unmount } = render(
+      <Shell
+        title="Test IDE"
+        registry={registry}
+        menus={menus}
+        main={<p>main slot</p>}
+        aside={{ title: "Assistant", icon: <span>A</span>, content: <p>aside slot</p> }}
+      />,
+    );
+    expect(screen.getByRole("complementary", { name: "Assistant" }).textContent).toBe("aside slot");
+    expect(screen.getByRole("separator", { name: "Resize Assistant" })).toBeTruthy();
+    const button = screen.getByRole("button", { name: "Show Assistant" });
+    expect(button.getAttribute("aria-controls")).toBe("app-shell-aside");
+    expect(registry.get("view.toggleAside")?.title).toBe("Toggle Secondary Side Bar");
+    expect(registry.get("view.showAside")?.palette).toBe(false);
+    unmount();
+    expect(registry.get("view.toggleAside")).toBeUndefined();
+  });
 });
