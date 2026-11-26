@@ -2503,6 +2503,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ide-cli"
+version = "0.1.0"
+dependencies = [
+ "ide-core",
+ "tempfile",
+]
+
+[[package]]
 name = "ide-core"
 version = "0.1.0"
 dependencies = [
@@ -2523,6 +2531,7 @@ name = "ide-desktop"
 version = "0.1.0"
 dependencies = [
  "ide-assistant",
+ "ide-cli",
  "ide-debug",
  "ide-fs",
  "ide-git",

@@ -1,0 +1,16 @@
+[package]
+name = "ide-cli"
+description = "The `webide` command: what a terminal asks to open, and putting the command on the PATH."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+ide-core = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

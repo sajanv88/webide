@@ -15,6 +15,7 @@ export type * from "./BedrockAuthDto";
 export type * from "./BreakpointDto";
 export type * from "./CloseGuardArgs";
 export type * from "./CodeActionDto";
+export type * from "./CommandLineStatusDto";
 export type * from "./CompletionDto";
 export type * from "./CompletionKindDto";
 export type * from "./CompletionsDto";

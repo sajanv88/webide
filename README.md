@@ -6,6 +6,20 @@ place: `productName` in [apps/desktop/src-tauri/tauri.conf.json](apps/desktop/sr
 
 Status and plan: [checklist.md](checklist.md), from [plan.md](plan.md).
 
+## From a terminal
+
+`webide .` opens the folder you're in, `webide <folder>` another one, and
+`webide <file>` a file in its folder. The terminal is free at once.
+
+- **Windows:** the installer puts `webide` on your PATH (and the uninstaller
+  takes it off). Open a new terminal after installing.
+- **macOS:** Help → Install 'webide' Command in PATH (it may ask for your
+  password, to write `/usr/local/bin`).
+- **Linux:** the `.deb` and `.rpm` install `/usr/bin/webide`. With the
+  AppImage, use Help → Install 'webide' Command in PATH (`~/.local/bin`).
+
+Help → Uninstall 'webide' Command from PATH takes it off again.
+
 ## Keys
 
 | Keys (macOS: Cmd for Ctrl)  | Does                      |
@@ -100,7 +114,7 @@ warn before they open one.
 
 ```
 crates/            Rust: ide-core, ide-fs, ide-watcher, ide-workspace, ide-search, ide-git,
-                   ide-terminal, ide-lsp, ide-debug, ide-mcp, ide-assistant, ide-ipc
+                   ide-terminal, ide-lsp, ide-debug, ide-mcp, ide-assistant, ide-cli, ide-ipc
 apps/desktop/      The Vite frontend (src/) and the Tauri composition root (src-tauri/)
 packages/          Frontend modules: contracts, kernel, ipc, shell, explorer, tabs,
                    editor-surface, commands, settings, search, git, terminal, lsp, debug,

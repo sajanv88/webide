@@ -13,11 +13,11 @@ use tauri_plugin_dialog::DialogExt;
 use crate::dto::{
     AgentConfigArgs, AgentStatusDto, AppInfoDto, AssistantConversationArgs, AssistantDecideArgs,
     AssistantSendArgs, AssistantSetupArgs, AssistantStatusDto, BreakpointDto, CloseGuardArgs,
-    CodeActionDto, CompletionsDto, DebugBreakpointsArgs, DebugEvaluateArgs, DebugReferenceArgs,
-    DebugStartArgs, DebugThreadArgs, DefinitionDto, DirListingDto, FileListDto, FileStampDto,
-    GitBranchDto, GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs,
-    HoverDto, LspDocumentArgs, LspPositionArgs, LspRangeArgs, LspResolveArgs, LspSourceActionArgs,
-    ModelInfoDto, OpenRecentArgs, ProblemDto, ReadFileDto, RecentWorkspaceDto,
+    CodeActionDto, CommandLineStatusDto, CompletionsDto, DebugBreakpointsArgs, DebugEvaluateArgs,
+    DebugReferenceArgs, DebugStartArgs, DebugThreadArgs, DefinitionDto, DirListingDto, FileListDto,
+    FileStampDto, GitBranchDto, GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto,
+    GitSwitchArgs, HoverDto, LspDocumentArgs, LspPositionArgs, LspRangeArgs, LspResolveArgs,
+    LspSourceActionArgs, ModelInfoDto, OpenRecentArgs, ProblemDto, ReadFileDto, RecentWorkspaceDto,
     ResolvedCompletionDto, ScopeDto, SearchTextArgs, SettingsDto, SettingsPatchDto, StackFrameDto,
     SubscribeEventsArgs, TerminalDto, TerminalEventDto, TerminalIdArgs, TerminalOpenArgs,
     TerminalResizeArgs, TerminalWriteArgs, TextEditDto, TextSearchDto, VariableDto, WindowStateDto,
@@ -123,6 +123,10 @@ ipc_commands! {
         assistant_stop(AssistantConversationArgs) -> ();
         assistant_decide(AssistantDecideArgs) -> ();
         assistant_clear(AssistantConversationArgs) -> ();
+        take_launch_file() -> Option<String>;
+        command_line_status() -> CommandLineStatusDto;
+        command_line_install() -> CommandLineStatusDto;
+        command_line_uninstall() -> CommandLineStatusDto;
     }
     custom {
         pick_workspace() -> Option<WorkspaceDto>;
@@ -563,6 +567,26 @@ pub async fn assistant_clear(
     args: AssistantConversationArgs,
 ) -> Result<(), IpcError> {
     run_blocking(&state, move |state| handlers::assistant_clear(state, args)).await
+}
+
+#[tauri::command]
+pub async fn take_launch_file(state: Shared<'_>) -> Result<Option<String>, IpcError> {
+    run_blocking(&state, handlers::take_launch_file).await
+}
+
+#[tauri::command]
+pub async fn command_line_status(state: Shared<'_>) -> Result<CommandLineStatusDto, IpcError> {
+    run_blocking(&state, handlers::command_line_status).await
+}
+
+#[tauri::command]
+pub async fn command_line_install(state: Shared<'_>) -> Result<CommandLineStatusDto, IpcError> {
+    run_blocking(&state, handlers::command_line_install).await
+}
+
+#[tauri::command]
+pub async fn command_line_uninstall(state: Shared<'_>) -> Result<CommandLineStatusDto, IpcError> {
+    run_blocking(&state, handlers::command_line_uninstall).await
 }
 
 /// Sends backend events (file changes, the close request) to the calling page,

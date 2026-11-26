@@ -64,6 +64,37 @@ impl OsDto {
     }
 }
 
+/// Whether `webide` in a terminal runs this app.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum CommandLineStatusDto {
+    /// It's at `path`; `hint` is what's left to do (open a new terminal…).
+    Installed {
+        path: String,
+        hint: Option<String>,
+    },
+    NotInstalled,
+    /// This copy of the app can't put it on the PATH: why.
+    Unavailable {
+        reason: String,
+    },
+}
+
+impl From<ide_core::cli::CommandLineStatus> for CommandLineStatusDto {
+    fn from(status: ide_core::cli::CommandLineStatus) -> Self {
+        use ide_core::cli::CommandLineStatus;
+        match status {
+            CommandLineStatus::Installed { path, hint } => Self::Installed { path, hint },
+            CommandLineStatus::NotInstalled => Self::NotInstalled,
+            CommandLineStatus::Unavailable { reason } => Self::Unavailable { reason },
+        }
+    }
+}
+
 /// How the window is shown, which the title bar follows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, TS)]
 #[serde(rename_all = "camelCase")]

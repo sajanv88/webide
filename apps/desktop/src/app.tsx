@@ -50,6 +50,8 @@ import {
   assistantStop,
   closeTerminal,
   closeWindow,
+  commandLineInstall,
+  commandLineUninstall,
   currentWorkspace,
   debugBreakpoints,
   debugEvaluate,
@@ -96,6 +98,7 @@ import {
   searchText,
   setCloseGuard,
   subscribeEvents,
+  takeLaunchFile,
   toggleMaximizeWindow,
   updateSettings,
   windowState,
@@ -198,6 +201,19 @@ export function App() {
     [workspace],
   );
   const documentsRef = useRef(documents);
+
+  // The file `webide <file>` named, once its folder is open. (The tabs, a
+  // child, already listen by the time this runs.)
+  useEffect(() => {
+    if (!documents) return;
+    let live = true;
+    void takeLaunchFile().then((file) => {
+      if (live && file.ok && file.value) bus.emit("file.openRequested", { path: file.value });
+    });
+    return () => {
+      live = false;
+    };
+  }, [documents]);
   documentsRef.current = documents;
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
@@ -366,6 +382,54 @@ export function App() {
         title: "About",
         category: "Help",
         run: () => setAboutOpen(true),
+      }),
+      registry.register({
+        id: "app.installCommandLine",
+        title: "Install 'webide' Command in PATH",
+        category: "Shell Command",
+        run: async () => {
+          const result = await commandLineInstall();
+          if (!result.ok) return showError("Couldn't put webide on the PATH", result.error);
+          const status = result.value;
+          if (status.kind === "unavailable") {
+            toast("The webide command can't be put on the PATH", {
+              intent: "warning",
+              description: status.reason,
+            });
+            return;
+          }
+          toast("The webide command is on the PATH", {
+            intent: "success",
+            description: [
+              "In a terminal, “webide .” opens the folder it’s in.",
+              status.kind === "installed" ? status.hint : null,
+            ]
+              .filter(Boolean)
+              .join(" "),
+          });
+        },
+      }),
+      registry.register({
+        id: "app.uninstallCommandLine",
+        title: "Uninstall 'webide' Command from PATH",
+        category: "Shell Command",
+        run: async () => {
+          const result = await commandLineUninstall();
+          if (!result.ok) return showError("Couldn't take webide off the PATH", result.error);
+          if (result.value.kind === "unavailable") {
+            toast("The webide command can't be changed here", {
+              intent: "warning",
+              description: result.value.reason,
+            });
+          } else if (result.value.kind === "installed") {
+            toast("The webide command stays", {
+              intent: "info",
+              description: result.value.hint ?? result.value.path,
+            });
+          } else {
+            toast("The webide command is off the PATH", { intent: "success" });
+          }
+        },
       }),
     ];
     return () => {
@@ -728,7 +792,15 @@ export function App() {
           { kind: "command", command: "view.showDebug" },
         ],
       },
-      { label: "Help", items: [{ kind: "command", command: "help.about" }] },
+      {
+        label: "Help",
+        items: [
+          { kind: "command", command: "app.installCommandLine" },
+          { kind: "command", command: "app.uninstallCommandLine" },
+          { kind: "separator" },
+          { kind: "command", command: "help.about" },
+        ],
+      },
     ],
     [recent],
   );

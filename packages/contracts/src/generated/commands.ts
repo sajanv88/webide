@@ -11,6 +11,7 @@ import type { AssistantStatusDto } from "./AssistantStatusDto";
 import type { BreakpointDto } from "./BreakpointDto";
 import type { CloseGuardArgs } from "./CloseGuardArgs";
 import type { CodeActionDto } from "./CodeActionDto";
+import type { CommandLineStatusDto } from "./CommandLineStatusDto";
 import type { CompletionsDto } from "./CompletionsDto";
 import type { DebugBreakpointsArgs } from "./DebugBreakpointsArgs";
 import type { DebugEvaluateArgs } from "./DebugEvaluateArgs";
@@ -117,6 +118,10 @@ export interface CommandMap {
   assistant_stop: { args: AssistantConversationArgs; output: null };
   assistant_decide: { args: AssistantDecideArgs; output: null };
   assistant_clear: { args: AssistantConversationArgs; output: null };
+  take_launch_file: { args: null; output: string | null };
+  command_line_status: { args: null; output: CommandLineStatusDto };
+  command_line_install: { args: null; output: CommandLineStatusDto };
+  command_line_uninstall: { args: null; output: CommandLineStatusDto };
   pick_workspace: { args: null; output: WorkspaceDto | null };
   subscribe_events: { args: SubscribeEventsArgs; output: null };
   set_close_guard: { args: CloseGuardArgs; output: null };
