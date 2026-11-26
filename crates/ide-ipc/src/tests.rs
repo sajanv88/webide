@@ -36,9 +36,9 @@ use serde_json::json;
 
 use crate::dto::{
     AgentConfigArgs, AppInfoDto, AssistantConversationArgs, AssistantDecideArgs, AssistantSendArgs,
-    AssistantSetupArgs, BackendEventDto, BedrockAuthDto, CloseGuardArgs, DebugStartArgs,
-    DebugThreadArgs, DiffSideDto, FileBreakpoints, GitCommitArgs, GitDiffArgs, GitPathsArgs,
-    GitSwitchArgs, LspDocumentArgs, LspPositionArgs, LspRangeArgs, LspResolveArgs,
+    AssistantSetupArgs, BackendEventDto, BedrockAuthDto, CloseGuardArgs, CommandLineStatusDto,
+    DebugStartArgs, DebugThreadArgs, DiffSideDto, FileBreakpoints, GitCommitArgs, GitDiffArgs,
+    GitPathsArgs, GitSwitchArgs, LspDocumentArgs, LspPositionArgs, LspRangeArgs, LspResolveArgs,
     LspSourceActionArgs, OpenRecentArgs, ProviderKindDto, ProviderSetupDto, ReadFileDto,
     SearchTextArgs, SettingsPatchDto, SourceActionDto, StepDto, TerminalIdArgs, TerminalResizeArgs,
     TerminalWriteArgs, TextPositionDto, WorkspaceArgs, WorkspacePathArgs, WriteFileArgs,
@@ -761,6 +761,32 @@ impl Drop for FakeAgentServer {
     }
 }
 
+/// Says the command is on the PATH once installed.
+#[derive(Default)]
+struct FakeCommandLine {
+    installed: Mutex<bool>,
+}
+
+impl ide_core::cli::CommandLine for FakeCommandLine {
+    fn status(&self) -> ide_core::cli::CommandLineStatus {
+        if *self.installed.lock().unwrap() {
+            ide_core::cli::CommandLineStatus::Installed {
+                path: "/usr/local/bin/webide".to_owned(),
+                hint: None,
+            }
+        } else {
+            ide_core::cli::CommandLineStatus::NotInstalled
+        }
+    }
+    fn install(&self) -> Result<ide_core::cli::CommandLineStatus, IdeError> {
+        *self.installed.lock().unwrap() = true;
+        Ok(self.status())
+    }
+    fn uninstall(&self) -> Result<ide_core::cli::CommandLineStatus, IdeError> {
+        Err(IdeError::PermissionDenied)
+    }
+}
+
 fn folder(name: &str) -> PathBuf {
     std::env::temp_dir().join(name)
 }
@@ -782,6 +808,10 @@ struct Fixture {
 }
 
 fn fixture() -> Fixture {
+    fixture_with(None)
+}
+
+fn fixture_with(launch: Option<ide_core::cli::Launch>) -> Fixture {
     let fs = Arc::new(FakeFs::default());
     let store = Arc::new(FakeStore {
         recent: vec![
@@ -817,6 +847,8 @@ fn fixture() -> Fixture {
         debuggers: debuggers.clone(),
         agents: agents.clone(),
         assistant: assistant.clone(),
+        command_line: Arc::new(FakeCommandLine::default()),
+        launch,
     };
     let info = AppInfoDto {
         name: "test".to_owned(),
@@ -1924,4 +1956,55 @@ fn a_separate_profile_needs_an_absolute_folder() {
     assert_eq!(config_dir_override(Some("relative/dir".into())), None);
     assert_eq!(config_dir_override(Some("".into())), None);
     assert_eq!(config_dir_override(None), None);
+}
+
+#[test]
+fn webide_with_a_folder_opens_it_and_with_a_file_opens_that_too_once() {
+    let none = fixture();
+    none.state.open_launch();
+    assert_eq!(handlers::current_workspace(&none.state).unwrap(), None);
+    assert_eq!(handlers::take_launch_file(&none.state).unwrap(), None);
+
+    let f = fixture_with(Some(ide_core::cli::Launch {
+        folder: folder("gamma"),
+        file: Some(folder("gamma").join("main.ts")),
+    }));
+    f.state.open_launch();
+    let open = handlers::current_workspace(&f.state).unwrap().unwrap();
+    assert_eq!(open.name, "gamma");
+    assert_eq!(f.store.opened.lock().unwrap().as_slice(), [folder("gamma")]);
+    assert_eq!(f.watcher.running.lock().unwrap().len(), 1);
+    assert_eq!(
+        handlers::take_launch_file(&f.state).unwrap().as_deref(),
+        Some("main.ts")
+    );
+    // A reloaded page doesn't open it again.
+    assert_eq!(handlers::take_launch_file(&f.state).unwrap(), None);
+}
+
+#[test]
+fn the_command_line_commands_say_where_it_stands() {
+    let f = fixture();
+    assert_eq!(
+        handlers::command_line_status(&f.state).unwrap(),
+        CommandLineStatusDto::NotInstalled
+    );
+    assert_eq!(
+        handlers::command_line_install(&f.state).unwrap(),
+        CommandLineStatusDto::Installed {
+            path: "/usr/local/bin/webide".to_owned(),
+            hint: None
+        }
+    );
+    assert_eq!(
+        code(handlers::command_line_uninstall(&f.state)),
+        IpcErrorCode::PermissionDenied
+    );
+    assert_eq!(
+        serde_json::to_value(CommandLineStatusDto::Unavailable {
+            reason: "why".to_owned()
+        })
+        .unwrap(),
+        serde_json::json!({ "kind": "unavailable", "reason": "why" })
+    );
 }

@@ -117,6 +117,7 @@ where
                 os: OsDto::current(),
             };
             let state = Arc::new(IpcState::new(services(&paths), info, emit));
+            state.open_launch();
             state.start_agents();
             app.manage(state);
             set_main_window_title(app)?;

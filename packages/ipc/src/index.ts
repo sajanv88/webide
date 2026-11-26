@@ -9,6 +9,7 @@ import type {
   AssistantStatusDto,
   BreakpointDto,
   CodeActionDto,
+  CommandLineStatusDto,
   CompletionsDto,
   DebugBreakpointsArgs,
   DebugEvaluateArgs,
@@ -77,6 +78,21 @@ export const openRecentWorkspace = (args: OpenRecentArgs): Promise<IpcResult<Wor
 
 export const recentWorkspaces = (): Promise<IpcResult<RecentWorkspaceDto[]>> =>
   call("recent_workspaces");
+
+/** The file `webide <file>` named as the app started, once; `null` after that. */
+export const takeLaunchFile = (): Promise<IpcResult<string | null>> => call("take_launch_file");
+
+/** Whether `webide` in a terminal runs this app. */
+export const commandLineStatus = (): Promise<IpcResult<CommandLineStatusDto>> =>
+  call("command_line_status");
+
+/** Puts `webide` on the PATH; the system may ask for permission. */
+export const commandLineInstall = (): Promise<IpcResult<CommandLineStatusDto>> =>
+  call("command_line_install");
+
+/** Takes `webide` off the PATH, if this app put it there. */
+export const commandLineUninstall = (): Promise<IpcResult<CommandLineStatusDto>> =>
+  call("command_line_uninstall");
 
 /** The open workspace, if any (it survives a reload of the page). */
 export const currentWorkspace = (): Promise<IpcResult<WorkspaceDto | null>> =>

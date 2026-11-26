@@ -14,6 +14,7 @@ publish = false
 
 # Workspace crates
 ide-assistant = { path = "crates/ide-assistant" }
+ide-cli = { path = "crates/ide-cli" }
 ide-core = { path = "crates/ide-core" }
 ide-debug = { path = "crates/ide-debug" }
 ide-fs = { path = "crates/ide-fs" }

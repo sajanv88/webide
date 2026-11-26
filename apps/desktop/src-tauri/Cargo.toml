@@ -11,6 +11,7 @@ tauri-build = { workspace = true }
 
 [dependencies]
 ide-assistant = { workspace = true }
+ide-cli = { workspace = true }
 ide-debug = { workspace = true }
 ide-fs = { workspace = true }
 ide-git = { workspace = true }

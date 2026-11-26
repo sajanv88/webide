@@ -80,6 +80,10 @@ ts-rs.
 | `assistant_stop`         | `{ conversationId }`                     | nothing; a waiting change is rejected                                        |
 | `assistant_decide`       | `{ conversationId, callId, accept }`     | nothing; an accepted change is written                                       |
 | `assistant_clear`        | `{ conversationId }`                     | nothing; the conversation is forgotten                                       |
+| `take_launch_file`       | none                                     | `string \| null`: the file `webide <file>` named, once                       |
+| `command_line_status`    | none                                     | `CommandLineStatusDto` (switch on `kind`)                                    |
+| `command_line_install`   | none                                     | `CommandLineStatusDto`; puts `webide` on the PATH                            |
+| `command_line_uninstall` | none                                     | `CommandLineStatusDto`; takes it off, if the app put it there                |
 | `subscribe_events`       | `{ channel }` (a Tauri `Channel`)        | nothing; `BackendEventDto`s arrive on the channel                            |
 | `set_close_guard`        | `{ unsaved }`                            | nothing                                                                      |
 | `close_window`           | none                                     | nothing; closes the calling window without asking                            |
@@ -155,7 +159,10 @@ The rules that keep the webview contained:
 ## Public API
 
 - `run(context, services)`, with `Services { fs, workspace, watcher, search, git, terminals,
-  languages }` and `AppPaths` (`config_dir`, `resource_dir`).
+  languages, debuggers, agents, assistant, command_line, launch }` and
+  `AppPaths` (`config_dir`, `resource_dir`). With a `launch` (`webide <path>`
+  in a terminal), its folder is the open workspace as the page starts, and
+  `take_launch_file` gives the page the file it named, once.
 - `CONFIG_DIR_VAR` (`WEBIDE_CONFIG_DIR`): set to an absolute folder, the app
   keeps its settings, recent folders and the rest there instead of its own
   place (a separate profile, to try a build without touching yours);

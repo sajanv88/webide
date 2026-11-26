@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 use ide_core::agent::{AgentConfig, AgentHost, AgentServer, AgentSink, AgentWorkbench};
 use ide_core::assistant::{AssistantHost, AssistantSink, ChatContext};
+use ide_core::cli::{CommandLine, Launch};
 use ide_core::debug::{DebugAdapters, DebugEvent, DebugSession};
 use ide_core::fs::ReadLimits;
 use ide_core::language::{
@@ -24,15 +25,15 @@ use ide_core::{
 use crate::dto::{
     AgentConfigArgs, AgentStatusDto, AppInfoDto, AssistantConversationArgs, AssistantDecideArgs,
     AssistantSendArgs, AssistantSetupArgs, AssistantStatusDto, BackendEventDto, BreakpointDto,
-    CodeActionDto, CompletionsDto, DebugBreakpointsArgs, DebugEvaluateArgs, DebugEventDto,
-    DebugReferenceArgs, DebugStartArgs, DebugThreadArgs, DefinitionDto, DirListingDto, FileListDto,
-    FileStampDto, GitBranchDto, GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto,
-    GitSwitchArgs, HoverDto, LanguageStatusDto, LspDocumentArgs, LspPositionArgs, LspRangeArgs,
-    LspResolveArgs, LspSourceActionArgs, ModelInfoDto, OpenRecentArgs, ProblemDto, ReadFileDto,
-    RecentWorkspaceDto, ResolvedCompletionDto, ScopeDto, SearchTextArgs, SettingsDto,
-    SettingsPatchDto, StackFrameDto, TerminalDto, TerminalIdArgs, TerminalResizeArgs,
-    TerminalWriteArgs, TextEditDto, TextSearchDto, VariableDto, WorkspaceArgs, WorkspaceDto,
-    WorkspacePathArgs, WriteFileArgs,
+    CodeActionDto, CommandLineStatusDto, CompletionsDto, DebugBreakpointsArgs, DebugEvaluateArgs,
+    DebugEventDto, DebugReferenceArgs, DebugStartArgs, DebugThreadArgs, DefinitionDto,
+    DirListingDto, FileListDto, FileStampDto, GitBranchDto, GitCommitArgs, GitDiffArgs, GitDiffDto,
+    GitPathsArgs, GitStateDto, GitSwitchArgs, HoverDto, LanguageStatusDto, LspDocumentArgs,
+    LspPositionArgs, LspRangeArgs, LspResolveArgs, LspSourceActionArgs, ModelInfoDto,
+    OpenRecentArgs, ProblemDto, ReadFileDto, RecentWorkspaceDto, ResolvedCompletionDto, ScopeDto,
+    SearchTextArgs, SettingsDto, SettingsPatchDto, StackFrameDto, TerminalDto, TerminalIdArgs,
+    TerminalResizeArgs, TerminalWriteArgs, TextEditDto, TextSearchDto, VariableDto, WorkspaceArgs,
+    WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::IpcError;
 
@@ -49,6 +50,10 @@ pub struct Services {
     pub debuggers: Arc<dyn DebugAdapters>,
     pub agents: Arc<dyn AgentHost>,
     pub assistant: Arc<dyn AssistantHost>,
+    /// The `webide` command, on the PATH or not.
+    pub command_line: Arc<dyn CommandLine>,
+    /// What the terminal asked to open, when the app was started as `webide <path>`.
+    pub launch: Option<Launch>,
 }
 
 impl std::fmt::Debug for Services {
@@ -95,6 +100,8 @@ pub struct IpcState {
     debug: Mutex<Option<DebugRun>>,
     /// The MCP server for AI agents, while it runs, or why it couldn't start.
     agent: Mutex<AgentRun>,
+    /// The file `webide <file>` named, until the page takes it.
+    launch_file: Mutex<Option<String>>,
 }
 
 #[derive(Default)]
@@ -165,7 +172,32 @@ impl IpcState {
             language: Mutex::new(Language::NotStarted),
             debug: Mutex::new(None),
             agent: Mutex::new(AgentRun::default()),
+            launch_file: Mutex::new(None),
         }
+    }
+
+    /// Opens what `webide <path>` named, as the app starts: the folder, and
+    /// the file for the page to open. A folder that can't be opened leaves
+    /// the app as it would start without one.
+    pub fn open_launch(&self) {
+        let Some(launch) = self.services.launch.clone() else {
+            return;
+        };
+        let Ok(root) = self.services.workspace.open(&launch.folder) else {
+            return;
+        };
+        self.set_open(root);
+        // The file is in the folder itself: its name is its path there.
+        let name = launch
+            .file
+            .as_deref()
+            .and_then(Path::file_name)
+            .and_then(|name| name.to_str())
+            .and_then(|name| RelPath::parse(name).ok());
+        *self
+            .launch_file
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = name.map(|name| name.as_str().to_owned());
     }
 
     /// Starts the MCP server, if the person turned it on. At startup.
@@ -423,6 +455,30 @@ pub fn recent_workspaces(state: &IpcState) -> Result<Vec<RecentWorkspaceDto>, Ip
         .iter()
         .map(Into::into)
         .collect())
+}
+
+/// The file `webide <file>` named, once: later calls (a reloaded page) get none.
+pub fn take_launch_file(state: &IpcState) -> Result<Option<String>, IpcError> {
+    Ok(state
+        .launch_file
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take())
+}
+
+/// Whether `webide` in a terminal runs this app.
+pub fn command_line_status(state: &IpcState) -> Result<CommandLineStatusDto, IpcError> {
+    Ok(state.services.command_line.status().into())
+}
+
+/// Puts `webide` on the PATH (the system may ask for permission).
+pub fn command_line_install(state: &IpcState) -> Result<CommandLineStatusDto, IpcError> {
+    Ok(state.services.command_line.install()?.into())
+}
+
+/// Takes `webide` off the PATH, if this app put it there.
+pub fn command_line_uninstall(state: &IpcState) -> Result<CommandLineStatusDto, IpcError> {
+    Ok(state.services.command_line.uninstall()?.into())
 }
 
 pub fn current_workspace(state: &IpcState) -> Result<Option<WorkspaceDto>, IpcError> {

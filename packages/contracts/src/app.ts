@@ -104,7 +104,9 @@ export type AppCommandId =
   | "assistant.focus"
   | "assistant.setup"
   | "assistant.newChat"
-  | "help.about";
+  | "help.about"
+  | "app.installCommandLine"
+  | "app.uninstallCommandLine";
 
 /** Events on the app's bus, by name, with their payloads. */
 export interface AppEvents {

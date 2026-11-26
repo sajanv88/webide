@@ -40,6 +40,7 @@ const FEATURES: &[&str] = &[
     "ide-mcp",
     "ide-assistant",
     "ide-search",
+    "ide-cli",
 ];
 const TAURI_ALLOWED: &[&str] = &[IPC, APP];
 const ASYNC_RUNTIMES: &[&str] = &["tokio", "async-std", "smol", "async-executor"];
