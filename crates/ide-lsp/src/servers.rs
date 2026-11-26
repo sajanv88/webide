@@ -56,9 +56,6 @@ pub struct ServerSpec {
     /// Whether it serves the workspace at this folder; every one when absent.
     /// One that doesn't leaves its files to the next server that handles them.
     pub applies: Option<fn(&Path) -> bool>,
-    /// Files it needs from the project (relative to its folder), and what
-    /// to tell the person when one is missing.
-    pub needs: Option<(&'static [&'static str], &'static str)>,
 }
 
 /// In a server's `args`, the workspace's folder.
@@ -67,9 +64,24 @@ pub const WORKSPACE_ARG: &str = "{workspace}";
 /// Whether the folder is an Angular project: `angular.json`, or
 /// `@angular/core` in its `package.json`.
 pub fn angular_workspace(folder: &Path) -> bool {
-    folder.join("angular.json").is_file()
-        || std::fs::read_to_string(folder.join("package.json"))
-            .is_ok_and(|text| text.contains("\"@angular/core\""))
+    let read = |name: &str| -> Option<Value> {
+        serde_json::from_str(&std::fs::read_to_string(folder.join(name)).ok()?).ok()
+    };
+    // angular.json's own shape: its projects.
+    let config = read("angular.json")
+        .is_some_and(|config| config.get("projects").is_some_and(Value::is_object));
+    // Or @angular/core among the package's dependencies.
+    let package = read("package.json").is_some_and(|package| {
+        ["dependencies", "devDependencies", "peerDependencies"]
+            .iter()
+            .any(|kind| {
+                package
+                    .get(kind)
+                    .and_then(|deps| deps.get("@angular/core"))
+                    .is_some()
+            })
+    });
+    config || package
 }
 
 /// SchemaStore's schemas the JSON server checks files against, and the file names each is for.
@@ -184,23 +196,25 @@ fn bundled<'a>(dir: &Path, list: &'a [(&'a str, &'a [&'a str])]) -> Vec<(&'a str
 impl ServerSpec {
     /// Angular's templates (`.html`) in an Angular project: Angular's own
     /// server (`script`), on Node. It loads TypeScript and
-    /// `@angular/language-service` from the project's `node_modules` (the
-    /// one server here that runs the workspace's code), so it needs the
-    /// project's packages installed. Listed before HTML, which then has the
-    /// `.html` files of every other project.
+    /// `@angular/language-service` from the copies bundled beside it
+    /// (`angular/node_modules`), never the project's: opening a template
+    /// runs nothing from the workspace, which it only reads. Listed before
+    /// HTML, which then has the `.html` files of every other project.
     pub fn angular(script: PathBuf) -> Self {
         let script = plain_path(script);
-        // The language service the app bundles, after the project's own.
-        let bundled = script.with_file_name("angular");
+        let bundled = script
+            .with_file_name("angular")
+            .to_string_lossy()
+            .into_owned();
         Self {
             name: "Angular",
             program: Program::Node(script),
             args: vec![
                 "--stdio".to_owned(),
                 "--tsProbeLocations".to_owned(),
-                WORKSPACE_ARG.to_owned(),
+                bundled.clone(),
                 "--ngProbeLocations".to_owned(),
-                format!("{WORKSPACE_ARG},{}", bundled.to_string_lossy()),
+                bundled,
             ],
             language: html_language,
             initialization_options: Value::Null,
@@ -208,10 +222,6 @@ impl ServerSpec {
             schemas: None,
             notifications: Vec::new(),
             applies: Some(angular_workspace),
-            needs: Some((
-                &["node_modules/typescript/package.json"],
-                "Angular uses the project's own TypeScript: install the project's packages (npm install, pnpm install…), then restart the language servers",
-            )),
         }
     }
 
@@ -227,7 +237,6 @@ impl ServerSpec {
             schemas: None,
             notifications: Vec::new(),
             applies: None,
-            needs: None,
         }
     }
 
@@ -262,7 +271,6 @@ impl ServerSpec {
             schemas: Some(schemas),
             notifications: Vec::new(),
             applies: None,
-            needs: None,
         }
     }
 
@@ -283,7 +291,6 @@ impl ServerSpec {
             schemas: None,
             notifications: Vec::new(),
             applies: None,
-            needs: None,
         }
     }
 
@@ -307,7 +314,6 @@ impl ServerSpec {
             schemas: None,
             notifications: Vec::new(),
             applies: None,
-            needs: None,
         }
     }
 
@@ -351,7 +357,6 @@ impl ServerSpec {
             // bundle: the server fetches nothing itself.
             notifications: vec![("yaml/registerContentRequest", Value::Null)],
             applies: None,
-            needs: None,
         }
     }
 }
@@ -530,13 +535,6 @@ impl Workspace {
             );
             None
         };
-        if let Some((files, why)) = spec.needs {
-            let folder = PathBuf::from(self.root.display_path());
-            if files.iter().any(|file| !folder.join(file).is_file()) {
-                (self.status)(spec.name, LanguageStatus::Failed(why.to_owned()));
-                return None;
-            }
-        }
         match &spec.program {
             Program::Native(program) if program.is_file() => {
                 Some((program.clone(), self.args(spec)))

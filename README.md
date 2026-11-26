@@ -49,8 +49,8 @@ your platform, from the app's own `typescript` dependency, and the
 vscode-js-debug DAP server (downloaded from its GitHub release once, checked
 by its SHA-256, then cached), into `apps/desktop/src-tauri/resources/`, which
 the app bundles. It also bundles the JSON, CSS, HTML, YAML and Angular language
-servers with esbuild (Angular's with its language service; it loads the
-project's own TypeScript), and the SchemaStore schemas they check files against (pinned in
+servers with esbuild (Angular's with its language service and the TypeScript
+it runs on, so a project's own packages are never run), and the SchemaStore schemas they check files against (pinned in
 `apps/desktop/scripts/schemas.lock.json`, fetched once and cached). The
 debugger and those servers run on your own `node`: the app asks for it, and
 offers its installer, when it's missing. Run `pnpm build`

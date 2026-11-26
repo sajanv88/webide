@@ -508,42 +508,10 @@ fn snippets_become_plain_text() {
     );
 }
 
-/// TypeScript 6 as pnpm installed it for Angular's server, if it's there.
-fn installed_typescript_6() -> Option<PathBuf> {
-    let store = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../node_modules/.pnpm");
-    let dir = std::fs::read_dir(&store).ok()?.flatten().find(|entry| {
-        entry
-            .file_name()
-            .to_string_lossy()
-            .starts_with("typescript@6.")
-    })?;
-    let typescript = dir.path().join("node_modules/typescript");
-    typescript
-        .join("lib/tsserverlibrary.js")
-        .is_file()
-        .then_some(typescript)
-}
-
-fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
-    std::fs::create_dir_all(to).unwrap();
-    for entry in std::fs::read_dir(from).unwrap().flatten() {
-        let target = to.join(entry.file_name());
-        if entry.file_type().unwrap().is_dir() {
-            copy_dir(&entry.path(), &target);
-        } else {
-            std::fs::copy(entry.path(), target).unwrap();
-        }
-    }
-}
-
 #[test]
-fn angular_takes_an_angular_projects_templates() {
-    let (Some(node), Some(staged), Some(typescript)) =
-        (node_on_path(), staged_servers(), installed_typescript_6())
-    else {
-        eprintln!(
-            "skipping: no node, staged servers or TypeScript 6 (run pnpm install and pnpm build)"
-        );
+fn angular_takes_an_angular_projects_templates_without_running_its_code() {
+    let (Some(node), Some(staged)) = (node_on_path(), staged_servers()) else {
+        eprintln!("skipping: no node, or the language servers aren't staged (run pnpm build)");
         return;
     };
     let servers = Servers::new(
@@ -570,19 +538,14 @@ fn angular_takes_an_angular_projects_templates() {
     };
     let template = RelPath::parse("src/app/app.html").unwrap();
 
-    // An Angular project with its packages: Angular's server, finding the
-    // project's TypeScript and the bundled language service.
+    // An Angular project whose own TypeScript and language service would
+    // leave a mark if they were run.
     let project = tempfile::Builder::new().prefix("webide").tempdir().unwrap();
     let folder = project.path();
-    std::fs::write(folder.join("angular.json"), "{}").unwrap();
-    std::fs::write(
-        folder.join("package.json"),
-        r#"{ "dependencies": { "@angular/core": "22.3.0" } }"#,
-    )
-    .unwrap();
+    std::fs::write(folder.join("angular.json"), r#"{ "projects": {} }"#).unwrap();
     std::fs::write(
         folder.join("tsconfig.json"),
-        r#"{ "compilerOptions": { "strict": true, "experimentalDecorators": true }, "include": ["src"] }"#,
+        r#"{ "compilerOptions": { "strict": true }, "include": ["src"] }"#,
     )
     .unwrap();
     std::fs::create_dir_all(folder.join("src/app")).unwrap();
@@ -592,7 +555,24 @@ fn angular_takes_an_angular_projects_templates() {
     )
     .unwrap();
     std::fs::write(folder.join("src/app/app.html"), "<h1>{{ title }}</h1>\n").unwrap();
-    copy_dir(&typescript, &folder.join("node_modules/typescript"));
+    let marker = folder.join("ran");
+    let trap = format!(
+        "require('fs').writeFileSync({:?}, 'yes'); module.exports = {{}};\n",
+        marker.to_string_lossy()
+    );
+    for (package, version, main) in [
+        ("typescript", "6.0.3", "lib/tsserverlibrary.js"),
+        ("@angular/language-service", "22.3.0", "index.js"),
+    ] {
+        let dir = folder.join("node_modules").join(package);
+        std::fs::create_dir_all(dir.join(main).parent().unwrap()).unwrap();
+        std::fs::write(
+            dir.join("package.json"),
+            format!(r#"{{ "name": "{package}", "version": "{version}", "main": "{main}" }}"#),
+        )
+        .unwrap();
+        std::fs::write(dir.join(main), &trap).unwrap();
+    }
     let (server, statuses) = start(folder);
     server.open(&template, "<h1>{{ title }}</h1>\n").unwrap();
     server.problems(&template).unwrap();
@@ -601,17 +581,7 @@ fn angular_takes_an_angular_projects_templates() {
     let said = statuses.lock().unwrap().clone();
     assert!(said.contains(&"Angular Ready".to_owned()), "{said:?}");
     assert!(!said.iter().any(|s| s.contains("Failed")), "{said:?}");
-    drop(server);
-
-    // The same project without its packages: said plainly, not started.
-    std::fs::remove_dir_all(folder.join("node_modules")).unwrap();
-    let (server, statuses) = start(folder);
-    server.open(&template, "<h1></h1>\n").unwrap();
-    let said = statuses.lock().unwrap().clone();
-    assert!(
-        matches!(&said[..], [only] if only.starts_with("Angular Failed") && only.contains("install the project's packages")),
-        "{said:?}"
-    );
+    assert!(!marker.exists(), "the project's own packages were run");
     drop(server);
 
     // Not an Angular project: its HTML is the HTML server's.
@@ -624,22 +594,36 @@ fn angular_takes_an_angular_projects_templates() {
 }
 
 #[test]
-fn an_angular_project_is_known_by_its_config_or_its_package() {
-    let dir = tempfile::tempdir().unwrap();
-    assert!(!crate::angular_workspace(dir.path()));
-    std::fs::write(
-        dir.path().join("package.json"),
-        r#"{ "dependencies": { "react": "19" } }"#,
-    )
-    .unwrap();
-    assert!(!crate::angular_workspace(dir.path()));
-    std::fs::write(
-        dir.path().join("package.json"),
-        r#"{ "dependencies": { "@angular/core": "22" } }"#,
-    )
-    .unwrap();
-    assert!(crate::angular_workspace(dir.path()));
-    let other = tempfile::tempdir().unwrap();
-    std::fs::write(other.path().join("angular.json"), "{}").unwrap();
-    assert!(crate::angular_workspace(other.path()));
+fn an_angular_project_is_known_by_its_config_or_its_dependencies() {
+    let is = |files: &[(&str, &str)]| {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, text) in files {
+            std::fs::write(dir.path().join(name), text).unwrap();
+        }
+        crate::angular_workspace(dir.path())
+    };
+    assert!(!is(&[]));
+    assert!(is(&[(
+        "angular.json",
+        r#"{ "version": 1, "projects": { "app": {} } }"#
+    )]));
+    assert!(is(&[(
+        "package.json",
+        r#"{ "dependencies": { "@angular/core": "22" } }"#
+    )]));
+    assert!(is(&[(
+        "package.json",
+        r#"{ "devDependencies": { "@angular/core": "22" } }"#
+    )]));
+    // Not its shape, or only its name somewhere else: not Angular.
+    assert!(!is(&[("angular.json", "{}")]));
+    assert!(!is(&[("angular.json", "not json")]));
+    assert!(!is(&[(
+        "package.json",
+        r#"{ "description": "\"@angular/core\" fan site" }"#
+    )]));
+    assert!(!is(&[(
+        "package.json",
+        r#"{ "dependencies": { "react": "19" } }"#
+    )]));
 }

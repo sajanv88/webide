@@ -9,7 +9,15 @@
 // once. The app never downloads a schema.
 
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
@@ -30,6 +38,12 @@ const angular = packageDir("@angular/language-server");
 const angularService = dirname(
   createRequire(join(angular, "package.json")).resolve("@angular/language-service/package.json"),
 );
+// And the TypeScript it runs on (its own dependency): the server loads only
+// these two copies, never a project's, so opening a template runs nothing
+// from the workspace.
+const angularTypeScript = dirname(
+  createRequire(join(angular, "package.json")).resolve("typescript/package.json"),
+);
 const version = (dir) => JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).version;
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
@@ -40,6 +54,7 @@ const stamp = sha256(
     version(yaml),
     version(angular),
     version(angularService),
+    version(angularTypeScript),
     version(packageDir("esbuild")),
     readFileSync(new URL(import.meta.url)),
     lock,
@@ -125,6 +140,24 @@ await minify(
   join(angularService, "bundles", "language-service.js"),
   join(serviceTarget, "bundles", "language-service.js"),
 );
+// TypeScript for it: its library (made smaller) and the lib.*.d.ts files it reads.
+const typeScriptTarget = join(target, "angular", "node_modules", "typescript");
+mkdirSync(join(typeScriptTarget, "lib"), { recursive: true });
+copyFileSync(join(angularTypeScript, "package.json"), join(typeScriptTarget, "package.json"));
+copyFileSync(join(angularTypeScript, "LICENSE.txt"), join(target, "LICENSE-typescript"));
+copyFileSync(
+  join(angularTypeScript, "lib", "tsserverlibrary.js"),
+  join(typeScriptTarget, "lib", "tsserverlibrary.js"),
+);
+await minify(
+  join(angularTypeScript, "lib", "typescript.js"),
+  join(typeScriptTarget, "lib", "typescript.js"),
+);
+for (const file of readdirSync(join(angularTypeScript, "lib"))) {
+  if (/^lib\..*\.d\.ts$/.test(file)) {
+    copyFileSync(join(angularTypeScript, "lib", file), join(typeScriptTarget, "lib", file));
+  }
+}
 writeFileSync(
   join(target, "LICENSE-angular"),
   "@angular/language-server and @angular/language-service: MIT License, Copyright Google LLC.\nhttps://angular.dev/license\n",

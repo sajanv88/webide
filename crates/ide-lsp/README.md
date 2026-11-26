@@ -6,14 +6,14 @@
 
 Language features over LSP, from servers the app ships:
 
-| Server     | Files                                                                                           | Runs as                                   |
-| ---------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| TypeScript | `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`                                    | TypeScript 7's native `tsc --lsp --stdio` |
-| JSON       | `.json`, `.jsonc` (`tsconfig*.json`, `.vscode/*.json`… as JSON with comments)                   | VS Code's JSON server, on Node            |
-| CSS        | `.css`, `.scss`, `.less`                                                                        | VS Code's CSS server, on Node             |
-| Angular    | `.html` templates, in an Angular project (`angular.json`, or `@angular/core` in `package.json`) | Angular's server, on Node                 |
-| HTML       | `.html`, `.htm` (with the CSS and JavaScript in them), in any other project                     | VS Code's HTML server, on Node            |
-| YAML       | `.yaml`, `.yml`                                                                                 | Red Hat's YAML server, on Node            |
+| Server     | Files                                                                                           | Runs as                                            |
+| ---------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| TypeScript | `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`                                    | TypeScript 7's native `tsc --lsp --stdio`          |
+| JSON       | `.json`, `.jsonc` (`tsconfig*.json`, `.vscode/*.json`… as JSON with comments)                   | VS Code's JSON server, on Node                     |
+| CSS        | `.css`, `.scss`, `.less`                                                                        | VS Code's CSS server, on Node                      |
+| Angular    | `.html` templates, in an Angular project (`angular.json`, or `@angular/core` in `package.json`) | Angular's server, on Node, with its own TypeScript |
+| HTML       | `.html`, `.htm` (with the CSS and JavaScript in them), in any other project                     | VS Code's HTML server, on Node                     |
+| YAML       | `.yaml`, `.yml`                                                                                 | Red Hat's YAML server, on Node                     |
 
 - **The programs** are the app's own: `tsc` from its `typescript`
   dependency (`apps/desktop/scripts/stage-typescript.mjs`), the others from
@@ -27,13 +27,15 @@ Language features over LSP, from servers the app ships:
   the servers are restarted.
 - **Angular:** a spec can serve only some workspaces (`applies`): Angular's
   is asked whether the folder is an Angular project, once as it opens, and
-  is listed before HTML, which has the `.html` files of every other one. Its
-  server is the one here that runs the workspace's code: it loads the
-  project's own TypeScript (`--tsProbeLocations`), and the project's
-  `@angular/language-service`, or else the copy the app bundles beside it
-  (`--ngProbeLocations`); `{workspace}` in a spec's `args` is the folder.
-  Without the project's packages (`node_modules/typescript`) it says so
-  (`needs`) rather than starting.
+  is listed before HTML, which has the `.html` files of every other one. A
+  project is Angular's when `angular.json` has `projects`, or
+  `package.json` has `@angular/core` among its dependencies (both parsed).
+  Its server loads TypeScript and `@angular/language-service` only from the
+  copies the app bundles beside it (`--tsProbeLocations`,
+  `--ngProbeLocations` name nothing else), never the project's: opening a
+  template runs nothing from the workspace, which it only reads (its
+  sources and its packages' type declarations). `{workspace}` in a spec's
+  `args` is the folder.
 - **Node:** the JSON, CSS, HTML, YAML and Angular servers run on the person's `node`,
   found when each starts (`FindNode`: the app gives the debugger's
   `find_node`, which also looks where installers put it). Without one they
