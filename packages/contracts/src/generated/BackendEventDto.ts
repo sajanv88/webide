@@ -14,4 +14,4 @@ export type BackendEventDto = { "kind": "filesChanged", workspaceId: string, cha
 /**
  * Which server: "TypeScript", "JSON", "YAML"…
  */
-server: string, status: LanguageStatusDto, } | { "kind": "agentCall", call: AgentCallDto, } | { "kind": "assistant", event: AssistantEventDto, } | { "kind": "windowState", state: WindowStateDto, };
+server: string, status: LanguageStatusDto, } | { "kind": "languageProblemsChanged", workspaceId: string, } | { "kind": "agentCall", call: AgentCallDto, } | { "kind": "assistant", event: AssistantEventDto, } | { "kind": "windowState", state: WindowStateDto, };

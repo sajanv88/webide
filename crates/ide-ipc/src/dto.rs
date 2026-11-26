@@ -338,6 +338,10 @@ pub enum BackendEventDto {
         server: String,
         status: LanguageStatusDto,
     },
+    /// A language server's problems may have changed by themselves: read
+    /// the open files' problems again.
+    #[serde(rename_all = "camelCase")]
+    LanguageProblemsChanged { workspace_id: String },
     /// An AI agent used a tool of the MCP server.
     AgentCall { call: AgentCallDto },
     /// What a conversation with the IDE's assistant reports.
@@ -1594,15 +1598,18 @@ impl From<Definition> for DefinitionDto {
     }
 }
 
-impl From<LanguageStatus> for LanguageStatusDto {
-    fn from(status: LanguageStatus) -> Self {
-        match status {
+impl LanguageStatusDto {
+    /// The status to show; `None` for `ProblemsChanged`, which is sent as
+    /// `languageProblemsChanged` instead.
+    pub fn from_status(status: LanguageStatus) -> Option<Self> {
+        Some(match status {
             LanguageStatus::Starting => Self::Starting,
             LanguageStatus::Ready => Self::Ready,
             LanguageStatus::NeedsNode => Self::NeedsNode,
             LanguageStatus::Failed(message) => Self::Failed { message },
             LanguageStatus::Restricted => Self::Restricted,
-        }
+            LanguageStatus::ProblemsChanged => return None,
+        })
     }
 }
 

@@ -80,7 +80,7 @@ export interface LanguageClient {
  * The files a language server here handles: scripts (TypeScript), JSON, CSS,
  * SCSS and Less, HTML, YAML. The backend decides which server.
  */
-const HANDLED = /\.(?:[mc]?[jt]s|[jt]sx|jsonc?|css|scss|less|html?|ya?ml)$/i;
+const HANDLED = /\.(?:[mc]?[jt]s|[jt]sx|jsonc?|css|scss|less|html?|ya?ml|vue|svelte)$/i;
 
 /** Character offsets of each line's start, in UTF-16 units (as JavaScript counts). */
 function lineStarts(text: string): number[] {
@@ -171,6 +171,8 @@ export function createLanguageClient(port: LanguagePort, bus: EventBus<AppEvents
   };
 
   const stops = [
+    // A server found problems by itself (its project loaded, it pushed new ones).
+    bus.on("language.problemsChanged", () => refreshSoon()),
     bus.on("document.opened", ({ path, text }) => {
       if (!handles(path)) return;
       texts.set(path, text);

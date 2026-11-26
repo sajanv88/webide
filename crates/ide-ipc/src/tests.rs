@@ -2195,3 +2195,23 @@ fn turning_eslint_on_starts_the_language_servers_again_and_other_settings_dont()
     assert!(on.eslint);
     assert_eq!(stops(), 1);
 }
+
+#[test]
+fn changed_problems_are_their_own_event_not_a_status() {
+    use crate::dto::LanguageStatusDto;
+    assert_eq!(
+        LanguageStatusDto::from_status(LanguageStatus::ProblemsChanged),
+        None
+    );
+    assert_eq!(
+        LanguageStatusDto::from_status(LanguageStatus::Ready),
+        Some(LanguageStatusDto::Ready)
+    );
+    assert_eq!(
+        serde_json::to_value(BackendEventDto::LanguageProblemsChanged {
+            workspace_id: "1".to_owned()
+        })
+        .unwrap(),
+        json!({ "kind": "languageProblemsChanged", "workspaceId": "1" })
+    );
+}

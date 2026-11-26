@@ -29,7 +29,7 @@ pub use crate::rpc::{OnRequest, RpcClient, RpcError, read_message, write_message
 pub use crate::servers::{
     FindNode, LanguageId, Program, Role, ServerSpec, Servers, WORKSPACE_ARG,
     WORKSPACE_NAME_SETTING, WORKSPACE_URI_SETTING, angular_workspace, css_language,
-    eslint_language, html_language, json_language, yaml_language,
+    eslint_language, html_language, json_language, svelte_language, vue_language, yaml_language,
 };
 pub use crate::uri::{from_uri, relative_to, to_uri};
 
@@ -72,6 +72,8 @@ fn start_session(
     let (exit_status, exit_stopping) = (Arc::clone(status), Arc::clone(&stopping));
     let pushed: Pushed = Arc::new(Mutex::new(HashMap::new()));
     let (push_into, push_folder) = (Arc::clone(&pushed), folder.clone());
+    let (push_status, refresh_status) = (Arc::clone(status), Arc::clone(status));
+    let respond = servers::responder(spec, root);
     let client = RpcClient::spawn(
         program,
         args,
@@ -97,8 +99,16 @@ fn start_session(
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .insert(path, (Instant::now(), items));
+            push_status(name, LanguageStatus::ProblemsChanged);
         }),
-        servers::responder(spec, root),
+        Box::new(move |method, params| {
+            // Its problems are worth pulling again (its project has loaded).
+            if method == "workspace/diagnostic/refresh" {
+                refresh_status(name, LanguageStatus::ProblemsChanged);
+                return Ok(Value::Null);
+            }
+            respond(method, params)
+        }),
         Box::new(move || {
             if !exit_stopping.load(Ordering::Acquire) {
                 exit_status(

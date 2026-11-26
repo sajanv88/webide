@@ -29,7 +29,7 @@ export interface WorkspaceTrustProps {
 export const RESTRICTED: readonly string[] = [
   "Source control: git can run programs a repository configures.",
   "Run and Debug, which runs the folder's code.",
-  "Language servers that load the project's own code or configuration (ESLint, Svelte).",
+  "Language servers that load the project's own code or configuration (ESLint, Vue, Svelte).",
 ];
 
 /** The folder a path is in, as people write it; `null` at the top of a drive. */

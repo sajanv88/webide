@@ -143,6 +143,8 @@ export interface AppEvents {
   "document.closed": { readonly path: string };
   /** The problems the language server found in an open file, now. */
   "language.problems": { readonly path: string; readonly problems: readonly EditorProblem[] };
+  /** A language server's problems may have changed by themselves: read them again. */
+  "language.problemsChanged": Record<string, never>;
   /** How one of the open workspace's language servers ("TypeScript", "JSON"…) is doing. */
   "language.status": { readonly server: string; readonly status: LanguageStatusDto };
   /**

@@ -27,7 +27,7 @@ binds to the open workspace.
     the file's latest text first.
   - `restart()` stops the servers and opens the files again in new ones.
   - It sends the files a server handles: scripts, JSON, CSS, SCSS, Less,
-    HTML and YAML. The backend picks the server.
+    HTML, YAML, Vue and Svelte. The backend picks the server.
 - `LanguageStatusItem`, for the status bar: each server by name (TypeScript,
   JSON, YAML…) as it starts (a spinner) and is ready, with the open files'
   errors and warnings (all said in words). One that failed is a button that
