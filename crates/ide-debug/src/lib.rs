@@ -51,13 +51,64 @@ fn failed(what: &str, error: impl std::fmt::Display) -> IdeError {
     IdeError::Io(format!("{what}: {error}"))
 }
 
-/// The person's `node`, on the PATH.
+/// The person's `node`: on the PATH, or where installers put it. An app
+/// started from the Finder or the Start menu may not have the shell's PATH,
+/// and one already running doesn't see a PATH changed since, so the usual
+/// places are looked in too: an install made a moment ago is found.
 pub fn find_node() -> Option<PathBuf> {
     let name = if cfg!(windows) { "node.exe" } else { "node" };
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
+    let on_path = std::env::var_os("PATH")
+        .map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
+        .unwrap_or_default();
+    on_path
+        .into_iter()
+        .chain(node_folders())
         .map(|dir| dir.join(name))
         .find(|candidate| candidate.is_file())
+}
+
+/// Where Node's installers and version managers put `node`.
+fn node_folders() -> Vec<PathBuf> {
+    let env = |name: &str| std::env::var_os(name).map(PathBuf::from);
+    let mut folders = Vec::new();
+    if cfg!(windows) {
+        // The installer (and winget's), for everyone or for one person; Volta.
+        for (var, rest) in [
+            ("ProgramFiles", &["nodejs"][..]),
+            ("LOCALAPPDATA", &["Programs", "nodejs"][..]),
+            ("LOCALAPPDATA", &["Volta", "bin"][..]),
+        ] {
+            if let Some(base) = env(var) {
+                folders.push(rest.iter().fold(base, |dir, part| dir.join(part)));
+            }
+        }
+    } else {
+        // Homebrew (Apple silicon, Intel), MacPorts, the system's, Snap.
+        for dir in [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/opt/local/bin",
+            "/usr/bin",
+            "/snap/bin",
+        ] {
+            folders.push(PathBuf::from(dir));
+        }
+        if let Some(home) = env("HOME") {
+            folders.push(home.join(".volta/bin"));
+            // nvm: the newest version installed.
+            let mut versions: Vec<PathBuf> = std::fs::read_dir(home.join(".nvm/versions/node"))
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .map(|entry| entry.path().join("bin"))
+                        .collect()
+                })
+                .unwrap_or_default();
+            versions.sort();
+            folders.extend(versions.into_iter().rev());
+        }
+    }
+    folders
 }
 
 /// A path the debugger names, as a workspace path if it's inside `root`

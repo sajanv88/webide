@@ -32,6 +32,8 @@ interface Entry {
   readonly status: TerminalStatus;
   /** The shell's name, once it's running. */
   readonly shell?: string;
+  /** Typed at its prompt once it's up, not run. */
+  readonly input?: string;
 }
 
 /** A tab's name: its number and shell, and whether it ended. */
@@ -60,9 +62,12 @@ export function TerminalPanel({ port, registry, bus, passKey, styleNonce }: Term
   const state = useRef({ entries, active });
   state.current = { entries, active };
 
-  const add = useCallback(() => {
+  const add = useCallback((input?: string) => {
     const key = nextKey.current++;
-    setEntries((now) => [...now, { key, status: { kind: "starting" } }]);
+    setEntries((now) => [
+      ...now,
+      { key, status: { kind: "starting" }, ...(input ? { input } : {}) },
+    ]);
     setActive(key);
     pendingFocus.current = key;
   }, []);
@@ -144,6 +149,15 @@ export function TerminalPanel({ port, registry, bus, passKey, styleNonce }: Term
   useEffect(() => registry.notify(), [registry, entries, active]);
 
   // The page's theme changed: the terminals read their colors again.
+  // A command to type for the person (an installer's), in a terminal of its own.
+  useEffect(
+    () =>
+      bus.on("terminal.type", ({ text }) => {
+        void registry.execute("view.showPanel").then(() => add(text));
+      }),
+    [bus, registry, add],
+  );
+
   useEffect(() => {
     const again = () => setThemeKey(String(Date.now()));
     const stop = bus.on("settings.changed", () => requestAnimationFrame(again));
@@ -172,7 +186,7 @@ export function TerminalPanel({ port, registry, bus, passKey, styleNonce }: Term
           <EmptyTitle>No terminal open</EmptyTitle>
           <EmptyDescription>A terminal runs your shell in the folder that's open.</EmptyDescription>
           <EmptyActions>
-            <Button onClick={add}>
+            <Button onClick={() => add()}>
               <TerminalIcon size={16} />
               New terminal
             </Button>
@@ -209,7 +223,7 @@ export function TerminalPanel({ port, registry, bus, passKey, styleNonce }: Term
               className="terminal-panel__icon"
               aria-label="New terminal"
               title="New terminal"
-              onClick={add}
+              onClick={() => add()}
             >
               <PlusIcon size={16} />
             </Button>
@@ -245,6 +259,7 @@ export function TerminalPanel({ port, registry, bus, passKey, styleNonce }: Term
               themeKey={themeKey}
               onStatus={(status) => setStatus(entry.key, status)}
               onReady={(focus) => focusers.current.set(entry.key, focus)}
+              initialInput={entry.input}
             />
           </TabsContent>
         ))}

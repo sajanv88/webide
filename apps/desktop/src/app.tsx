@@ -231,7 +231,9 @@ export function App() {
           if (event.workspaceId === current?.id) bus.emit("debug.event", event.event);
           break;
         case "languageStatus":
-          if (event.workspaceId === current?.id) bus.emit("language.status", event.status);
+          if (event.workspaceId === current?.id) {
+            bus.emit("language.status", { server: event.server, status: event.status });
+          }
           break;
         case "agentCall":
           bus.emit("agent.call", event.call);

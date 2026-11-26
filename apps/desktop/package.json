@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:web": "node scripts/stage-typescript.mjs && node scripts/stage-js-debug.mjs && vite",
-    "build": "node scripts/stage-typescript.mjs && node scripts/stage-js-debug.mjs && vite build",
+    "dev:web": "node scripts/stage-typescript.mjs && node scripts/stage-js-debug.mjs && node scripts/stage-language-servers.mjs && vite",
+    "build": "node scripts/stage-typescript.mjs && node scripts/stage-js-debug.mjs && node scripts/stage-language-servers.mjs && vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "tauri": "tauri",
     "stage:typescript": "node scripts/stage-typescript.mjs",
-    "stage:js-debug": "node scripts/stage-js-debug.mjs"
+    "stage:js-debug": "node scripts/stage-js-debug.mjs",
+    "stage:language-servers": "node scripts/stage-language-servers.mjs"
   },
   "dependencies": {
     "@nuvui/backgrounds": "catalog:",
@@ -36,14 +37,18 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@angular/language-server": "catalog:",
     "@repo/tsconfig": "workspace:*",
     "@tauri-apps/cli": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "esbuild": "catalog:",
     "sass": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "vscode-langservers-extracted": "catalog:",
+    "yaml-language-server": "catalog:"
   }
 }

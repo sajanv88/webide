@@ -140,8 +140,13 @@ export interface AppEvents {
   "document.closed": { readonly path: string };
   /** The problems the language server found in an open file, now. */
   "language.problems": { readonly path: string; readonly problems: readonly EditorProblem[] };
-  /** How the open workspace's language server is doing. */
-  "language.status": LanguageStatusDto;
+  /** How one of the open workspace's language servers ("TypeScript", "JSON"…) is doing. */
+  "language.status": { readonly server: string; readonly status: LanguageStatusDto };
+  /**
+   * Opens a new terminal with `text` typed at its prompt, not run: the
+   * person reads it and presses Enter (an installer's command, say).
+   */
+  "terminal.type": { readonly text: string };
   /** What the program running under the debugger reports. */
   "debug.event": DebugEventDto;
   /** An AI agent used a tool of the MCP server. */

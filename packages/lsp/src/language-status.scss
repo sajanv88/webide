@@ -1,10 +1,21 @@
-// The language server in the status bar.
+// The language servers in the status bar.
 .language-status {
   display: inline-flex;
-  gap: var(--spacing);
+  gap: calc(var(--spacing) * 2);
   align-items: center;
   font-size: var(--text-xs);
   line-height: var(--text-xs--line-height);
+
+  &__summary,
+  &__server {
+    display: inline-flex;
+    gap: var(--spacing);
+    align-items: center;
+  }
+
+  &__summary {
+    gap: calc(var(--spacing) * 1.5);
+  }
 
   &__count {
     display: inline-flex;
@@ -12,12 +23,20 @@
     align-items: center;
     margin-inline-start: var(--spacing);
   }
-}
 
-// A button the size of the bar's text.
-.language-status--failed {
-  min-block-size: 0;
-  padding-block: 0;
-  padding-inline: calc(var(--spacing) * 1.5);
-  color: var(--color-danger);
+  // A button the size of the bar's text.
+  &__button {
+    min-block-size: 0;
+    padding-block: 0;
+    padding-inline: calc(var(--spacing) * 1.5);
+    font-size: inherit;
+  }
+
+  &__button--failed {
+    color: var(--color-danger);
+  }
+
+  &__button--node {
+    color: var(--color-warning);
+  }
 }

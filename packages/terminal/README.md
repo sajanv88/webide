@@ -26,6 +26,9 @@ workspace.
 - **A screen reader:** each terminal's input is named "Terminal 1: pwsh";
   `terminal.screenReader` turns on xterm's screen reader mode (the output is
   read as it comes).
+- **Typed for the person:** `terminal.type` on the bus (`{ text }`) opens a
+  new terminal and types `text` at its prompt once the shell's output has
+  paused (400 ms), without pressing Enter: they read it and run it.
 - Commands: `terminal.new`, `terminal.kill`, `terminal.focus` ("Toggle
   Terminal": show the panel, start a terminal if there's none, and focus it;
   from inside a terminal, hide the panel and go back), `terminal.screenReader`.

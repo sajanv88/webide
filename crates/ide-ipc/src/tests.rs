@@ -379,12 +379,12 @@ impl LanguageServers for FakeLanguages {
         let mut log = self.log.lock().unwrap();
         let n = log.iter().filter(|line| line.starts_with("start")).count() + 1;
         log.push(format!("start {n} in {}", root.name()));
-        status(LanguageStatus::Starting);
+        status("TypeScript", LanguageStatus::Starting);
         if self.fail.load(std::sync::atomic::Ordering::Relaxed) {
-            status(LanguageStatus::Failed("no server".into()));
+            status("TypeScript", LanguageStatus::Failed("no server".into()));
             return Err(IdeError::Io("no server".into()));
         }
-        status(LanguageStatus::Ready);
+        status("TypeScript", LanguageStatus::Ready);
         Ok(Box::new(FakeServer {
             n,
             log: Arc::clone(&self.log),
@@ -1490,14 +1490,18 @@ fn the_language_server_starts_with_the_first_file_it_handles_and_stops_with_the_
         .filter_map(|event| match event {
             BackendEventDto::LanguageStatus {
                 workspace_id,
+                server,
                 status,
-            } => Some(format!("{workspace_id} {status:?}")),
+            } => Some(format!("{workspace_id} {server} {status:?}")),
             _ => None,
         })
         .collect();
     assert_eq!(
         statuses,
-        [format!("{} Starting", ws.id), format!("{} Ready", ws.id)]
+        [
+            format!("{} TypeScript Starting", ws.id),
+            format!("{} TypeScript Ready", ws.id)
+        ]
     );
 
     handlers::open_picked(&fx.state, &folder("beta")).unwrap();

@@ -13,3 +13,12 @@ export {
   toEdit,
 } from "./language-client";
 export { LanguageStatusItem, type LanguageStatusItemProps } from "./language-status";
+export {
+  currentPlatform,
+  DOWNLOAD_ADDRESS,
+  INSTALL_COMMAND,
+  listed,
+  NodeSetupDialog,
+  type NodeSetupDialogProps,
+  type Platform,
+} from "./node-setup";

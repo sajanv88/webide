@@ -10,7 +10,7 @@ import {
 import { EditorState, type Extension, Prec, type Text } from "@codemirror/state";
 import { EditorView, hoverTooltip, keymap } from "@codemirror/view";
 import type { SurfaceCompletion, SurfaceLanguage, SurfacePosition } from "./contract";
-import { editChanges, overlapping } from "./edits";
+import { editChanges, offsetAt, overlapping } from "./edits";
 
 /** A character offset as a line and a UTF-16 column (CodeMirror counts UTF-16). */
 export function positionAt(doc: Text, offset: number): SurfacePosition {
@@ -37,6 +37,12 @@ const TYPES: Record<string, string> = {
   typeParameter: "type",
   text: "text",
 };
+
+/**
+ * What starts a completion before a word does: a member (`.`), a JSON key or
+ * value (`"`, `:`), an HTML tag or a closing one (`<`, `/`), a CSS at-rule (`@`).
+ */
+const TRIGGERS = [".", '"', ":", "<", "/", "@"];
 
 /**
  * Markdown from a hover as plain DOM: fenced code as `<pre>`, the rest as
@@ -66,8 +72,12 @@ export function hoverContent(markdown: string): HTMLElement {
  * still as it was: their places were counted in that text.
  */
 export function applyCompletion(item: SurfaceCompletion) {
-  return (view: EditorView, completion: Completion, from: number, to: number): void => {
+  return (view: EditorView, completion: Completion, wordFrom: number, to: number): void => {
     const before = view.state.doc;
+    // Where the server's own edit starts, if it's on this line before the cursor.
+    const start = item.replaceFrom ? offsetAt(before, item.replaceFrom) : wordFrom;
+    const from =
+      start <= to && before.lineAt(start).number === before.lineAt(to).number ? start : wordFrom;
     const insert = item.insert ?? item.label;
     const extra = editChanges(before, item.edits ?? []).filter(
       (change) => change.to <= from || change.from >= to,
@@ -107,17 +117,20 @@ export function languageExtensions(language: () => SurfaceLanguage | undefined):
   const complete = async (context: CompletionContext): Promise<CompletionResult | null> => {
     const features = language();
     if (!features) return null;
-    const word = context.matchBefore(/[\w$]*/);
+    // A word, with CSS's and HTML's hyphens in it.
+    const word = context.matchBefore(/[\w$-]*/);
     const before = context.state.sliceDoc(Math.max(0, context.pos - 1), context.pos);
-    // Ask after a word starts, after a dot, or when asked (Ctrl+Space).
-    if (!context.explicit && (!word || word.from === word.to) && before !== ".") return null;
+    // Ask after a word starts, after one of TRIGGERS, or when asked (Ctrl+Space).
+    if (!context.explicit && (!word || word.from === word.to) && !TRIGGERS.includes(before)) {
+      return null;
+    }
     const items = await features.completions(positionAt(context.state.doc, context.pos));
     if (!items || context.aborted) return null;
     return {
       from: word ? word.from : context.pos,
       options: items.map((item) => {
         const detail = item.detail ?? item.source;
-        const changes = item.resolve || (item.edits?.length ?? 0) > 0;
+        const changes = item.resolve || item.replaceFrom || (item.edits?.length ?? 0) > 0;
         return {
           label: item.label,
           ...(item.kind && TYPES[item.kind] ? { type: TYPES[item.kind] } : {}),
@@ -129,7 +142,7 @@ export function languageExtensions(language: () => SurfaceLanguage | undefined):
               : {}),
         };
       }),
-      validFor: /^[\w$]*$/,
+      validFor: /^[\w$-]*$/,
     };
   };
 

@@ -50,7 +50,8 @@
     ],
     "resources": {
       "resources/typescript/": "typescript/",
-      "resources/js-debug/": "js-debug/"
+      "resources/js-debug/": "js-debug/",
+      "resources/language-servers/": "language-servers/"
     }
   }
 }
