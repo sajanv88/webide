@@ -242,6 +242,8 @@ pub struct SettingsDto {
     /// Files larger than this don't open.
     pub refuse_above_bytes: u64,
     pub editor: EditorSettingsDto,
+    /// ESLint checks JavaScript and TypeScript files, in trusted folders.
+    pub eslint: bool,
 }
 
 /// Where spaces and tabs are drawn as marks.
@@ -1001,6 +1003,9 @@ pub struct SettingsPatchDto {
     #[serde(default)]
     #[ts(optional)]
     pub editor: Option<EditorSettingsDto>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub eslint: Option<bool>,
 }
 
 /// Where backend events go: one channel per page, replaced when the page
@@ -1232,6 +1237,7 @@ impl From<Settings> for SettingsDto {
             read_only_above_bytes: settings.read_only_above_bytes,
             refuse_above_bytes: settings.refuse_above_bytes,
             editor: settings.editor.into(),
+            eslint: settings.eslint,
         }
     }
 }
@@ -1283,6 +1289,7 @@ impl From<SettingsPatchDto> for SettingsPatch {
             read_only_above_bytes: patch.read_only_above_bytes,
             refuse_above_bytes: patch.refuse_above_bytes,
             editor: patch.editor.map(Into::into),
+            eslint: patch.eslint,
         }
     }
 }

@@ -11,7 +11,7 @@ versioned JSON files in the config folder the composition root passes in
 (Tauri's app config dir):
 
 - `recent-workspaces.json`
-- `settings.json` (sections `theme`, `files`, `editor`): unknown keys are
+- `settings.json` (sections `theme`, `files`, `editor`, `languages`): unknown keys are
   ignored and missing ones take defaults. A
   file that isn't valid settings is moved to `settings.invalid.json`, and the
   defaults are used.

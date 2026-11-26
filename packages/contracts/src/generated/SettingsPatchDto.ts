@@ -9,4 +9,4 @@ export type SettingsPatchDto = { theme?: ThemeDto, readOnlyAboveBytes?: number, 
 /**
  * All of the editor's settings, or none.
  */
-editor?: EditorSettingsDto, };
+editor?: EditorSettingsDto, eslint?: boolean, };

@@ -29,6 +29,14 @@ the project's code stay off. Editing, search, the terminal and the other
 language features work either way. "Restricted Mode" in the status bar, or
 Manage Workspace Trust in the command palette, changes it.
 
+## ESLint
+
+Off by default. Turn it on in Settings → Languages → ESLint. In a folder
+whose authors you trust, it then checks JavaScript, TypeScript, Vue and
+Svelte files with the project's own ESLint and configuration, beside the
+other language features; Ctrl+. offers its fixes. A project without ESLint
+gets nothing from it.
+
 ## Keys
 
 | Keys (macOS: Cmd for Ctrl)  | Does                      |
@@ -71,7 +79,7 @@ the menus and the palette show them from there.
 your platform, from the app's own `typescript` dependency, and the
 vscode-js-debug DAP server (downloaded from its GitHub release once, checked
 by its SHA-256, then cached), into `apps/desktop/src-tauri/resources/`, which
-the app bundles. It also bundles the JSON, CSS, HTML, YAML and Angular language
+the app bundles. It also bundles the JSON, CSS, HTML, YAML, Angular and ESLint language
 servers with esbuild (Angular's with its language service and the TypeScript
 it runs on, so a project's own packages are never run), and the SchemaStore schemas they check files against (pinned in
 `apps/desktop/scripts/schemas.lock.json`, fetched once and cached). The

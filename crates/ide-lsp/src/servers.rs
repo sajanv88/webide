@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
+use ide_core::language::StartOptions;
 use ide_core::language::{
     CodeAction, Completions, Definition, HoverText, LanguageServer, LanguageServers, LanguageSink,
     LanguageStatus, Problem, ResolvedCompletion, SourceAction, TextEdit, TextPosition, TextRange,
@@ -60,6 +61,44 @@ pub struct ServerSpec {
     /// It runs the folder's own code (its config, plugins or packages), so
     /// it's off until the person trusts the folder.
     pub needs_trust: bool,
+    /// The one server for its files, or one beside it (a linter).
+    pub role: Role,
+    /// Whether it's on with these options; always when absent.
+    pub switch: Option<fn(&StartOptions) -> bool>,
+}
+
+/// What a server is to the files it handles.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    /// The first one that handles a file answers everything about it.
+    Primary,
+    /// Beside the primary one: it's told about the file too, and its
+    /// problems and fixes are added to the primary's (ESLint).
+    Linter,
+}
+
+/// In a server's settings, the workspace folder's `file:` URI, and its name.
+pub const WORKSPACE_URI_SETTING: &str = "{workspaceUri}";
+pub const WORKSPACE_NAME_SETTING: &str = "{workspaceName}";
+
+/// `settings` with the workspace's URI and name where they're asked for.
+pub(crate) fn with_workspace(settings: &Value, uri: &str, name: &str) -> Value {
+    match settings {
+        Value::String(text) if text == WORKSPACE_URI_SETTING => Value::String(uri.to_owned()),
+        Value::String(text) if text == WORKSPACE_NAME_SETTING => Value::String(name.to_owned()),
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|item| with_workspace(item, uri, name))
+                .collect(),
+        ),
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, value)| (key.clone(), with_workspace(value, uri, name)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
 }
 
 /// In a server's `args`, the workspace's folder.
@@ -171,6 +210,15 @@ pub fn html_language(path: &RelPath) -> Option<&'static str> {
     matches!(extension(path)?.as_str(), "html" | "htm").then_some("html")
 }
 
+/// The files ESLint checks: scripts, and Vue and Svelte components.
+pub fn eslint_language(path: &RelPath) -> Option<&'static str> {
+    script_language(path).or_else(|| match extension(path)?.as_str() {
+        "vue" => Some("vue"),
+        "svelte" => Some("svelte"),
+        _ => None,
+    })
+}
+
 pub fn yaml_language(path: &RelPath) -> Option<&'static str> {
     matches!(extension(path)?.as_str(), "yaml" | "yml").then_some("yaml")
 }
@@ -227,6 +275,8 @@ impl ServerSpec {
             notifications: Vec::new(),
             applies: Some(angular_workspace),
             needs_trust: false,
+            role: Role::Primary,
+            switch: None,
         }
     }
 
@@ -243,6 +293,8 @@ impl ServerSpec {
             notifications: Vec::new(),
             applies: None,
             needs_trust: false,
+            role: Role::Primary,
+            switch: None,
         }
     }
 
@@ -278,6 +330,8 @@ impl ServerSpec {
             notifications: Vec::new(),
             applies: None,
             needs_trust: false,
+            role: Role::Primary,
+            switch: None,
         }
     }
 
@@ -299,6 +353,57 @@ impl ServerSpec {
             notifications: Vec::new(),
             applies: None,
             needs_trust: false,
+            role: Role::Primary,
+            switch: None,
+        }
+    }
+
+    /// ESLint, beside the file's own server, for JavaScript and TypeScript
+    /// (and Vue and Svelte files, which ESLint can check with their
+    /// plugins): VS Code's ESLint server, on Node. It loads the project's
+    /// own `eslint` and its configuration, so it needs the folder trusted;
+    /// and it's off unless the person turns it on. A project without ESLint
+    /// gets nothing from it.
+    pub fn eslint(script: PathBuf) -> Self {
+        let script = plain_path(script);
+        Self {
+            name: "ESLint",
+            program: Program::Node(script),
+            args: vec!["--stdio".to_owned()],
+            language: eslint_language,
+            initialization_options: Value::Null,
+            // What VS Code's ESLint extension sends: the server reads every
+            // field, so none may be missing.
+            settings: json!({
+                "validate": "on",
+                "packageManager": "npm",
+                "useESLintClass": false,
+                "experimental": { "useFlatConfig": false },
+                "codeAction": {
+                    "disableRuleComment": {
+                        "enable": true,
+                        "location": "separateLine",
+                        "commentStyle": "line",
+                    },
+                    "showDocumentation": { "enable": false },
+                },
+                "codeActionOnSave": { "mode": "all" },
+                "format": false,
+                "quiet": false,
+                "onIgnoredFiles": "off",
+                "options": {},
+                "rulesCustomizations": [],
+                "run": "onType",
+                "problems": { "shortenToSingleLine": false },
+                "nodePath": null,
+                "workspaceFolder": { "uri": WORKSPACE_URI_SETTING, "name": WORKSPACE_NAME_SETTING },
+            }),
+            schemas: None,
+            notifications: Vec::new(),
+            applies: None,
+            needs_trust: true,
+            role: Role::Linter,
+            switch: Some(|options| options.eslint),
         }
     }
 
@@ -323,6 +428,8 @@ impl ServerSpec {
             notifications: Vec::new(),
             applies: None,
             needs_trust: false,
+            role: Role::Primary,
+            switch: None,
         }
     }
 
@@ -367,14 +474,17 @@ impl ServerSpec {
             notifications: vec![("yaml/registerContentRequest", Value::Null)],
             applies: None,
             needs_trust: false,
+            role: Role::Primary,
+            switch: None,
         }
     }
 }
 
 /// How a server answers the requests a server makes: its settings, and the
 /// bundled schemas it asks for by address.
-pub(crate) fn responder(spec: &ServerSpec) -> OnRequest {
-    let (settings, schemas) = (spec.settings.clone(), spec.schemas.clone());
+pub(crate) fn responder(spec: &ServerSpec, root: &WorkspaceRoot) -> OnRequest {
+    let settings = with_workspace(&spec.settings, &to_uri(&root.display_path()), root.name());
+    let schemas = spec.schemas.clone();
     Box::new(move |method, params| match method {
         // A schema by address: only a bundled one. Nothing is fetched.
         "vscode/content" => schema_content(schemas.as_deref(), params)
@@ -438,15 +548,19 @@ impl LanguageServers for Servers {
     fn start(
         &self,
         root: &WorkspaceRoot,
-        trusted: bool,
+        options: StartOptions,
         status: LanguageSink,
     ) -> Result<Box<dyn LanguageServer>, IdeError> {
+        let trusted = options.trusted;
         let folder = PathBuf::from(root.display_path());
         // Asked once, as the workspace opens.
         let applies: Vec<bool> = self
             .specs
             .iter()
-            .map(|spec| spec.applies.is_none_or(|applies| applies(&folder)))
+            .map(|spec| {
+                spec.switch.is_none_or(|on| on(&options))
+                    && spec.applies.is_none_or(|applies| applies(&folder))
+            })
             .collect();
         Ok(Box::new(Workspace {
             root: root.clone(),
@@ -494,28 +608,50 @@ struct Workspace {
 }
 
 impl Workspace {
-    /// The first server that serves this workspace and handles `path`. A
-    /// server before it that's off until the folder is trusted says so, once.
+    /// Whether server `index` serves this workspace and handles `path`.
+    fn serves(&self, index: usize, path: &RelPath) -> bool {
+        self.applies.get(index).copied().unwrap_or(false)
+            && (self.specs[index].language)(path).is_some()
+    }
+
+    /// The first primary server that serves this workspace and handles
+    /// `path`. A server that would have had it (a primary one before it, or
+    /// a linter) but is off until the folder is trusted says so, once.
     fn index_for(&self, path: &RelPath) -> Option<usize> {
-        let index = self.specs.iter().enumerate().position(|(index, spec)| {
-            self.applies.get(index).copied().unwrap_or(false) && (spec.language)(path).is_some()
-        });
-        for (spec, restricted) in self
-            .specs
-            .iter()
-            .zip(&self.restricted)
-            .take(index.unwrap_or(usize::MAX))
-        {
-            if (spec.language)(path).is_some() && restricted.swap(false, Ordering::Relaxed) {
+        let index = (0..self.specs.len())
+            .find(|&index| self.specs[index].role == Role::Primary && self.serves(index, path));
+        for (at, (spec, restricted)) in self.specs.iter().zip(&self.restricted).enumerate() {
+            let would = spec.role == Role::Linter || index.is_none_or(|index| at < index);
+            if would && (spec.language)(path).is_some() && restricted.swap(false, Ordering::Relaxed)
+            {
                 (self.status)(spec.name, LanguageStatus::Restricted);
             }
         }
         index
     }
 
-    /// The server for `path`, started now if it's the first of its files.
+    /// The linters that serve this workspace and handle `path`.
+    fn linters_for(&self, path: &RelPath) -> Vec<usize> {
+        (0..self.specs.len())
+            .filter(|&index| self.specs[index].role == Role::Linter && self.serves(index, path))
+            .collect()
+    }
+
+    /// The primary server for `path`, started now if it's the first of its files.
     fn server(&self, path: &RelPath) -> Option<Arc<Session>> {
-        let index = self.index_for(path)?;
+        self.slot(self.index_for(path)?)
+    }
+
+    /// The linters for `path`, each started now if it's the first of its files.
+    fn linters(&self, path: &RelPath) -> Vec<Arc<Session>> {
+        self.linters_for(path)
+            .into_iter()
+            .filter_map(|index| self.slot(index))
+            .collect()
+    }
+
+    /// Server `index`, started now if it isn't yet.
+    fn slot(&self, index: usize) -> Option<Arc<Session>> {
         let mut slots = self.slots.lock().unwrap_or_else(PoisonError::into_inner);
         match slots.get(index)? {
             Slot::Running(session) => return Some(Arc::clone(session)),
@@ -538,18 +674,17 @@ impl Workspace {
         found
     }
 
-    /// The server for `path`, if it's running.
-    fn running(&self, path: &RelPath) -> Option<Arc<Session>> {
-        let index = self.index_for(path)?;
-        match self
-            .slots
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(index)?
-        {
-            Slot::Running(session) => Some(Arc::clone(session)),
-            _ => None,
-        }
+    /// The servers for `path` that are running, the primary one first.
+    fn running(&self, path: &RelPath) -> Vec<Arc<Session>> {
+        let slots = self.slots.lock().unwrap_or_else(PoisonError::into_inner);
+        self.index_for(path)
+            .into_iter()
+            .chain(self.linters_for(path))
+            .filter_map(|index| match slots.get(index)? {
+                Slot::Running(session) => Some(Arc::clone(session)),
+                _ => None,
+            })
+            .collect()
     }
 
     /// `spec`'s arguments, with the workspace's folder in them.
@@ -595,18 +730,40 @@ impl Workspace {
 
 impl LanguageServer for Workspace {
     fn open(&self, path: &RelPath, text: &str) -> Result<(), IdeError> {
-        self.server(path).map_or(Ok(()), |s| s.open(path, text))
+        if let Some(server) = self.server(path) {
+            server.open(path, text)?;
+        }
+        // A linter that fails is said in its status; the file's server goes on.
+        for linter in self.linters(path) {
+            let _ = linter.open(path, text);
+        }
+        Ok(())
     }
     fn change(&self, path: &RelPath, text: &str) -> Result<(), IdeError> {
-        self.server(path).map_or(Ok(()), |s| s.change(path, text))
+        if let Some(server) = self.server(path) {
+            server.change(path, text)?;
+        }
+        for linter in self.linters(path) {
+            let _ = linter.change(path, text);
+        }
+        Ok(())
     }
     fn close(&self, path: &RelPath) -> Result<(), IdeError> {
         // Never started just to be told a file closed.
-        self.running(path).map_or(Ok(()), |s| s.close(path))
+        for server in self.running(path) {
+            server.close(path)?;
+        }
+        Ok(())
     }
     fn problems(&self, path: &RelPath) -> Result<Vec<Problem>, IdeError> {
-        self.server(path)
-            .map_or(Ok(Vec::new()), |s| s.problems(path))
+        let mut found = match self.server(path) {
+            Some(server) => server.problems(path)?,
+            None => Vec::new(),
+        };
+        for linter in self.linters(path) {
+            found.extend(linter.problems(path).unwrap_or_default());
+        }
+        Ok(found)
     }
     fn completions(&self, path: &RelPath, at: TextPosition) -> Result<Completions, IdeError> {
         self.server(path)
@@ -630,8 +787,14 @@ impl LanguageServer for Workspace {
             })
     }
     fn fixes(&self, path: &RelPath, range: TextRange) -> Result<Vec<CodeAction>, IdeError> {
-        self.server(path)
-            .map_or(Ok(Vec::new()), |s| s.fixes(path, range))
+        let mut found = match self.server(path) {
+            Some(server) => server.fixes(path, range)?,
+            None => Vec::new(),
+        };
+        for linter in self.linters(path) {
+            found.extend(linter.fixes(path, range).unwrap_or_default());
+        }
+        Ok(found)
     }
     fn source_action(
         &self,

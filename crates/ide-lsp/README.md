@@ -14,6 +14,7 @@ Language features over LSP, from servers the app ships:
 | Angular    | `.html` templates, in an Angular project (`angular.json`, or `@angular/core` in `package.json`) | Angular's server, on Node, with its own TypeScript |
 | HTML       | `.html`, `.htm` (with the CSS and JavaScript in them), in any other project                     | VS Code's HTML server, on Node                     |
 | YAML       | `.yaml`, `.yml`                                                                                 | Red Hat's YAML server, on Node                     |
+| ESLint     | scripts, `.vue`, `.svelte`, beside their own server: when turned on, in a trusted folder        | VS Code's ESLint server, on Node                   |
 
 - **The programs** are the app's own: `tsc` from its `typescript`
   dependency (`apps/desktop/scripts/stage-typescript.mjs`), the others from
@@ -38,9 +39,21 @@ Language features over LSP, from servers the app ships:
   `args` is the folder.
 - **Trust:** a spec that runs the folder's own code (its configuration,
   plugins or packages) sets `needs_trust`. In a folder the person hasn't
-  trusted (`start(root, trusted, status)`), it doesn't start: the first file
+  trusted (`StartOptions { trusted, .. }`), it doesn't start: the first file
   it would have had reports `Restricted` for it, once, and the file goes to
   the next server that handles it, if any.
+- **Linters:** a spec's `role` is `Primary` (the first one that handles a
+  file answers everything about it) or `Linter` (beside it: told about the
+  file too, its problems and quick fixes added to the primary's). A linter
+  that fails says so in its status and leaves the file's server alone. A
+  spec's `switch` turns it on by the options (ESLint: `StartOptions::eslint`,
+  from the settings).
+- **ESLint** loads the project's own `eslint` and its configuration, so it
+  `needs_trust`, and it's off unless turned on. It gets the settings VS
+  Code's extension sends (every field: the server reads them all), with the
+  workspace folder (`{workspaceUri}` and `{workspaceName}` in a spec's
+  settings are filled in), and answers its `eslint/*` requests with nothing.
+  A project without ESLint gets nothing from it.
 - **Node:** the JSON, CSS, HTML, YAML and Angular servers run on the person's `node`,
   found when each starts (`FindNode`: the app gives the debugger's
   `find_node`, which also looks where installers put it). Without one they
@@ -109,10 +122,12 @@ Language features over LSP, from servers the app ships:
 
 - `Servers::new(specs, find_node)` (implements `ide_core::LanguageServers`),
   with `ServerSpec::typescript(program)`, `json(script, schemas)`,
-  `css(script)`, `angular(script)`, `html(script)`, `yaml(script, schemas)`;
-  `Program` (`Native`, `Node`), `FindNode`, `LanguageId`, `WORKSPACE_ARG`,
-  `angular_workspace`, and `json_language`, `css_language`, `html_language`,
-  `yaml_language`.
+  `css(script)`, `angular(script)`, `html(script)`, `yaml(script, schemas)`,
+  `eslint(script)`; `Program` (`Native`, `Node`), `Role` (`Primary`,
+  `Linter`), `FindNode`, `LanguageId`, `WORKSPACE_ARG`,
+  `WORKSPACE_URI_SETTING`, `WORKSPACE_NAME_SETTING`, `angular_workspace`, and
+  `json_language`, `css_language`, `html_language`, `yaml_language`,
+  `eslint_language`.
 - `RpcClient`, `RpcError`, `OnRequest`, `read_message`, `write_message`;
   `to_uri`, `from_uri`, `relative_to`; `MAX_COMPLETIONS`.
 

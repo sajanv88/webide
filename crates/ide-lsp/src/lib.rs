@@ -27,8 +27,9 @@ use serde_json::{Value, json};
 
 pub use crate::rpc::{OnRequest, RpcClient, RpcError, read_message, write_message};
 pub use crate::servers::{
-    FindNode, LanguageId, Program, ServerSpec, Servers, WORKSPACE_ARG, angular_workspace,
-    css_language, html_language, json_language, yaml_language,
+    FindNode, LanguageId, Program, Role, ServerSpec, Servers, WORKSPACE_ARG,
+    WORKSPACE_NAME_SETTING, WORKSPACE_URI_SETTING, angular_workspace, css_language,
+    eslint_language, html_language, json_language, yaml_language,
 };
 pub use crate::uri::{from_uri, relative_to, to_uri};
 
@@ -97,7 +98,7 @@ fn start_session(
                 .unwrap_or_else(PoisonError::into_inner)
                 .insert(path, (Instant::now(), items));
         }),
-        servers::responder(spec),
+        servers::responder(spec, root),
         Box::new(move || {
             if !exit_stopping.load(Ordering::Acquire) {
                 exit_status(
@@ -169,9 +170,10 @@ fn start_session(
         if spec.settings.is_null() {
             Ok(())
         } else {
+            let settings = servers::with_workspace(&spec.settings, &root_uri, root.name());
             client.notify(
                 "workspace/didChangeConfiguration",
-                json!({ "settings": spec.settings }),
+                json!({ "settings": settings }),
             )
         }
     });

@@ -73,6 +73,10 @@ pub struct Settings {
     /// Files larger than this don't open.
     pub refuse_above_bytes: u64,
     pub editor: EditorSettings,
+    /// ESLint checks JavaScript and TypeScript files (in trusted folders:
+    /// it runs the project's own ESLint and its configuration). Off unless
+    /// the person turns it on.
+    pub eslint: bool,
 }
 
 impl Default for Settings {
@@ -82,6 +86,7 @@ impl Default for Settings {
             read_only_above_bytes: MIB,
             refuse_above_bytes: 20 * MIB,
             editor: EditorSettings::default(),
+            eslint: false,
         }
     }
 }
@@ -94,6 +99,7 @@ pub struct SettingsPatch {
     pub read_only_above_bytes: Option<u64>,
     pub refuse_above_bytes: Option<u64>,
     pub editor: Option<EditorSettings>,
+    pub eslint: Option<bool>,
 }
 
 impl Settings {
@@ -106,6 +112,7 @@ impl Settings {
                 .unwrap_or(self.read_only_above_bytes),
             refuse_above_bytes: patch.refuse_above_bytes.unwrap_or(self.refuse_above_bytes),
             editor: patch.editor.unwrap_or(self.editor),
+            eslint: patch.eslint.unwrap_or(self.eslint),
         };
         next.validate()?;
         Ok(next)

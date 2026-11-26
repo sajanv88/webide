@@ -395,10 +395,10 @@ impl LanguageServers for FakeLanguages {
     fn start(
         &self,
         root: &WorkspaceRoot,
-        trusted: bool,
+        options: ide_core::language::StartOptions,
         status: LanguageSink,
     ) -> Result<Box<dyn LanguageServer>, IdeError> {
-        self.trusted.lock().unwrap().push(trusted);
+        self.trusted.lock().unwrap().push(options.trusted);
         let mut log = self.log.lock().unwrap();
         let n = log.iter().filter(|line| line.starts_with("start")).count() + 1;
         log.push(format!("start {n} in {}", root.name()));
@@ -2159,4 +2159,39 @@ fn trusting_the_parent_trusts_the_folders_beside_it() {
         )),
         IpcErrorCode::WorkspaceChanged
     );
+}
+
+#[test]
+fn turning_eslint_on_starts_the_language_servers_again_and_other_settings_dont() {
+    let fx = fixture();
+    let ws = handlers::open_picked(&fx.state, &folder("alpha")).unwrap();
+    handlers::lsp_open(&fx.state, doc(&ws.id, "a.ts", "one")).unwrap();
+    let stops = || {
+        fx.languages
+            .log
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|line| line.contains("stop"))
+            .count()
+    };
+    handlers::update_settings(
+        &fx.state,
+        SettingsPatchDto {
+            theme: Some(crate::dto::ThemeDto::Dark),
+            ..SettingsPatchDto::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(stops(), 0);
+    let on = handlers::update_settings(
+        &fx.state,
+        SettingsPatchDto {
+            eslint: Some(true),
+            ..SettingsPatchDto::default()
+        },
+    )
+    .unwrap();
+    assert!(on.eslint);
+    assert_eq!(stops(), 1);
 }

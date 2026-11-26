@@ -23,6 +23,7 @@ const initial: SettingsDto = {
   readOnlyAboveBytes: MIB,
   refuseAboveBytes: 20 * MIB,
   editor,
+  eslint: false,
 };
 
 function setup(update?: (patch: SettingsPatchDto) => IpcResult<SettingsDto>) {
@@ -96,10 +97,17 @@ describe("SettingsDialog", () => {
       readOnlyAboveBytes: 2.5 * MIB,
       refuseAboveBytes: 20 * MIB,
       editor,
+      eslint: false,
     });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(changed).toEqual([
-      { theme: "dark", readOnlyAboveBytes: 2.5 * MIB, refuseAboveBytes: 20 * MIB, editor },
+      {
+        theme: "dark",
+        readOnlyAboveBytes: 2.5 * MIB,
+        refuseAboveBytes: 20 * MIB,
+        editor,
+        eslint: false,
+      },
     ]);
   });
 
@@ -131,6 +139,19 @@ describe("SettingsDialog", () => {
       whitespace: "all",
       lineHighlight: "tint",
     });
+  });
+
+  it("turns ESLint on, under Languages", async () => {
+    const { open, patches } = setup();
+    const dialog = await open();
+    const languages = await within(dialog).findByRole("group", { name: "Languages" });
+    const eslint = within(languages).getByRole("switch", { name: "ESLint" });
+    expect(eslint.getAttribute("aria-checked")).toBe("false");
+    expect(eslint.getAttribute("aria-describedby")).toBe("settings-eslint-about");
+    fireEvent.click(eslint);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]?.eslint).toBe(true);
   });
 
   it("won't save a read-only size above the don't-open size, and says why on the field", async () => {

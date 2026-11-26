@@ -28,6 +28,12 @@
     gap: calc(var(--spacing) * 2);
   }
 
+  &__about {
+    margin: 0;
+    color: var(--color-muted-foreground);
+    font-size: var(--text-sm);
+  }
+
   &__size {
     --nuv-number-field-width: 12rem;
   }

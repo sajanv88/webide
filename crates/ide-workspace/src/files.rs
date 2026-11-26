@@ -94,6 +94,13 @@ pub(crate) struct SettingsFile {
     theme: Option<ThemeName>,
     files: FilesSection,
     editor: EditorSection,
+    languages: LanguagesSection,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct LanguagesSection {
+    eslint: Option<bool>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -166,6 +173,9 @@ impl SettingsFile {
                     LineHighlight::Both => LineHighlightName::Both,
                 }),
             },
+            languages: LanguagesSection {
+                eslint: Some(settings.eslint),
+            },
         }
     }
 
@@ -201,6 +211,7 @@ impl SettingsFile {
             read_only_above_bytes: self.files.read_only_above_bytes,
             refuse_above_bytes: self.files.refuse_above_bytes,
             editor: Some(editor),
+            eslint: self.languages.eslint,
         };
         Settings::default().apply(&patch)
     }

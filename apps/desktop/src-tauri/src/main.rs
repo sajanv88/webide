@@ -85,6 +85,8 @@ fn main() -> ExitCode {
                         ServerSpec::angular(servers.join("angular-server.cjs")),
                         ServerSpec::html(servers.join("html-server.cjs")),
                         ServerSpec::yaml(servers.join("yaml-server.mjs"), schemas),
+                        // Beside the others, when turned on, in trusted folders.
+                        ServerSpec::eslint(servers.join("eslint-server.cjs")),
                     ],
                     Arc::new(ide_debug::find_node),
                 ))

@@ -94,7 +94,10 @@ fn the_typescript_server_answers_about_a_real_project() {
     let server = servers
         .start(
             &root,
-            true,
+            ide_core::language::StartOptions {
+                trusted: true,
+                eslint: false,
+            },
             Arc::new(move |name: &str, status| {
                 assert_eq!(name, "TypeScript");
                 seen.lock().unwrap().push(status);
@@ -196,7 +199,10 @@ fn a_missing_server_says_so() {
     let server = servers
         .start(
             &root,
-            true,
+            ide_core::language::StartOptions {
+                trusted: true,
+                eslint: false,
+            },
             Arc::new(move |_: &str, status| seen.lock().unwrap().push(status)),
         )
         .unwrap();
@@ -228,7 +234,10 @@ fn a_server_on_node_asks_for_node_when_there_is_none() {
     let server = servers
         .start(
             &root,
-            true,
+            ide_core::language::StartOptions {
+                trusted: true,
+                eslint: false,
+            },
             Arc::new(move |name: &str, status| {
                 seen.lock().unwrap().push((name.to_owned(), status))
             }),
@@ -296,7 +305,14 @@ fn imports_come_with_completions_fixes_and_organizing() {
     std::fs::write(dir.path().join("a.ts"), "").unwrap();
     let root = WorkspaceRoot::from_canonical(std::fs::canonicalize(dir.path()).unwrap()).unwrap();
     let server = typescript(program)
-        .start(&root, true, Arc::new(|_: &str, _| {}))
+        .start(
+            &root,
+            ide_core::language::StartOptions {
+                trusted: true,
+                eslint: false,
+            },
+            Arc::new(|_: &str, _| {}),
+        )
         .unwrap();
     let a = RelPath::parse("a.ts").unwrap();
     let at = |line, character| TextPosition { line, character };
@@ -409,7 +425,10 @@ fn the_bundled_servers_check_json_yaml_and_css() {
     let server = servers
         .start(
             &root,
-            true,
+            ide_core::language::StartOptions {
+                trusted: true,
+                eslint: false,
+            },
             Arc::new(move |name: &str, status| {
                 seen.lock().unwrap().push(format!("{name} {status:?}"))
             }),
@@ -533,7 +552,10 @@ fn angular_takes_an_angular_projects_templates_without_running_its_code() {
         let server = servers
             .start(
                 &root,
-                true,
+                ide_core::language::StartOptions {
+                    trusted: true,
+                    eslint: false,
+                },
                 Arc::new(move |name: &str, status| {
                     seen.lock().unwrap().push(format!("{name} {status:?}"));
                 }),
@@ -650,7 +672,10 @@ fn a_server_that_runs_the_folders_code_waits_for_trust() {
         Servers::new(vec![spec()], Arc::new(|| None))
             .start(
                 &root,
-                trusted,
+                ide_core::language::StartOptions {
+                    trusted,
+                    eslint: false,
+                },
                 Arc::new(move |name: &str, status| {
                     seen.lock().unwrap().push((name.to_owned(), status))
                 }),
@@ -673,4 +698,118 @@ fn a_server_that_runs_the_folders_code_waits_for_trust() {
         *statuses.lock().unwrap(),
         [("JSON".to_owned(), LanguageStatus::NeedsNode)]
     );
+}
+
+/// A stand-in for a project's `eslint` package: its `ESLint` class reports
+/// `debugger` statements, and writes a marker when it's loaded.
+const FAKE_ESLINT: &str = r#"
+require("fs").writeFileSync(require("path").join(__dirname, "..", "..", "eslint-loaded"), "");
+class ESLint {
+  constructor(options) { this.options = options; }
+  async isPathIgnored() { return false; }
+  async calculateConfigForFile() { return { rules: { "no-debugger": 2 } }; }
+  async lintText(text, options) {
+    const messages = [];
+    text.split("\n").forEach((line, index) => {
+      const column = line.indexOf("debugger");
+      if (column >= 0) messages.push({
+        ruleId: "no-debugger", severity: 2, message: "Unexpected 'debugger' statement.",
+        line: index + 1, column: column + 1, endLine: index + 1, endColumn: column + 9,
+      });
+    });
+    return [{ filePath: options && options.filePath, messages, errorCount: messages.length,
+      warningCount: 0, fixableErrorCount: 0, fixableWarningCount: 0, source: text }];
+  }
+}
+ESLint.version = "8.57.0";
+module.exports = { ESLint, Linter: class { static get version() { return "8.57.0"; } } };
+"#;
+
+#[test]
+fn eslint_beside_typescript_adds_its_problems_once_turned_on_and_trusted() {
+    let (Some(node), Some(staged)) = (node_on_path(), staged_servers()) else {
+        eprintln!("skipping: no node, or the language servers aren't staged (run pnpm build)");
+        return;
+    };
+    let dir = tempfile::Builder::new().prefix("webide").tempdir().unwrap();
+    let eslint = dir.path().join("node_modules").join("eslint");
+    std::fs::create_dir_all(&eslint).unwrap();
+    std::fs::write(
+        eslint.join("package.json"),
+        r#"{ "name": "eslint", "version": "8.57.0", "main": "index.js" }"#,
+    )
+    .unwrap();
+    std::fs::write(eslint.join("index.js"), FAKE_ESLINT).unwrap();
+    std::fs::write(dir.path().join(".eslintrc.json"), r#"{ "root": true }"#).unwrap();
+    std::fs::write(dir.path().join("package.json"), r#"{ "name": "demo" }"#).unwrap();
+    let root = WorkspaceRoot::from_canonical(std::fs::canonicalize(dir.path()).unwrap()).unwrap();
+    let marker = dir.path().join("eslint-loaded");
+
+    let statuses = Arc::new(Mutex::new(Vec::new()));
+    let start = |options: ide_core::language::StartOptions| {
+        let seen = Arc::clone(&statuses);
+        let node = node.clone();
+        Servers::new(
+            vec![ServerSpec::eslint(staged.join("eslint-server.cjs"))],
+            Arc::new(move || Some(node.clone())),
+        )
+        .start(
+            &root,
+            options,
+            Arc::new(move |name: &str, status| {
+                seen.lock().unwrap().push(format!("{name} {status:?}"))
+            }),
+        )
+        .unwrap()
+    };
+    let file = RelPath::parse("main.js").unwrap();
+    let text = "const a = 1;\ndebugger;\n";
+
+    // Off unless turned on: nothing starts, nothing is loaded.
+    let off = start(ide_core::language::StartOptions {
+        trusted: true,
+        eslint: false,
+    });
+    off.open(&file, text).unwrap();
+    assert!(off.problems(&file).unwrap().is_empty());
+    drop(off);
+    // On, but the folder isn't trusted: it says so, and the project's eslint isn't loaded.
+    let untrusted = start(ide_core::language::StartOptions {
+        trusted: false,
+        eslint: true,
+    });
+    untrusted.open(&file, text).unwrap();
+    assert!(untrusted.problems(&file).unwrap().is_empty());
+    drop(untrusted);
+    assert!(
+        !marker.exists(),
+        "the project's eslint was loaded untrusted"
+    );
+    assert_eq!(
+        statuses.lock().unwrap().drain(..).collect::<Vec<_>>(),
+        ["ESLint Restricted"]
+    );
+
+    // On and trusted: the project's ESLint checks the file.
+    let on = start(ide_core::language::StartOptions {
+        trusted: true,
+        eslint: true,
+    });
+    on.open(&file, text).unwrap();
+    let mut found = Vec::new();
+    for _ in 0..40 {
+        found = on.problems(&file).unwrap();
+        if !found.is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    assert!(
+        found
+            .iter()
+            .any(|problem| problem.message.contains("debugger") && problem.range.start.line == 1),
+        "{found:?} {:?}",
+        statuses.lock().unwrap()
+    );
+    assert!(marker.exists());
 }

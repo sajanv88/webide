@@ -12,7 +12,7 @@ use ide_core::cli::{CommandLine, Launch};
 use ide_core::debug::{DebugAdapters, DebugEvent, DebugSession};
 use ide_core::fs::ReadLimits;
 use ide_core::language::{
-    LanguageServer, LanguageServers, LanguageStatus, TextPosition, TextRange,
+    LanguageServer, LanguageServers, LanguageStatus, StartOptions, TextPosition, TextRange,
 };
 use ide_core::terminal::{MAX_TERMINALS, MAX_WRITE_BYTES};
 use ide_core::workspace::display_path;
@@ -325,11 +325,15 @@ impl IpcState {
                     status: LanguageStatusDto::from(status),
                 });
             });
-        match self
-            .services
-            .languages
-            .start(&root, self.is_trusted(), status)
-        {
+        let options = StartOptions {
+            trusted: self.is_trusted(),
+            eslint: self
+                .services
+                .workspace
+                .settings()
+                .is_ok_and(|settings| settings.eslint),
+        };
+        match self.services.languages.start(&root, options, status) {
             Ok(server) => {
                 let server: Arc<dyn LanguageServer> = Arc::from(server);
                 *language = Language::Running {
@@ -582,12 +586,15 @@ pub fn get_settings(state: &IpcState) -> Result<SettingsDto, IpcError> {
     Ok(state.services.workspace.settings()?.into())
 }
 
+/// Saves a change to the settings. Turning ESLint on or off starts the
+/// language servers again, with it or without it, at the next file.
 pub fn update_settings(state: &IpcState, patch: SettingsPatchDto) -> Result<SettingsDto, IpcError> {
-    Ok(state
-        .services
-        .workspace
-        .update_settings(&patch.into())?
-        .into())
+    let before = state.services.workspace.settings()?.eslint;
+    let settings = state.services.workspace.update_settings(&patch.into())?;
+    if settings.eslint != before {
+        state.stop_language();
+    }
+    Ok(settings.into())
 }
 
 /// Find in files. Files too large to open (over the don't-open size) aren't
