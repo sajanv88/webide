@@ -162,6 +162,9 @@ fn start_session(
         Err(error) => return Err(fail(format!("the {name} server didn't start: {error}"))),
     };
     let ready = client.notify("initialized", json!({})).and_then(|()| {
+        for (method, params) in &spec.notifications {
+            client.notify(method, params.clone())?;
+        }
         // Servers that read their settings when told (JSON, YAML) are told now.
         if spec.settings.is_null() {
             Ok(())

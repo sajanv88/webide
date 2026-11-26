@@ -449,6 +449,33 @@ fn the_bundled_servers_check_json_yaml_and_css() {
         "{problems:?}"
     );
 
+    // A schema a file names for itself, at an address: never fetched, by
+    // either server. (Here a listener on this machine, which hears nothing.)
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let address = format!("http://{}/schema.json", listener.local_addr().unwrap());
+    let own = RelPath::parse("own.yml").unwrap();
+    server
+        .open(
+            &own,
+            &format!("# yaml-language-server: $schema={address}\nkey: value\n"),
+        )
+        .unwrap();
+    server.problems(&own).unwrap();
+    let named = RelPath::parse("named.json").unwrap();
+    server
+        .open(
+            &named,
+            &format!("{{ \"$schema\": \"{address}\", \"a\": 1 }}"),
+        )
+        .unwrap();
+    server.problems(&named).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    assert!(
+        listener.accept().is_err(),
+        "a server fetched a schema itself"
+    );
+
     let statuses = statuses.lock().unwrap().clone();
     for name in ["JSON", "YAML", "CSS"] {
         assert!(statuses.contains(&format!("{name} Ready")), "{statuses:?}");

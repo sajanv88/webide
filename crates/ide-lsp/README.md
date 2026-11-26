@@ -35,7 +35,11 @@ Language features over LSP, from servers the app ships:
   `apps/desktop/scripts/schemas.lock.json`). The JSON server asks the app for
   a SchemaStore address (`vscode/content`), answered from the bundle by file
   name only; the YAML server is given the files. Nothing is downloaded, and
-  YAML's SchemaStore catalog is off.
+  YAML's SchemaStore catalog is off. A schema a file names for itself at an
+  address (JSON's `"$schema"`, YAML's `# yaml-language-server: $schema=`) is
+  asked of the app too (the YAML server is told to with
+  `yaml/registerContentRequest`), so opening a file never makes a server
+  fetch anything; one that isn't bundled is refused.
 - **`rpc`:** JSON-RPC 2.0 over the server's stdio, in LSP frames
   (`Content-Length`). Requests have time limits (15 s, 60 s to start) and
   are cancelled (`$/cancelRequest`) past them. The server's own requests

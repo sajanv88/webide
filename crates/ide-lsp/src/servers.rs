@@ -51,6 +51,8 @@ pub struct ServerSpec {
     /// server asks for a SchemaStore address (`vscode/content`): nothing is
     /// downloaded.
     pub schemas: Option<PathBuf>,
+    /// Notifications sent once it has started (method, params).
+    pub notifications: Vec<(&'static str, Value)>,
 }
 
 /// SchemaStore's schemas the JSON server checks files against, and the file names each is for.
@@ -173,6 +175,7 @@ impl ServerSpec {
             initialization_options: Value::Null,
             settings: Value::Null,
             schemas: None,
+            notifications: Vec::new(),
         }
     }
 
@@ -205,6 +208,7 @@ impl ServerSpec {
                 "http": { "proxy": "", "proxyStrictSSL": true },
             }),
             schemas: Some(schemas),
+            notifications: Vec::new(),
         }
     }
 
@@ -223,6 +227,7 @@ impl ServerSpec {
                 "less": { "validate": true },
             }),
             schemas: None,
+            notifications: Vec::new(),
         }
     }
 
@@ -244,6 +249,7 @@ impl ServerSpec {
                 "javascript": { "validate": { "enable": true } },
             }),
             schemas: None,
+            notifications: Vec::new(),
         }
     }
 
@@ -282,6 +288,10 @@ impl ServerSpec {
                 "http": { "proxy": "", "proxyStrictSSL": true },
             }),
             schemas: Some(schemas),
+            // Schemas at http(s) addresses (a file's own `$schema=` modeline
+            // included) are asked of the app, which answers only from the
+            // bundle: the server fetches nothing itself.
+            notifications: vec![("yaml/registerContentRequest", Value::Null)],
         }
     }
 }
@@ -291,9 +301,14 @@ impl ServerSpec {
 pub(crate) fn responder(spec: &ServerSpec) -> OnRequest {
     let (settings, schemas) = (spec.settings.clone(), spec.schemas.clone());
     Box::new(move |method, params| match method {
+        // A schema by address: only a bundled one. Nothing is fetched.
         "vscode/content" => schema_content(schemas.as_deref(), params)
             .map(Value::String)
             .ok_or_else(|| (-32603, "that schema isn't bundled with the app".to_owned())),
+        // A schema of another kind of address (YAML's): none.
+        "custom/schema/content" => {
+            Err((-32603, "that schema isn't bundled with the app".to_owned()))
+        }
         _ => Ok(answer_server_request(method, params, &settings)),
     })
 }
