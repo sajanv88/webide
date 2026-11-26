@@ -76,8 +76,12 @@ Intel) and Linux (`.deb`, `.rpm`, `.AppImage`).
   match, builds, and drafts a GitHub release with the installers and
   `SHA256SUMS.txt`. Only the repository's writers see a draft; publish it
   from the Releases page once it's tested.
-- **On your own machine:** `pnpm tauri build --bundles nsis` writes
-  `target/release/bundle/nsis/webide_<version>_x64-setup.exe`.
+- **On your own machine:** `pnpm release:auto` builds the installers for
+  the system it runs on, the same kinds as the workflow (Windows: `.exe` and
+  `.msi`; macOS: `.dmg`; Linux: `.deb`, `.rpm`, `.AppImage`), for this
+  machine's processor. They're gathered with `SHA256SUMS.txt` in
+  `target/installers/webide-<version>-<os>-<arch>/`. Nothing is uploaded.
+  For one kind only: `pnpm tauri build --bundles nsis`.
 
 The installers aren't signed yet, so Windows SmartScreen and macOS Gatekeeper
 warn before they open one.

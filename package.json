@@ -24,7 +24,8 @@
     "rust:fmt": "cargo fmt --all --check",
     "rust:clippy": "cargo clippy --workspace --all-targets -- -D warnings",
     "rust:test": "cargo test --workspace",
-    "tauri": "pnpm --filter @repo/desktop tauri"
+    "tauri": "pnpm --filter @repo/desktop tauri",
+    "release:auto": "node apps/desktop/scripts/release-auto.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
