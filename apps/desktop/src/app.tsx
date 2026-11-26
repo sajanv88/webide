@@ -21,6 +21,7 @@ import type {
   RecentWorkspaceDto,
   SearchPort,
   TerminalPort,
+  WindowStateDto,
   WorkspaceDto,
 } from "@repo/contracts";
 import { createDebugStore, DebugView, debuggable } from "@repo/debug";
@@ -59,6 +60,7 @@ import {
   debugStart,
   debugStop,
   debugVariables,
+  dragWindow,
   getSettings,
   getStyleNonce,
   gitBranches,
@@ -83,16 +85,20 @@ import {
   lspResolveCompletion,
   lspRestart,
   lspSourceAction,
+  minimizeWindow,
   openRecentWorkspace,
   openTerminal,
   pickWorkspace,
   readFile,
   recentWorkspaces,
+  requestCloseWindow,
   resizeTerminal,
   searchText,
   setCloseGuard,
   subscribeEvents,
+  toggleMaximizeWindow,
   updateSettings,
+  windowState,
   writeFile,
   writeTerminal,
 } from "@repo/ipc";
@@ -101,7 +107,7 @@ import { createLanguageClient, LanguageStatusItem } from "@repo/lsp";
 import { AgentStatusItem, AgentsDialog, createAgentStore } from "@repo/mcp";
 import { QuickOpen, SearchView } from "@repo/search";
 import { SettingsDialog } from "@repo/settings";
-import { type MenuSpec, Shell, type SidebarView } from "@repo/shell";
+import { type MenuSpec, Shell, type SidebarView, type WindowFrame } from "@repo/shell";
 import { createDocuments, type Documents, DocumentTabs } from "@repo/tabs";
 import { TerminalPanel } from "@repo/terminal";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -167,6 +173,10 @@ function pathArg(args: unknown): string | undefined {
 
 export function App() {
   const [info, setInfo] = useState<AppInfoDto | null>(null);
+  const [windowShown, setWindowShown] = useState<WindowStateDto>({
+    maximized: false,
+    fullscreen: false,
+  });
   const [workspace, setWorkspace] = useState<WorkspaceDto | null>(null);
   const [recent, setRecent] = useState<readonly RecentWorkspaceDto[]>([]);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -238,6 +248,9 @@ export function App() {
         case "agentCall":
           bus.emit("agent.call", event.call);
           break;
+        case "windowState":
+          setWindowShown(event.state);
+          break;
         case "assistant":
           bus.emit("assistant.event", event.event);
           break;
@@ -283,6 +296,9 @@ export function App() {
     let live = true;
     void agents.refresh();
     void assistant.refresh();
+    void windowState().then((shown) => {
+      if (live && shown.ok) setWindowShown(shown.value);
+    });
     void Promise.all([appInfo(), currentWorkspace(), recentWorkspaces(), getSettings()]).then(
       ([nextInfo, current, nextRecent, settings]) => {
         if (!live) return;
@@ -717,6 +733,22 @@ export function App() {
     [recent],
   );
 
+  // The app draws its own title bar: the shell moves the window, and has its buttons.
+  const frame = useMemo<WindowFrame | undefined>(
+    () =>
+      info
+        ? {
+            os: info.os,
+            ...windowShown,
+            minimize: () => void minimizeWindow(),
+            toggleMaximize: () => void toggleMaximizeWindow(),
+            close: () => void requestCloseWindow(),
+            startDrag: () => void dragWindow(),
+          }
+        : undefined,
+    [info, windowShown],
+  );
+
   const appName = info?.name ?? "";
   const title = workspace ? `${workspace.name} — ${appName}` : appName;
   useEffect(() => {
@@ -727,6 +759,7 @@ export function App() {
     <>
       <Shell
         title={title}
+        {...(frame ? { frame } : {})}
         registry={registry}
         menus={menus}
         shortcutFor={keybindings.forCommand}

@@ -9,13 +9,15 @@ use std::sync::{Mutex, PoisonError};
 
 use tauri::ipc::Channel;
 
-use crate::dto::BackendEventDto;
+use crate::dto::{BackendEventDto, WindowStateDto};
 
 /// The page's channel, and whether closing now would lose unsaved changes.
 #[derive(Default)]
 pub struct EventHub {
     channel: Mutex<Option<Channel<BackendEventDto>>>,
     unsaved: AtomicBool,
+    /// The window's state as last sent, so resizing sends only changes.
+    window: Mutex<WindowStateDto>,
 }
 
 impl std::fmt::Debug for EventHub {
@@ -44,6 +46,14 @@ impl EventHub {
     pub fn send(&self, event: BackendEventDto) -> bool {
         let channel = self.lock().clone();
         channel.is_some_and(|channel| channel.send(event).is_ok())
+    }
+
+    /// Keeps the window's `state`; returns whether it differs from before.
+    pub fn window_state_changed(&self, state: WindowStateDto) -> bool {
+        let mut kept = self.window.lock().unwrap_or_else(PoisonError::into_inner);
+        let changed = *kept != state;
+        *kept = state;
+        changed
     }
 
     pub fn set_unsaved(&self, unsaved: bool) {

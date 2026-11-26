@@ -54,6 +54,7 @@ import type { TerminalWriteArgs } from "./TerminalWriteArgs";
 import type { TextEditDto } from "./TextEditDto";
 import type { TextSearchDto } from "./TextSearchDto";
 import type { VariableDto } from "./VariableDto";
+import type { WindowStateDto } from "./WindowStateDto";
 import type { WorkspaceArgs } from "./WorkspaceArgs";
 import type { WorkspaceDto } from "./WorkspaceDto";
 import type { WorkspacePathArgs } from "./WorkspacePathArgs";
@@ -120,6 +121,11 @@ export interface CommandMap {
   subscribe_events: { args: SubscribeEventsArgs; output: null };
   set_close_guard: { args: CloseGuardArgs; output: null };
   close_window: { args: null; output: null };
+  window_minimize: { args: null; output: null };
+  window_toggle_maximize: { args: null; output: null };
+  window_drag: { args: null; output: null };
+  window_close: { args: null; output: null };
+  window_state: { args: null; output: WindowStateDto };
   terminal_open: { args: TerminalOpenArgs; output: TerminalDto };
 }
 

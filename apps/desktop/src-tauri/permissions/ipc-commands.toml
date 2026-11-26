@@ -63,5 +63,10 @@ permissions = [
   "allow-subscribe-events",
   "allow-set-close-guard",
   "allow-close-window",
+  "allow-window-minimize",
+  "allow-window-toggle-maximize",
+  "allow-window-drag",
+  "allow-window-close",
+  "allow-window-state",
   "allow-terminal-open",
 ]

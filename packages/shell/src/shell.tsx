@@ -16,6 +16,7 @@ import type { AppCommandId } from "@repo/contracts";
 import type { CommandRegistry } from "@repo/kernel";
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { AppMenubar, type MenuShortcut, type MenuSpec } from "./app-menubar";
+import { dragHandlers, WindowControls, type WindowFrame } from "./window-controls";
 
 /** DOM id of the side pane, which the toggle button controls. */
 const SIDEBAR_ID = "app-shell-sidebar";
@@ -67,6 +68,28 @@ export interface ShellProps {
   };
   /** Slot: items in the status bar. */
   readonly statusBar?: ReactNode;
+  /**
+   * The window, when the shell draws its frame (there's no system title
+   * bar): the top bar moves it, has its buttons, and a border around it
+   * shows whether it has focus.
+   */
+  readonly frame?: WindowFrame;
+}
+
+/** Whether the page's window has focus, which the frame's border shows. */
+function useWindowFocus(): boolean {
+  const [focused, setFocused] = useState(() => document.hasFocus());
+  useEffect(() => {
+    const focus = () => setFocused(true);
+    const blur = () => setFocused(false);
+    window.addEventListener("focus", focus);
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("focus", focus);
+      window.removeEventListener("blur", blur);
+    };
+  }, []);
+  return focused;
 }
 
 /**
@@ -139,7 +162,9 @@ export function Shell({
   panel,
   aside,
   statusBar,
+  frame,
 }: ShellProps) {
+  const focused = useWindowFocus();
   const first = views[0];
   const sidebarPanel = useResizablePanelRef();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -313,10 +338,12 @@ export function Shell({
   );
 
   return (
-    <div className="app-shell">
+    <div className={shellClass(frame, focused)}>
       {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: a top-level <header> is the banner landmark (HTML-AAM), which takes a name; Biome can't see that it's top-level */}
-      <header className="app-shell__bar" aria-label="Title bar">
-        <AppMenubar registry={registry} menus={menus} shortcutFor={shortcutFor} />
+      <header className="app-shell__bar" aria-label="Title bar" {...dragHandlers(frame)}>
+        <div className="app-shell__start">
+          <AppMenubar registry={registry} menus={menus} shortcutFor={shortcutFor} />
+        </div>
         <h1 className="app-shell__title">{title}</h1>
         <div className="app-shell__tools">
           {first ? (
@@ -346,6 +373,7 @@ export function Shell({
               {aside.icon}
             </Button>
           ) : null}
+          {frame ? <WindowControls frame={frame} /> : null}
         </div>
       </header>
       {first && active ? (
@@ -423,4 +451,15 @@ export function Shell({
       </footer>
     </div>
   );
+}
+
+/** The shell's classes: whether it draws the window's frame, and how. */
+function shellClass(frame: WindowFrame | undefined, focused: boolean): string {
+  if (!frame) return "app-shell";
+  const classes = ["app-shell", "app-shell--framed", `app-shell--${frame.os}`];
+  // A maximized or full screen window has no border, as the system's has none.
+  if (!frame.maximized && !frame.fullscreen) classes.push("app-shell--bordered");
+  if (frame.fullscreen) classes.push("app-shell--fullscreen");
+  if (!focused) classes.push("app-shell--inactive");
+  return classes.join(" ");
 }

@@ -4,6 +4,7 @@ import type { AssistantEventDto } from "./AssistantEventDto";
 import type { DebugEventDto } from "./DebugEventDto";
 import type { FileChangeDto } from "./FileChangeDto";
 import type { LanguageStatusDto } from "./LanguageStatusDto";
+import type { WindowStateDto } from "./WindowStateDto";
 
 /**
  * What the backend tells the webview, over the channel given to
@@ -13,4 +14,4 @@ export type BackendEventDto = { "kind": "filesChanged", workspaceId: string, cha
 /**
  * Which server: "TypeScript", "JSON", "YAML"…
  */
-server: string, status: LanguageStatusDto, } | { "kind": "agentCall", call: AgentCallDto, } | { "kind": "assistant", event: AssistantEventDto, };
+server: string, status: LanguageStatusDto, } | { "kind": "agentCall", call: AgentCallDto, } | { "kind": "assistant", event: AssistantEventDto, } | { "kind": "windowState", state: WindowStateDto, };

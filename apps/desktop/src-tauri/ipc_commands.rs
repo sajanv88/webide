@@ -61,5 +61,10 @@ const IPC_COMMANDS: &[&str] = &[
     "subscribe_events",
     "set_close_guard",
     "close_window",
+    "window_minimize",
+    "window_toggle_maximize",
+    "window_drag",
+    "window_close",
+    "window_state",
     "terminal_open",
 ];

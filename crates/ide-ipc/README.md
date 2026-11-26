@@ -24,7 +24,7 @@ ts-rs.
 
 | Command                  | Args                                     | Output                                                  |
 | ------------------------ | ---------------------------------------- | ------------------------------------------------------- |
-| `app_info`               | none                                     | `AppInfoDto` (name and version from tauri.conf.json)    |
+| `app_info`               | none                                     | `AppInfoDto` (name and version from tauri.conf.json, `os`) |
 | `pick_workspace`         | none                                     | `WorkspaceDto \| null`, after the native folder picker  |
 | `open_recent_workspace`  | `{ path }` (from `recent_workspaces`)    | `WorkspaceDto`                                          |
 | `recent_workspaces`      | none                                     | `RecentWorkspaceDto[]`                                  |
@@ -83,6 +83,11 @@ ts-rs.
 | `subscribe_events`       | `{ channel }` (a Tauri `Channel`)        | nothing; `BackendEventDto`s arrive on the channel       |
 | `set_close_guard`        | `{ unsaved }`                            | nothing                                                 |
 | `close_window`           | none                                     | nothing; closes the calling window without asking       |
+| `window_minimize`        | none                                     | nothing                                                 |
+| `window_toggle_maximize` | none                                     | nothing; maximizes the window, or restores it           |
+| `window_drag`            | none                                     | nothing; the window follows the pointer (a press on the title bar) |
+| `window_close`           | none                                     | nothing; closes as the system button would (asks first with unsaved changes) |
+| `window_state`           | none                                     | `WindowStateDto` (`maximized`, `fullscreen`)            |
 
 ## Events (backend → webview)
 
@@ -100,6 +105,10 @@ loading drops the old one.
 - `debug { workspaceId, event }`: the program printed, stopped, continued or
   ended (`DebugEventDto`, switch on `kind`). The program is ended when another
   workspace opens and when the page reloads.
+- `windowState { state }`: the window was maximized or restored, or went
+  full screen or back (sent only when that changes). The page draws the
+  title bar (no system decorations on Windows and Linux; on macOS the
+  system's buttons over the page's bar), so it follows this.
 - `agentCall { call }`: an AI agent used a tool of the MCP server
   (`AgentCallDto`: the tool, what it was about, why it failed).
 - `assistant { event }`: what a conversation with the assistant reports

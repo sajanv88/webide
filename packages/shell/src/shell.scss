@@ -7,14 +7,23 @@
   color: var(--color-foreground);
   font-family: var(--font-sans);
 
+  // The menus at the start, the title in the middle, the tools at the end.
   &__bar {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     gap: calc(var(--spacing) * 3);
     align-items: center;
     padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 3);
     border-block-end: var(--nuv-border-width) solid var(--color-border);
     background-color: var(--color-surface);
     color: var(--color-surface-foreground);
+    user-select: none;
+  }
+
+  &__start {
+    display: flex;
+    align-items: center;
+    min-inline-size: 0;
   }
 
   &__menubar {
@@ -24,6 +33,7 @@
 
   &__title {
     min-inline-size: 0;
+    max-inline-size: 60vw;
     margin: 0;
     overflow: hidden;
     font-size: var(--text-base);
@@ -37,7 +47,8 @@
     display: flex;
     gap: calc(var(--spacing) * 2);
     align-items: center;
-    margin-inline-start: auto;
+    justify-content: flex-end;
+    block-size: 100%;
   }
 
   // Square, as the button holds only an icon.
@@ -128,4 +139,44 @@
 // Views stay mounted (each keeps its state); only the chosen one is drawn.
 .app-shell__view[data-state="inactive"] {
   display: none;
+}
+
+// The shell draws the window's frame: its bar is the title bar, of a fixed
+// height, with the window's buttons flush at the end.
+.app-shell--framed {
+  position: relative;
+}
+
+.app-shell--framed .app-shell__bar {
+  block-size: calc(var(--spacing) * 9);
+  padding-block: 0;
+  padding-inline-end: 0;
+}
+
+// macOS keeps its own buttons, over the start of the bar.
+.app-shell--macos .app-shell__bar {
+  padding-inline: calc(var(--spacing) * 19) calc(var(--spacing) * 3);
+}
+
+.app-shell--macos.app-shell--fullscreen .app-shell__bar {
+  padding-inline-start: calc(var(--spacing) * 3);
+}
+
+// Without focus the title fades, as a system title bar's does.
+.app-shell--inactive .app-shell__title {
+  color: var(--color-muted-foreground);
+}
+
+// A line around the window: the accent while it has focus, quiet without.
+.app-shell--bordered::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  border: var(--nuv-border-width) solid var(--color-primary);
+  content: "";
+  pointer-events: none;
+}
+
+.app-shell--bordered.app-shell--inactive::after {
+  border-color: var(--color-border);
 }

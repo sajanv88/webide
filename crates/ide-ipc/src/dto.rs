@@ -38,6 +38,38 @@ pub struct AppInfoDto {
     /// `productName` from tauri.conf.json.
     pub name: String,
     pub version: String,
+    /// The system it runs on, which places the window's buttons.
+    pub os: OsDto,
+}
+
+/// The systems the app runs on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum OsDto {
+    Windows,
+    Macos,
+    Linux,
+}
+
+impl OsDto {
+    /// The system this build is for.
+    pub const fn current() -> Self {
+        if cfg!(windows) {
+            Self::Windows
+        } else if cfg!(target_os = "macos") {
+            Self::Macos
+        } else {
+            Self::Linux
+        }
+    }
+}
+
+/// How the window is shown, which the title bar follows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowStateDto {
+    pub maximized: bool,
+    pub fullscreen: bool,
 }
 
 /// The open workspace. `id` changes every time a workspace is opened; file
@@ -273,6 +305,8 @@ pub enum BackendEventDto {
     AgentCall { call: AgentCallDto },
     /// What a conversation with the IDE's assistant reports.
     Assistant { event: AssistantEventDto },
+    /// The window was maximized, restored, or went full screen or back.
+    WindowState { state: WindowStateDto },
 }
 
 /// The MCP server for AI agents: what the person chose, and whether it runs.
