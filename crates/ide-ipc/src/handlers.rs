@@ -10,7 +10,9 @@ use ide_core::agent::{AgentConfig, AgentHost, AgentServer, AgentSink, AgentWorkb
 use ide_core::assistant::{AssistantHost, AssistantSink, ChatContext};
 use ide_core::debug::{DebugAdapters, DebugEvent, DebugSession};
 use ide_core::fs::ReadLimits;
-use ide_core::language::{LanguageServer, LanguageServers, LanguageStatus, TextPosition};
+use ide_core::language::{
+    LanguageServer, LanguageServers, LanguageStatus, TextPosition, TextRange,
+};
 use ide_core::terminal::{MAX_TERMINALS, MAX_WRITE_BYTES};
 use ide_core::workspace::display_path;
 use ide_core::{
@@ -22,14 +24,15 @@ use ide_core::{
 use crate::dto::{
     AgentConfigArgs, AgentStatusDto, AppInfoDto, AssistantConversationArgs, AssistantDecideArgs,
     AssistantSendArgs, AssistantSetupArgs, AssistantStatusDto, BackendEventDto, BreakpointDto,
-    CompletionsDto, DebugBreakpointsArgs, DebugEvaluateArgs, DebugEventDto, DebugReferenceArgs,
-    DebugStartArgs, DebugThreadArgs, DefinitionDto, DirListingDto, FileListDto, FileStampDto,
-    GitBranchDto, GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs,
-    HoverDto, LanguageStatusDto, LspDocumentArgs, LspPositionArgs, ModelInfoDto, OpenRecentArgs,
-    ProblemDto, ReadFileDto, RecentWorkspaceDto, ScopeDto, SearchTextArgs, SettingsDto,
+    CodeActionDto, CompletionsDto, DebugBreakpointsArgs, DebugEvaluateArgs, DebugEventDto,
+    DebugReferenceArgs, DebugStartArgs, DebugThreadArgs, DefinitionDto, DirListingDto, FileListDto,
+    FileStampDto, GitBranchDto, GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto,
+    GitSwitchArgs, HoverDto, LanguageStatusDto, LspDocumentArgs, LspPositionArgs, LspRangeArgs,
+    LspResolveArgs, LspSourceActionArgs, ModelInfoDto, OpenRecentArgs, ProblemDto, ReadFileDto,
+    RecentWorkspaceDto, ResolvedCompletionDto, ScopeDto, SearchTextArgs, SettingsDto,
     SettingsPatchDto, StackFrameDto, TerminalDto, TerminalIdArgs, TerminalResizeArgs,
-    TerminalWriteArgs, TextSearchDto, VariableDto, WorkspaceArgs, WorkspaceDto, WorkspacePathArgs,
-    WriteFileArgs,
+    TerminalWriteArgs, TextEditDto, TextSearchDto, VariableDto, WorkspaceArgs, WorkspaceDto,
+    WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::IpcError;
 
@@ -774,6 +777,59 @@ pub fn lsp_definition(
             .map(Into::into)
             .collect(),
         None => Vec::new(),
+    })
+}
+
+/// The longest `resolve` a completion has: the server's tokens are short.
+const MAX_RESOLVE_LEN: usize = 64;
+
+/// What else picking a completion does: the import it adds.
+pub fn lsp_resolve_completion(
+    state: &IpcState,
+    args: LspResolveArgs,
+) -> Result<ResolvedCompletionDto, IpcError> {
+    let path = RelPath::parse(&args.path)?;
+    if args.resolve.len() > MAX_RESOLVE_LEN {
+        return Err(IdeError::InvalidArgument("that completion isn't known".to_owned()).into());
+    }
+    Ok(match language_server(state, &args.workspace_id, &path)? {
+        Some(server) => server.resolve_completion(&path, &args.resolve)?.into(),
+        None => ResolvedCompletionDto {
+            detail: None,
+            edits: Vec::new(),
+        },
+    })
+}
+
+/// The fixes for the problems in part of a file.
+pub fn lsp_fixes(state: &IpcState, args: LspRangeArgs) -> Result<Vec<CodeActionDto>, IpcError> {
+    let path = RelPath::parse(&args.path)?;
+    let (start, end): (TextPosition, TextPosition) = (args.start.into(), args.end.into());
+    if end < start {
+        return Err(IdeError::InvalidArgument("the range ends before it starts".to_owned()).into());
+    }
+    Ok(match language_server(state, &args.workspace_id, &path)? {
+        Some(server) => server
+            .fixes(&path, TextRange { start, end })?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+        None => Vec::new(),
+    })
+}
+
+/// The edits that organize a file's imports (or make another source action);
+/// `None` when the server doesn't offer it there.
+pub fn lsp_source_action(
+    state: &IpcState,
+    args: LspSourceActionArgs,
+) -> Result<Option<Vec<TextEditDto>>, IpcError> {
+    let path = RelPath::parse(&args.path)?;
+    Ok(match language_server(state, &args.workspace_id, &path)? {
+        Some(server) => server
+            .source_action(&path, args.action.into())?
+            .map(|edits| edits.into_iter().map(Into::into).collect()),
+        None => None,
     })
 }
 

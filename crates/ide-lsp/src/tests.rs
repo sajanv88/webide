@@ -2,7 +2,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use ide_core::language::{
-    CompletionKind, Definition, LanguageServers, LanguageStatus, Severity, TextPosition,
+    CompletionKind, Definition, LanguageServers, LanguageStatus, Severity, SourceAction,
+    TextPosition, TextRange,
 };
 use ide_core::{RelPath, WorkspaceRoot};
 use serde_json::json;
@@ -190,4 +191,96 @@ fn a_missing_server_says_so() {
         statuses.lock().unwrap().as_slice(),
         [LanguageStatus::Failed(_)]
     ));
+}
+
+#[test]
+fn imports_come_with_completions_fixes_and_organizing() {
+    let Some(program) = installed_server() else {
+        eprintln!("skipping: no TypeScript server installed (run pnpm install)");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("lib.ts"),
+        "export function helper(): number {\n  return 1;\n}\nexport const unused = 2;\n",
+    )
+    .unwrap();
+    // A project, so lib.ts is in the same program as a.ts.
+    std::fs::write(
+        dir.path().join("tsconfig.json"),
+        r#"{ "compilerOptions": { "strict": true }, "include": ["*.ts"] }"#,
+    )
+    .unwrap();
+    std::fs::write(dir.path().join("a.ts"), "").unwrap();
+    let root = WorkspaceRoot::from_canonical(std::fs::canonicalize(dir.path()).unwrap()).unwrap();
+    let server = TypeScriptServers::new(program)
+        .start(&root, Arc::new(|_| {}))
+        .unwrap();
+    let a = RelPath::parse("a.ts").unwrap();
+    let at = |line, character| TextPosition { line, character };
+
+    // A name from another module: picking it adds the import.
+    let typing = "export const n = help\n";
+    server.open(&a, typing).unwrap();
+    let completions = server.completions(&a, at(0, 21)).unwrap();
+    let helper = completions
+        .items
+        .iter()
+        .find(|item| item.label == "helper")
+        .expect("helper is offered");
+    assert_eq!(helper.source.as_deref(), Some("./lib"), "{helper:?}");
+    let token = helper.resolve.as_deref().expect("it can be resolved");
+    let resolved = server.resolve_completion(&a, token).unwrap();
+    assert!(
+        resolved
+            .edits
+            .iter()
+            .any(|edit| edit.new_text.contains("import { helper } from \"./lib\"")),
+        "{resolved:?}"
+    );
+    // A token from an older list is refused.
+    server.completions(&a, at(0, 21)).unwrap();
+    assert!(server.resolve_completion(&a, token).is_err());
+
+    // Used without its import: the fix adds it.
+    let missing = "export const n = helper();\n";
+    server.change(&a, missing).unwrap();
+    let problems = server.problems(&a).unwrap();
+    let problem = problems
+        .iter()
+        .find(|p| p.code.as_deref() == Some("2304"))
+        .expect("cannot find name");
+    let fixes = server.fixes(&a, problem.range).unwrap();
+    assert!(
+        fixes.iter().any(|fix| fix.title.contains("import")
+            && fix.edits.iter().any(|edit| edit.new_text.contains("./lib"))),
+        "{fixes:?}"
+    );
+    // Nowhere near a problem: nothing to fix.
+    assert!(
+        server
+            .fixes(
+                &a,
+                TextRange {
+                    start: at(1, 0),
+                    end: at(1, 0)
+                }
+            )
+            .unwrap()
+            .is_empty()
+    );
+
+    // An unused import is removed by organizing them.
+    let unused = "import { helper, unused } from \"./lib\";\nexport const n = helper();\n";
+    server.change(&a, unused).unwrap();
+    let edits = server
+        .source_action(&a, SourceAction::OrganizeImports)
+        .unwrap()
+        .expect("organize imports is offered");
+    assert!(
+        edits
+            .iter()
+            .any(|edit| edit.new_text.contains("import { helper } from \"./lib\"")),
+        "{edits:?}"
+    );
 }

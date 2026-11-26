@@ -18,8 +18,8 @@ use ide_core::git::{
     DiffSide, DiffTexts, GitBranch, GitChange, GitFileStatus, GitHead, GitState, GitStatus,
 };
 use ide_core::language::{
-    Completion, CompletionKind, Completions, Definition, HoverText, LanguageStatus, Problem,
-    Severity, TextPosition, TextRange,
+    CodeAction, Completion, CompletionKind, Completions, Definition, HoverText, LanguageStatus,
+    Problem, ResolvedCompletion, Severity, SourceAction, TextEdit, TextPosition, TextRange,
 };
 use ide_core::workspace::display_path;
 use ide_core::{
@@ -483,6 +483,14 @@ pub struct TextRangeDto {
     pub end: TextPositionDto,
 }
 
+/// A change to a file's text: `range` is replaced by `newText`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TextEditDto {
+    pub range: TextRangeDto,
+    pub new_text: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum SeverityDto {
@@ -536,6 +544,44 @@ pub struct CompletionDto {
     /// What's inserted, when it isn't the label.
     pub insert: Option<String>,
     pub sort: Option<String>,
+    /// The module it would be imported from, when it isn't in scope yet.
+    pub source: Option<String>,
+    /// Other changes made with it, such as an import.
+    pub edits: Vec<TextEditDto>,
+    /// Give it to `lsp_resolve_completion`, when it's picked, for what else
+    /// picking it does (the import it adds).
+    pub resolve: Option<String>,
+}
+
+/// What else picking a completion does.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedCompletionDto {
+    /// What it does, said: `Add import from "react"`.
+    pub detail: Option<String>,
+    pub edits: Vec<TextEditDto>,
+}
+
+/// A fix the language server offers, with its edits to the file asked about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeActionDto {
+    pub title: String,
+    /// The one the server thinks is meant.
+    pub preferred: bool,
+    pub edits: Vec<TextEditDto>,
+}
+
+/// A change to a whole file the language server makes on request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum SourceActionDto {
+    /// Sorts the imports and removes the unused ones.
+    OrganizeImports,
+    RemoveUnusedImports,
+    SortImports,
+    /// Every fix the server is sure of.
+    FixAll,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -723,6 +769,34 @@ pub struct LspPositionArgs {
     pub path: String,
     pub line: u32,
     pub character: u32,
+}
+
+/// A completion that was picked, by its `resolve`.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LspResolveArgs {
+    pub workspace_id: String,
+    pub path: String,
+    pub resolve: String,
+}
+
+/// Part of a file (a cursor when `start` is `end`), for its fixes.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LspRangeArgs {
+    pub workspace_id: String,
+    pub path: String,
+    pub start: TextPositionDto,
+    pub end: TextPositionDto,
+}
+
+/// A change to a whole file, asked of the language server.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LspSourceActionArgs {
+    pub workspace_id: String,
+    pub path: String,
+    pub action: SourceActionDto,
 }
 
 /// One file's breakpoint lines (1-based).
@@ -1276,6 +1350,54 @@ impl From<TextPosition> for TextPositionDto {
     }
 }
 
+impl From<TextPositionDto> for TextPosition {
+    fn from(at: TextPositionDto) -> Self {
+        Self {
+            line: at.line,
+            character: at.character,
+        }
+    }
+}
+
+impl From<TextEdit> for TextEditDto {
+    fn from(edit: TextEdit) -> Self {
+        Self {
+            range: edit.range.into(),
+            new_text: edit.new_text,
+        }
+    }
+}
+
+impl From<ResolvedCompletion> for ResolvedCompletionDto {
+    fn from(resolved: ResolvedCompletion) -> Self {
+        Self {
+            detail: resolved.detail,
+            edits: resolved.edits.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<CodeAction> for CodeActionDto {
+    fn from(action: CodeAction) -> Self {
+        Self {
+            title: action.title,
+            preferred: action.preferred,
+            edits: action.edits.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<SourceActionDto> for SourceAction {
+    fn from(action: SourceActionDto) -> Self {
+        match action {
+            SourceActionDto::OrganizeImports => Self::OrganizeImports,
+            SourceActionDto::RemoveUnusedImports => Self::RemoveUnusedImports,
+            SourceActionDto::SortImports => Self::SortImports,
+            SourceActionDto::FixAll => Self::FixAll,
+        }
+    }
+}
+
 impl From<TextRange> for TextRangeDto {
     fn from(range: TextRange) -> Self {
         Self {
@@ -1340,6 +1462,9 @@ impl From<Completions> for CompletionsDto {
                     detail: item.detail,
                     insert: item.insert,
                     sort: item.sort,
+                    source: item.source,
+                    edits: item.edits.into_iter().map(Into::into).collect(),
+                    resolve: item.resolve,
                 })
                 .collect(),
             incomplete: list.incomplete,

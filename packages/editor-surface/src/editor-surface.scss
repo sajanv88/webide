@@ -44,6 +44,45 @@
   }
 }
 
+// The quick fix menu at the cursor (Ctrl+.), or the note that there are none.
+.editor-surface-fixes {
+  display: grid;
+  min-inline-size: 14rem;
+  max-inline-size: 36rem;
+  max-block-size: 20rem;
+  overflow: auto;
+  padding: var(--spacing);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+
+  &__item {
+    padding: var(--spacing) calc(var(--spacing) * 2);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      background-color: var(--color-primary);
+      color: var(--color-primary-foreground);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-ring);
+      outline-offset: -2px;
+    }
+  }
+
+  &--empty {
+    padding: var(--spacing) calc(var(--spacing) * 3);
+    color: var(--color-muted-foreground);
+  }
+}
+
 // The breakpoint gutter: a dot on each line with a breakpoint.
 .editor-surface-breakpoints {
   min-inline-size: calc(var(--spacing) * 4);

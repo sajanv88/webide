@@ -20,6 +20,11 @@ binds to the open workspace.
     `SurfaceLanguage`): completions, hover (Markdown) and go to definition,
     which opens a workspace file at the place (`file.openRequested`) or says
     where it is when it's outside the folder;
+  - completions from modules not imported yet, with where they come from
+    and, once picked, the import they add (`resolveCompletion`); the fixes
+    for the problems at a place (`fixes`); and the edits that organize,
+    sort or remove unused imports, or fix all (`sourceAction`). Each sends
+    the file's latest text first.
   - `restart()` stops the server and opens the files again in a new one.
 - `LanguageStatusItem`, for the status bar: TypeScript starting (a spinner),
   ready (with the open files' errors and warnings, said in words), or failed

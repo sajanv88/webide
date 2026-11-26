@@ -15,6 +15,11 @@ const problem = (line: number, start: number, end: number): ProblemDto => ({
   code: "2322",
 });
 
+const importEdit = {
+  range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+  newText: 'import { useState } from "react";\n',
+};
+
 function fakePort(overrides: Partial<LanguagePort> = {}) {
   const calls: string[] = [];
   const port: LanguagePort = {
@@ -35,7 +40,26 @@ function fakePort(overrides: Partial<LanguagePort> = {}) {
       calls.push(`complete ${path} ${line}:${character}`);
       return ok({
         items: [
-          { label: "toFixed", kind: "method", detail: "(): string", insert: null, sort: null },
+          {
+            label: "toFixed",
+            kind: "method",
+            detail: "(): string",
+            insert: null,
+            sort: null,
+            source: null,
+            edits: [],
+            resolve: null,
+          },
+          {
+            label: "useState",
+            kind: "function",
+            detail: null,
+            insert: null,
+            sort: null,
+            source: "react",
+            edits: [],
+            resolve: "1:1",
+          },
         ],
         incomplete: false,
       });
@@ -49,6 +73,18 @@ function fakePort(overrides: Partial<LanguagePort> = {}) {
           range: { start: { line: 2, character: 4 }, end: { line: 2, character: 9 } },
         },
       ]),
+    resolveCompletion: async (path, resolve) => {
+      calls.push(`resolve ${path} ${resolve}`);
+      return ok({ detail: 'Add import from "react"', edits: [importEdit] });
+    },
+    fixes: async (path, start, end) => {
+      calls.push(`fixes ${path} ${start.line}:${start.character}-${end.line}:${end.character}`);
+      return ok([{ title: 'Add import from "react"', preferred: true, edits: [importEdit] }]);
+    },
+    sourceAction: async (path, action) => {
+      calls.push(`source ${path} ${action}`);
+      return ok(action === "organizeImports" ? [importEdit] : null);
+    },
     restart: async () => {
       calls.push("restart");
       return ok(null);
@@ -119,12 +155,41 @@ describe("createLanguageClient", () => {
     expect(client.features("src/a.ts")).toBe(features);
     const items = await features.completions({ line: 0, character: 2 });
     expect(calls.slice(-2)).toEqual(["change src/a.ts x.", "complete src/a.ts 0:2"]);
-    expect(items).toEqual([{ label: "toFixed", kind: "method", detail: "(): string" }]);
+    expect(items?.[0]).toEqual({ label: "toFixed", kind: "method", detail: "(): string" });
     expect(await features.hover({ line: 0, character: 0 })).toBe("const x: number");
 
     features.goToDefinition({ line: 0, character: 0 });
     await vi.runAllTimersAsync();
     expect(opened).toHaveBeenCalledWith({ path: "src/b.ts", line: 3, column: 5 });
+    client.dispose();
+  });
+
+  it("brings imports with completions, and fixes and organizes them", async () => {
+    const { port, calls } = fakePort();
+    const bus = createEventBus<AppEvents>();
+    const client = createLanguageClient(port, bus);
+    bus.emit("document.opened", { path: "src/a.ts", text: "useSta" });
+    await vi.runAllTimersAsync();
+    const features = client.features("src/a.ts");
+    const imported = { from: { line: 0, character: 0 }, to: { line: 0, character: 0 } };
+    const insert = 'import { useState } from "react";\n';
+
+    const items = await features.completions({ line: 0, character: 6 });
+    const useState = items?.find((item) => item.label === "useState");
+    expect(useState).toMatchObject({ source: "react" });
+    expect(await useState?.resolve?.()).toEqual([{ ...imported, insert }]);
+    expect(calls).toContain("resolve src/a.ts 1:1");
+    // Nothing to resolve: no question asked.
+    expect(items?.find((item) => item.label === "toFixed")?.resolve).toBeUndefined();
+
+    const fixes = await features.fixes({ line: 0, character: 1 }, { line: 0, character: 3 });
+    expect(fixes).toEqual([
+      { title: 'Add import from "react"', preferred: true, edits: [{ ...imported, insert }] },
+    ]);
+    expect(calls).toContain("fixes src/a.ts 0:1-0:3");
+
+    expect(await features.sourceAction("organizeImports")).toEqual([{ ...imported, insert }]);
+    expect(await features.sourceAction("fixAll")).toBeNull();
     client.dispose();
   });
 

@@ -5,6 +5,8 @@ import type {
   EditorProblem,
   LanguagePort,
   ProblemDto,
+  SourceActionDto,
+  TextEditDto,
 } from "@repo/contracts";
 import type { EventBus } from "@repo/kernel";
 
@@ -21,13 +23,43 @@ export interface Position {
   readonly character: number;
 }
 
+/** A change to the text: what's between `from` and `to` becomes `insert`. */
+export interface Edit {
+  readonly from: Position;
+  readonly to: Position;
+  readonly insert: string;
+}
+
+/** One completion, as the editor shows it. */
+export interface CompletionItem {
+  readonly label: string;
+  readonly kind?: string;
+  readonly detail?: string;
+  readonly insert?: string;
+  /** The module it would be imported from. */
+  readonly source?: string;
+  /** Other changes made with it, such as an import. */
+  readonly edits?: readonly Edit[];
+  /** Asked when it's picked: the import it adds. */
+  readonly resolve?: () => Promise<readonly Edit[]>;
+}
+
+/** A fix the server offers for a problem. */
+export interface Fix {
+  readonly title: string;
+  readonly preferred: boolean;
+  readonly edits: readonly Edit[];
+}
+
 /** What the editor asks about the file it shows (the editor surface's `SurfaceLanguage`). */
 export interface LanguageFeatures {
-  completions(
-    at: Position,
-  ): Promise<readonly { label: string; kind?: string; detail?: string; insert?: string }[] | null>;
+  completions(at: Position): Promise<readonly CompletionItem[] | null>;
   hover(at: Position): Promise<string | null>;
   goToDefinition(at: Position): void;
+  /** The fixes for the problems between `from` and `to`. */
+  fixes(from: Position, to: Position): Promise<readonly Fix[] | null>;
+  /** The edits that organize the imports (or another source action); `null` when not offered. */
+  sourceAction(action: SourceActionDto): Promise<readonly Edit[] | null>;
 }
 
 export interface LanguageClient {
@@ -77,6 +109,13 @@ export function placeProblems(text: string, problems: readonly ProblemDto[]): Ed
 }
 
 const kindOf = (item: CompletionDto): string => item.kind;
+
+/** A server's edit, as the editor takes it. */
+export const toEdit = (edit: TextEditDto): Edit => ({
+  from: edit.range.start,
+  to: edit.range.end,
+  insert: edit.newText,
+});
 
 /**
  * Keeps the workspace's language server in step with the open files (from
@@ -160,12 +199,47 @@ export function createLanguageClient(port: LanguagePort, bus: EventBus<AppEvents
       await flush(path);
       const result = await port.completions(path, at.line, at.character);
       if (!result.ok) return null;
-      return result.value.items.map((item) => ({
-        label: item.label,
-        kind: kindOf(item),
-        ...(item.detail ? { detail: item.detail } : {}),
-        ...(item.insert ? { insert: item.insert } : {}),
+      return result.value.items.map((item): CompletionItem => {
+        const token = item.resolve;
+        return {
+          label: item.label,
+          kind: kindOf(item),
+          ...(item.detail ? { detail: item.detail } : {}),
+          ...(item.insert ? { insert: item.insert } : {}),
+          ...(item.source ? { source: item.source } : {}),
+          ...(item.edits.length > 0 ? { edits: item.edits.map(toEdit) } : {}),
+          ...(token
+            ? {
+                resolve: async () => {
+                  const resolved = await port.resolveCompletion(path, token);
+                  return resolved.ok ? resolved.value.edits.map(toEdit) : [];
+                },
+              }
+            : {}),
+        };
+      });
+    },
+    async fixes(from, to) {
+      await flush(path);
+      const result = await port.fixes(path, from, to);
+      if (!result.ok) return null;
+      return result.value.map((fix) => ({
+        title: fix.title,
+        preferred: fix.preferred,
+        edits: fix.edits.map(toEdit),
       }));
+    },
+    async sourceAction(action) {
+      await flush(path);
+      const result = await port.sourceAction(path, action);
+      if (!result.ok) {
+        toast("The language server couldn't do that", {
+          intent: "danger",
+          description: result.error.message,
+        });
+        return null;
+      }
+      return result.value ? result.value.map(toEdit) : null;
     },
     async hover(at) {
       await flush(path);

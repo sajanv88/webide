@@ -24,6 +24,15 @@ that ships with the app.
   as the TypeScript server wants); completions (at most 1,000), hover
   (Markdown) and go to definition (`Location` or `LocationLink`).
   Positions are UTF-16, as the editor counts them.
+- **Imports and fixes:** a completion the server has more to say about gets
+  a `resolve` token (the list's number and the item's): picking it asks
+  `completionItem/resolve` for the import it adds. Only the latest list's
+  tokens, for its file, are known. Fixes are the `quickfix` code actions for
+  the problems at a place, asked with those problems as the server reports
+  them then; source actions are `source.organizeImports`,
+  `source.sortImports`, `source.removeUnusedImports` and `source.fixAll`.
+  Only edits are made (never a command the server would run), and only
+  those that change the file asked about.
 - **`uri`:** `file://` URIs to and from paths, `%`-encoded as servers write
   them (the TypeScript server writes `file:///c%3A/…`); a Windows drive
   letter matches in any case. A definition inside the workspace is a
@@ -36,8 +45,8 @@ that ships with the app.
 
 - One language: TypeScript's server, for TypeScript and JavaScript. No
   others yet, and no choosing the project's own TypeScript.
-- No rename, references, code actions, formatting or signature help yet
-  (the server has them).
+- No rename, references, refactorings, formatting or signature help yet
+  (the server has them). A fix that would change another file isn't offered.
 - Problems are asked for again after a change, for the files that are open,
   not for the whole project.
 

@@ -1,10 +1,16 @@
 // CodeMirror extensions for language features from a language server:
 // completion, hover, and go to definition. This package is the only one that
 // may import CodeMirror.
-import type { CompletionContext, CompletionResult } from "@codemirror/autocomplete";
+import {
+  type Completion,
+  type CompletionContext,
+  type CompletionResult,
+  pickedCompletion,
+} from "@codemirror/autocomplete";
 import { EditorState, type Extension, Prec, type Text } from "@codemirror/state";
 import { EditorView, hoverTooltip, keymap } from "@codemirror/view";
-import type { SurfaceLanguage, SurfacePosition } from "./contract";
+import type { SurfaceCompletion, SurfaceLanguage, SurfacePosition } from "./contract";
+import { editChanges, overlapping } from "./edits";
 
 /** A character offset as a line and a UTF-16 column (CodeMirror counts UTF-16). */
 export function positionAt(doc: Text, offset: number): SurfacePosition {
@@ -54,6 +60,46 @@ export function hoverContent(markdown: string): HTMLElement {
 }
 
 /**
+ * Picking `item`: its text replaces `from`–`to`, with its other edits (an
+ * import) in the same change. Edits that come only once it's picked
+ * (`resolve`) follow in a change of their own, when the text before them is
+ * still as it was: their places were counted in that text.
+ */
+export function applyCompletion(item: SurfaceCompletion) {
+  return (view: EditorView, completion: Completion, from: number, to: number): void => {
+    const before = view.state.doc;
+    const insert = item.insert ?? item.label;
+    const extra = editChanges(before, item.edits ?? []).filter(
+      (change) => change.to <= from || change.from >= to,
+    );
+    const changes = view.state.changes([{ from, to, insert }, ...extra]);
+    view.dispatch({
+      changes,
+      selection: { anchor: changes.mapPos(to, 1) },
+      annotations: pickedCompletion.of(completion),
+      userEvent: "input.complete",
+      scrollIntoView: true,
+    });
+    if (!item.resolve || (item.edits?.length ?? 0) > 0) return;
+    const after = view.state.doc;
+    void item.resolve().then((edits) => {
+      const later = editChanges(before, edits)
+        .filter((change) => change.to <= from || change.from >= to)
+        .map((change) => ({
+          from: changes.mapPos(change.from, -1),
+          to: changes.mapPos(change.to, 1),
+          insert: change.insert,
+        }));
+      if (later.length === 0 || overlapping(later)) return;
+      // Places before `end` are still right if nothing before it was typed since.
+      const end = Math.max(...later.map((change) => change.to));
+      if (view.state.doc.sliceString(0, end) !== after.sliceString(0, end)) return;
+      view.dispatch({ changes: later, userEvent: "input.complete" });
+    });
+  };
+}
+
+/**
  * Completion, hover and go to definition, each asking `language()` (the
  * features of the document shown now, if any).
  */
@@ -69,12 +115,20 @@ export function languageExtensions(language: () => SurfaceLanguage | undefined):
     if (!items || context.aborted) return null;
     return {
       from: word ? word.from : context.pos,
-      options: items.map((item) => ({
-        label: item.label,
-        ...(item.kind && TYPES[item.kind] ? { type: TYPES[item.kind] } : {}),
-        ...(item.detail ? { detail: item.detail } : {}),
-        ...(item.insert && item.insert !== item.label ? { apply: item.insert } : {}),
-      })),
+      options: items.map((item) => {
+        const detail = item.detail ?? item.source;
+        const changes = item.resolve || (item.edits?.length ?? 0) > 0;
+        return {
+          label: item.label,
+          ...(item.kind && TYPES[item.kind] ? { type: TYPES[item.kind] } : {}),
+          ...(detail ? { detail } : {}),
+          ...(changes
+            ? { apply: applyCompletion(item) }
+            : item.insert && item.insert !== item.label
+              ? { apply: item.insert }
+              : {}),
+        };
+      }),
       validFor: /^[\w$]*$/,
     };
   };

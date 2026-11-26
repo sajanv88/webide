@@ -10,6 +10,7 @@ import type {
   AssistantSetupArgs,
   AssistantStatusDto,
   BreakpointDto,
+  CodeActionDto,
   CompletionsDto,
   DebugEventDto,
   DefinitionDto,
@@ -26,13 +27,17 @@ import type {
   ModelInfoDto,
   ProblemDto,
   ReadFileDto,
+  ResolvedCompletionDto,
   ScopeDto,
   SearchTextArgs,
   SettingsDto,
   SettingsPatchDto,
+  SourceActionDto,
   StackFrameDto,
   TerminalDto,
   TerminalEventDto,
+  TextEditDto,
+  TextPositionDto,
   TextSearchDto,
   VariableDto,
   WorkspaceDto,
@@ -71,6 +76,11 @@ export type AppCommandId =
   | "terminal.focus"
   | "terminal.screenReader"
   | "language.restart"
+  | "editor.quickFix"
+  | "editor.organizeImports"
+  | "editor.removeUnusedImports"
+  | "editor.sortImports"
+  | "editor.fixAll"
   | "view.showDebug"
   | "debug.start"
   | "debug.stop"
@@ -239,6 +249,16 @@ export interface LanguagePort {
   completions(path: string, line: number, character: number): Promise<IpcResult<CompletionsDto>>;
   hover(path: string, line: number, character: number): Promise<IpcResult<HoverDto | null>>;
   definition(path: string, line: number, character: number): Promise<IpcResult<DefinitionDto[]>>;
+  /** What else picking a completion does (the import it adds), by its `resolve`. */
+  resolveCompletion(path: string, resolve: string): Promise<IpcResult<ResolvedCompletionDto>>;
+  /** The fixes for the problems between `start` and `end`. */
+  fixes(
+    path: string,
+    start: TextPositionDto,
+    end: TextPositionDto,
+  ): Promise<IpcResult<CodeActionDto[]>>;
+  /** The edits that organize the imports (or make another source action); `null` when not offered. */
+  sourceAction(path: string, action: SourceActionDto): Promise<IpcResult<TextEditDto[] | null>>;
   /** Stops the server; it starts again when it's next needed. */
   restart(): Promise<IpcResult<null>>;
 }

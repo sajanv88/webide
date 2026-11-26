@@ -10,7 +10,9 @@ import { type KeyboardEvent, useEffect, useImperativeHandle, useMemo, useRef } f
 import type { EditorSurfaceProps, SurfaceLanguage } from "./contract";
 import { debugExtensions, setDebugMarks } from "./debug-gutter";
 import { DEFAULT_DISPLAY, displayExtensions } from "./display";
+import { editChanges, overlapping } from "./edits";
 import { languageExtensions } from "./language";
+import { fixMenuExtension, showFixes } from "./quick-fix";
 
 const isSave = (event: KeyboardEvent): boolean =>
   (event.ctrlKey || event.metaKey) &&
@@ -34,7 +36,7 @@ export function EditorSurface({
   path,
   languageId,
   initialValue,
-  readOnly,
+  readOnly: readOnlyProp,
   onChange,
   onSave,
   diagnostics,
@@ -54,11 +56,14 @@ export function EditorSurface({
   currentLanguage.current = language;
   const currentToggle = useRef(onToggleBreakpoint);
   currentToggle.current = onToggleBreakpoint;
+  const readOnly = useRef(readOnlyProp);
+  readOnly.current = readOnlyProp;
   const { indentGuides, rulerColumn, whitespace, lineHighlight } = display;
   // Made again only when the display changes: the editor then reconfigures them.
   const extensions = useMemo(
     () => [
       ...languageExtensions(() => currentLanguage.current),
+      ...fixMenuExtension,
       ...debugExtensions(() => currentToggle.current),
       ...displayExtensions({ indentGuides, rulerColumn, whitespace, lineHighlight }),
     ],
@@ -108,6 +113,26 @@ export function EditorSurface({
           const target = doc.line(clamp(line, 1, doc.lines));
           handle.select(target.from + clamp(column - 1, 0, target.length));
         }),
+      showFixes: () => {
+        const view = editor.current?.view;
+        if (view) void showFixes(view, currentLanguage.current);
+      },
+      runSourceAction: async (action) => {
+        const view = editor.current?.view;
+        const features = currentLanguage.current;
+        if (!view || !features?.sourceAction || readOnly.current) return "unavailable";
+        const doc = view.state.doc;
+        const edits = await features.sourceAction(action);
+        if (edits === null) return "unavailable";
+        if (view.state.doc !== doc) return "stale";
+        const changes = editChanges(doc, edits).filter(
+          (change) => doc.sliceString(change.from, change.to) !== change.insert,
+        );
+        if (changes.length === 0) return "unchanged";
+        if (overlapping(changes)) return "unavailable";
+        view.dispatch({ changes, userEvent: "input.source" });
+        return view.state.doc.eq(doc) ? "unchanged" : "changed";
+      },
     };
   }, []);
 
@@ -122,7 +147,7 @@ export function EditorSurface({
       // Read only when a document is first shown: the editor is uncontrolled.
       defaultValue={initialValue}
       onValueChange={(code) => onChange(code)}
-      readOnly={readOnly}
+      readOnly={readOnlyProp}
       {...(languageId ? { language: languageId } : {})}
       {...(diagnostics ? { diagnostics } : {})}
       extensions={extensions}

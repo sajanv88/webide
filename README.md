@@ -28,6 +28,8 @@ Status and plan: [checklist.md](checklist.md), from [plan.md](plan.md).
 | Ctrl+Shift+`                | New terminal              |
 | F12, Ctrl+click             | Go to definition          |
 | Ctrl+Space                  | Show completions          |
+| Ctrl+.                      | Quick fix                 |
+| Shift+Alt+O                 | Organize imports          |
 | Ctrl+B                      | Show or hide the side bar |
 | Ctrl+,                      | Settings                  |
 
@@ -82,6 +84,9 @@ Intel) and Linux (`.deb`, `.rpm`, `.AppImage`).
   machine's processor. They're gathered with `SHA256SUMS.txt` in
   `target/installers/webide-<version>-<os>-<arch>/`. Nothing is uploaded.
   For one kind only: `pnpm tauri build --bundles nsis`.
+- **Trying a build beside the one you use:** start it with
+  `WEBIDE_CONFIG_DIR` set to an absolute folder of its own. It keeps its
+  settings and recent folders there, so it opens none of yours.
 
 The installers aren't signed yet, so Windows SmartScreen and macOS Gatekeeper
 warn before they open one.
