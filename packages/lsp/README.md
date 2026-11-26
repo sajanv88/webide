@@ -25,17 +25,31 @@ binds to the open workspace.
     for the problems at a place (`fixes`); and the edits that organize,
     sort or remove unused imports, or fix all (`sourceAction`). Each sends
     the file's latest text first.
-  - `restart()` stops the server and opens the files again in a new one.
-- `LanguageStatusItem`, for the status bar: TypeScript starting (a spinner),
-  ready (with the open files' errors and warnings, said in words), or failed
-  (pressing it restarts). It registers `language.restart`.
+  - `restart()` stops the servers and opens the files again in new ones.
+  - It sends the files a server handles: scripts, JSON, CSS, SCSS, Less,
+    HTML and YAML. The backend picks the server.
+- `LanguageStatusItem`, for the status bar: each server by name (TypeScript,
+  JSON, YAML…) as it starts (a spinner) and is ready, with the open files'
+  errors and warnings (all said in words). One that failed is a button that
+  restarts them; one that needs Node.js is a "Node.js needed" button. It
+  registers `language.restart` ("Restart the Language Servers").
+- `NodeSetupDialog`: asks for Node.js the first time a server needs it (and
+  from that button). On Windows and macOS, "Open the terminal" types the
+  system's installer command into a new terminal (`terminal.type`) for the
+  person to read and run: `winget install --id OpenJS.NodeJS.LTS -e`, or
+  `brew install node`. Or they install it themselves, from
+  nodejs.org/en/download (shown, not opened; on Linux, the only choice).
+  Check again restarts the servers, which look for it again.
 
 ## Public API
 
 - `createLanguageClient(port, bus)` → `LanguageClient` (`handles`, `features`,
   `problems`, `restart`, `dispose`); `placeProblems(text, problems)`;
   `CHANGE_DELAY_MS`, `PROBLEMS_DELAY_MS`; types `LanguageFeatures`, `Position`.
-- `LanguageStatusItem` with `{ client, registry, bus }`.
+- `LanguageStatusItem` with `{ client, registry, bus, platform? }`.
+- `NodeSetupDialog` with `{ open, onOpenChange, servers, bus, onCheckAgain,
+  platform? }`; `currentPlatform`, `INSTALL_COMMAND`, `DOWNLOAD_ADDRESS`,
+  `listed`, type `Platform`.
 
 ## May depend on
 

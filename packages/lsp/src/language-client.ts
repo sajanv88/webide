@@ -36,6 +36,8 @@ export interface CompletionItem {
   readonly kind?: string;
   readonly detail?: string;
   readonly insert?: string;
+  /** Where what's inserted starts, when not where the word typed does. */
+  readonly replaceFrom?: Position;
   /** The module it would be imported from. */
   readonly source?: string;
   /** Other changes made with it, such as an import. */
@@ -74,7 +76,11 @@ export interface LanguageClient {
   dispose(): void;
 }
 
-const SCRIPT = /\.(?:[mc]?[jt]s|[jt]sx)$/i;
+/**
+ * The files a language server here handles: scripts (TypeScript), JSON, CSS,
+ * SCSS and Less, HTML, YAML. The backend decides which server.
+ */
+const HANDLED = /\.(?:[mc]?[jt]s|[jt]sx|jsonc?|css|scss|less|html?|ya?ml)$/i;
 
 /** Character offsets of each line's start, in UTF-16 units (as JavaScript counts). */
 function lineStarts(text: string): number[] {
@@ -130,7 +136,7 @@ export function createLanguageClient(port: LanguagePort, bus: EventBus<AppEvents
   const features = new Map<string, LanguageFeatures>();
   let problemsTimer: ReturnType<typeof setTimeout> | undefined;
   let live = true;
-  const handles = (path: string) => SCRIPT.test(path);
+  const handles = (path: string) => HANDLED.test(path);
 
   const refresh = async (path: string) => {
     const result = await port.problems(path);
@@ -206,6 +212,7 @@ export function createLanguageClient(port: LanguagePort, bus: EventBus<AppEvents
           kind: kindOf(item),
           ...(item.detail ? { detail: item.detail } : {}),
           ...(item.insert ? { insert: item.insert } : {}),
+          ...(item.replaceFrom ? { replaceFrom: item.replaceFrom } : {}),
           ...(item.source ? { source: item.source } : {}),
           ...(item.edits.length > 0 ? { edits: item.edits.map(toEdit) } : {}),
           ...(token

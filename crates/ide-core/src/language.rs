@@ -80,6 +80,9 @@ pub struct Completion {
     pub detail: Option<String>,
     /// What's inserted, when it isn't the label.
     pub insert: Option<String>,
+    /// Where what's inserted starts, when not where the word typed does
+    /// (a JSON key replaces its opening quote too).
+    pub replace_from: Option<TextPosition>,
     /// The order the server suggests.
     pub sort: Option<String>,
     /// Where it comes from, when it isn't in scope yet: the module an import
@@ -156,17 +159,20 @@ pub enum Definition {
     Outside { path: String, range: TextRange },
 }
 
-/// How a workspace's language server is doing.
+/// How one of a workspace's language servers is doing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LanguageStatus {
     Starting,
     Ready,
+    /// It runs on Node.js, which isn't installed (or wasn't found).
+    NeedsNode,
     /// It couldn't start, or stopped; why.
     Failed(String),
 }
 
-/// Where a language server's status goes, from its own threads.
-pub type LanguageSink = Arc<dyn Fn(LanguageStatus) + Send + Sync>;
+/// Where the language servers' statuses go, from their own threads: the
+/// server's name ("TypeScript", "JSON") and how it's doing.
+pub type LanguageSink = Arc<dyn Fn(&str, LanguageStatus) + Send + Sync>;
 
 /// One language server for one workspace. Dropping it stops the server.
 pub trait LanguageServer: Send + Sync {

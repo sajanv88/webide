@@ -67,6 +67,19 @@ describe("picking a completion", () => {
     expect(view.state.selection.main.head).toBe(view.state.doc.length);
   });
 
+  it("replaces from where the server's edit starts: a JSON key's quote", () => {
+    const view = viewOf('{\n  "na\n}');
+    const item = {
+      label: "name",
+      insert: '"name": ',
+      replaceFrom: { line: 1, character: 2 },
+    };
+    // The word typed starts after the quote; the key replaces the quote too.
+    applyCompletion(item)(view, picked("name"), 5, 7);
+    expect(view.state.doc.toString()).toBe('{\n  "name": \n}');
+    expect(view.state.selection.main.head).toBe(12);
+  });
+
   it("makes edits that came with the item at once", () => {
     const view = viewOf("useSta");
     applyCompletion({ label: "useState", edits: [atTop] })(view, picked("useState"), 0, 6);

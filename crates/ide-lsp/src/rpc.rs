@@ -84,6 +84,10 @@ type Pending = Arc<Mutex<HashMap<i64, mpsc::Sender<Result<Value, RpcError>>>>>;
 /// Called with each notification the server sends (method, params).
 pub type OnNotification = Box<dyn Fn(&str, Value) + Send>;
 
+/// Answers a request the server makes of the client (method, params): a
+/// result, or an error's code and message.
+pub type OnRequest = Box<dyn Fn(&str, Option<&Value>) -> Result<Value, (i64, String)> + Send>;
+
 /// A server process, and calls to it.
 pub struct RpcClient {
     stdin: Arc<Mutex<ChildStdin>>,
@@ -109,6 +113,7 @@ impl RpcClient {
         args: &[String],
         cwd: &Path,
         on_notification: OnNotification,
+        on_request: OnRequest,
         on_exit: Box<dyn FnOnce() + Send>,
     ) -> io::Result<Self> {
         let mut command = Command::new(program);
@@ -148,7 +153,13 @@ impl RpcClient {
             .spawn(move || {
                 let mut input = BufReader::new(stdout);
                 while let Ok(Some(message)) = read_message(&mut input) {
-                    dispatch(message, &read_pending, &reply_to, &on_notification);
+                    dispatch(
+                        message,
+                        &read_pending,
+                        &reply_to,
+                        &on_notification,
+                        &on_request,
+                    );
                 }
                 read_alive.store(false, Ordering::Release);
                 // Whoever waits for an answer won't get one.
@@ -235,6 +246,7 @@ fn dispatch(
     pending: &Pending,
     reply_to: &Mutex<ChildStdin>,
     on_notification: &OnNotification,
+    on_request: &OnRequest,
 ) {
     let id = message.get("id").cloned();
     let method = message
@@ -265,14 +277,18 @@ fn dispatch(
             };
             let _ = waiting.send(result);
         }
-        // The server asks something: answered at once, plainly.
+        // The server asks something: answered at once.
         (Some(id), Some(method)) => {
-            let result = answer_server_request(&method, message.get("params"));
+            let reply = match on_request(&method, message.get("params")) {
+                Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
+                Err((code, message)) => json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": { "code": code, "message": message },
+                }),
+            };
             let mut stdin = reply_to.lock().unwrap_or_else(PoisonError::into_inner);
-            let _ = write_message(
-                &mut *stdin,
-                &json!({ "jsonrpc": "2.0", "id": id, "result": result }),
-            );
+            let _ = write_message(&mut *stdin, &reply);
         }
         (None, Some(method)) => {
             on_notification(
@@ -284,21 +300,39 @@ fn dispatch(
     }
 }
 
-/// What the client says to a server's own requests. It has no settings to
-/// give and nothing to register, so: the defaults, and "fine".
-pub fn answer_server_request(method: &str, params: Option<&Value>) -> Value {
+/// What the client says to a server's own requests when it has no settings
+/// to give and nothing to register: the defaults, and "fine". `settings` are
+/// a server's, by section (`json`, `yaml.schemas`…), for `workspace/configuration`.
+pub fn answer_server_request(method: &str, params: Option<&Value>, settings: &Value) -> Value {
     match method {
         // One value per item asked for; null is "use your default".
-        "workspace/configuration" => {
-            let items = params
+        "workspace/configuration" => Value::Array(
+            params
                 .and_then(|params| params.get("items"))
                 .and_then(Value::as_array)
-                .map_or(0, Vec::len);
-            Value::Array(vec![Value::Null; items])
-        }
-        "workspace/workspaceFolders" => Value::Null,
+                .map(|items| {
+                    items
+                        .iter()
+                        .map(|item| {
+                            item.get("section")
+                                .and_then(Value::as_str)
+                                .and_then(|section| setting(settings, section))
+                                .cloned()
+                                .unwrap_or(Value::Null)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+        ),
         _ => Value::Null,
     }
+}
+
+/// A setting by its dotted section: `yaml.schemas` in `{ "yaml": { "schemas": … } }`.
+fn setting<'a>(settings: &'a Value, section: &str) -> Option<&'a Value> {
+    section
+        .split('.')
+        .try_fold(settings, |value, key| value.get(key))
 }
 
 #[cfg(test)]
@@ -352,17 +386,33 @@ mod tests {
     }
 
     #[test]
-    fn server_requests_get_defaults() {
+    fn server_requests_get_defaults_or_the_settings_asked_for() {
+        let none = Value::Null;
         assert_eq!(
             answer_server_request(
                 "workspace/configuration",
-                Some(&json!({ "items": [{}, {}] }))
+                Some(&json!({ "items": [{}, {}] })),
+                &none
             ),
             json!([null, null])
         );
         assert_eq!(
-            answer_server_request("client/registerCapability", None),
+            answer_server_request("client/registerCapability", None, &none),
             Value::Null
+        );
+        let settings =
+            json!({ "yaml": { "schemas": { "a": ["b"] } }, "css": { "validate": true } });
+        assert_eq!(
+            answer_server_request(
+                "workspace/configuration",
+                Some(&json!({ "items": [
+                    { "section": "yaml.schemas" },
+                    { "section": "css" },
+                    { "section": "html.format" },
+                ] })),
+                &settings
+            ),
+            json!([{ "a": ["b"] }, { "validate": true }, null])
         );
     }
 }

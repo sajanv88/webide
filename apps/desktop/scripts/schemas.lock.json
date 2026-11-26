@@ -1,0 +1,25 @@
+{
+  "commit": "57b2de4b75e3287355eee5dc161c32dc22b46ffc",
+  "files": {
+    "ava": "3ed729a14b7c7ac8807e8e6aef9de1a722a74b9a24bee479b969c91dde1e5e37",
+    "babelrc": "cffaa36ce6f361d8ff9f1d302cc8c2ed667c349242ffcee7879116072d6d7e02",
+    "dependabot-2.0": "891027089ecaeaf235ba78fa6ec255542a49465e6cb71ffb92606a2d9edbc1ea",
+    "eslintrc": "2e7bf9df71bef201db128b6287c9d8b89bad4e7f8aa839d224e9c42141bb4e09",
+    "github-action": "224326cc5a334bdb97b56b6fc320cd4381ba7d61b477b425ed506e6a420b52ba",
+    "github-workflow": "dc7058e3ec7d8bd25530d63120544f2b0b8331c0ca34db0ec0850fe8e8aa5560",
+    "jsconfig": "586309622e0a5651303183e893f3bcee46192f27f0817ad78d0b2ae6e04c0e38",
+    "jscpd": "57a29676d1a84d660803b8e5b6cdcee02400169c66d7589df4965dda83edc1f4",
+    "lerna": "5e322b0126d8bd725ace9b922a2cf89eea6bcaa080c84949bf2ad671a825d822",
+    "madge": "b6e5ae0126cdfd73dcc1592bc91de0a8f246fde16fe9b7d0c0ad9c8b46b4a034",
+    "nest-cli": "5bab79a687f14b1c147aeafb7eb0491a845d13b0bd6904abc26b08a819794361",
+    "nodemon": "cc1c775543f377b9561fbf56e7a30a64dea18c0d7bff993ad1ad15ec8c3eaf04",
+    "package": "49b18d1292dff6b5ab88f083f6070ad9701deec69dacd2dee58571c6493c918c",
+    "partial-eslint-plugins": "64cb0d70799fccd67e24ae1befd7643a4808c78e383f361b820932aa80a5cf16",
+    "pnpm-workspace": "57d0cf4bcd00e1ec2e77d45fa3e0ac23a204939d93d6902c63590f5f983edf53",
+    "prettierrc": "a5f9c7ed250e12c1b5fb7f0a2ae1b03e064513b40be96688cd2517925f42a6f0",
+    "quikrun": "67cf4391e674bd17b77e893e97860d6d0c12f815a777251b65563c72e522b646",
+    "semantic-release": "0a471bd80eafbed9d250da67c2d6fbf2b6fab93d3cd1d627193875bf6a2c2168",
+    "stylelintrc": "e369999cfa1dac3a7fe6e3476d46fcee6e9e82348aedeae0b9c78c2ef39cc65e",
+    "tsconfig": "71ad60f305bfc680085c45e4b2fe2bad01dd8a9994ac7eb55f10b53dc37209bc"
+  }
+}

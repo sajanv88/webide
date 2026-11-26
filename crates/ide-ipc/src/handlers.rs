@@ -272,12 +272,14 @@ impl IpcState {
         }
         let emit = Arc::clone(&self.emit);
         let id = workspace_id.to_owned();
-        let status: ide_core::language::LanguageSink = Arc::new(move |status: LanguageStatus| {
-            emit(BackendEventDto::LanguageStatus {
-                workspace_id: id.clone(),
-                status: LanguageStatusDto::from(status),
+        let status: ide_core::language::LanguageSink =
+            Arc::new(move |server: &str, status: LanguageStatus| {
+                emit(BackendEventDto::LanguageStatus {
+                    workspace_id: id.clone(),
+                    server: server.to_owned(),
+                    status: LanguageStatusDto::from(status),
+                });
             });
-        });
         match self.services.languages.start(&root, status) {
             Ok(server) => {
                 let server: Arc<dyn LanguageServer> = Arc::from(server);

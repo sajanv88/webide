@@ -11,7 +11,7 @@ use ide_debug::NodeDebugger;
 use ide_fs::LocalFs;
 use ide_git::LocalGit;
 use ide_ipc::Services;
-use ide_lsp::TypeScriptServers;
+use ide_lsp::{ServerSpec, Servers};
 use ide_mcp::McpHost;
 use ide_search::LocalSearch;
 use ide_terminal::LocalTerminals;
@@ -48,13 +48,28 @@ fn main() -> ExitCode {
                     .join("src")
                     .join("dapDebugServer.js"),
             )),
-            // Staged into the bundle by scripts/stage-typescript.mjs.
-            languages: Arc::new(TypeScriptServers::new(
-                paths
-                    .resource_dir
-                    .join("typescript")
-                    .join(if cfg!(windows) { "tsc.exe" } else { "tsc" }),
-            )),
+            // TypeScript is staged into the bundle by scripts/stage-typescript.mjs;
+            // the others (and their schemas), bundled by
+            // scripts/stage-language-servers.mjs, run on the person's `node`.
+            languages: {
+                let servers = paths.resource_dir.join("language-servers");
+                let schemas = servers.join("schemas");
+                Arc::new(Servers::new(
+                    vec![
+                        ServerSpec::typescript(
+                            paths
+                                .resource_dir
+                                .join("typescript")
+                                .join(if cfg!(windows) { "tsc.exe" } else { "tsc" }),
+                        ),
+                        ServerSpec::json(servers.join("json-server.cjs"), schemas.clone()),
+                        ServerSpec::css(servers.join("css-server.cjs")),
+                        ServerSpec::html(servers.join("html-server.cjs")),
+                        ServerSpec::yaml(servers.join("yaml-server.mjs"), schemas),
+                    ],
+                    Arc::new(ide_debug::find_node),
+                ))
+            },
         }
     });
     match result {

@@ -42,7 +42,13 @@ the person's own `node`.
 ## Public API
 
 - `NodeDebugger::new(server_js)` (implements `ide_core::DebugAdapters`).
-- `find_node()`, `workspace_path(root, path)`.
+- `find_node()`: the person's `node`, on the PATH or where installers put it
+  (Windows: `Program Files\nodejs`, `%LOCALAPPDATA%\Programs\nodejs`, Volta;
+  macOS and Linux: Homebrew, MacPorts, `/usr/bin`, Snap, Volta, the newest
+  nvm version). An app started from the Finder or the Start menu may not
+  have the shell's PATH, and one running doesn't see a PATH changed since.
+  The language servers use it too.
+- `workspace_path(root, path)`.
 - `DapConnection`, `DapError`, `read_message`, `write_message`: the protocol,
   over any stream.
 

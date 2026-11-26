@@ -9,4 +9,8 @@ import type { LanguageStatusDto } from "./LanguageStatusDto";
  * What the backend tells the webview, over the channel given to
  * `subscribe_events`. Switch on `kind`.
  */
-export type BackendEventDto = { "kind": "filesChanged", workspaceId: string, changes: Array<FileChangeDto>, rescan: boolean, } | { "kind": "watchFailed", workspaceId: string, message: string, } | { "kind": "closeRequested" } | { "kind": "debug", workspaceId: string, event: DebugEventDto, } | { "kind": "languageStatus", workspaceId: string, status: LanguageStatusDto, } | { "kind": "agentCall", call: AgentCallDto, } | { "kind": "assistant", event: AssistantEventDto, };
+export type BackendEventDto = { "kind": "filesChanged", workspaceId: string, changes: Array<FileChangeDto>, rescan: boolean, } | { "kind": "watchFailed", workspaceId: string, message: string, } | { "kind": "closeRequested" } | { "kind": "debug", workspaceId: string, event: DebugEventDto, } | { "kind": "languageStatus", workspaceId: string, 
+/**
+ * Which server: "TypeScript", "JSON", "YAML"…
+ */
+server: string, status: LanguageStatusDto, } | { "kind": "agentCall", call: AgentCallDto, } | { "kind": "assistant", event: AssistantEventDto, };

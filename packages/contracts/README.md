@@ -40,8 +40,9 @@ Types only (`export type *`):
 - `AppEvents`: `workspace.opened`, `explorer.fileActivated`, `file.openRequested`
   (a path, and optionally where to put the cursor), `workspace.filesChanged`,
   `settings.changed`, `document.opened` / `document.changed` / `document.closed`
-  (an open file's text), `language.problems`, `language.status`, `debug.event`, `agent.call`,
-  `assistant.event`.
+  (an open file's text), `language.problems`, `language.status` (`{ server, status }`, one
+  server's), `terminal.type` (a command typed into a new terminal, not run), `debug.event`,
+  `agent.call`, `assistant.event`.
 - `EditorProblem`: a problem placed by character offset, and by line.
 - `ExplorerPort`: `listDirectory(path)`, bound to the open workspace by the app.
 - `DocumentsPort`: `readFile(path)`, `writeFile(path, text)`, the same way, for `@repo/tabs`.

@@ -265,6 +265,8 @@ pub enum BackendEventDto {
     #[serde(rename_all = "camelCase")]
     LanguageStatus {
         workspace_id: String,
+        /// Which server: "TypeScript", "JSON", "YAML"…
+        server: String,
         status: LanguageStatusDto,
     },
     /// An AI agent used a tool of the MCP server.
@@ -543,6 +545,8 @@ pub struct CompletionDto {
     pub detail: Option<String>,
     /// What's inserted, when it isn't the label.
     pub insert: Option<String>,
+    /// Where what's inserted starts, when not where the word typed does.
+    pub replace_from: Option<TextPositionDto>,
     pub sort: Option<String>,
     /// The module it would be imported from, when it isn't in scope yet.
     pub source: Option<String>,
@@ -616,6 +620,8 @@ pub enum DefinitionDto {
 pub enum LanguageStatusDto {
     Starting,
     Ready,
+    /// It runs on Node.js, which isn't installed (or wasn't found).
+    NeedsNode,
     #[serde(rename_all = "camelCase")]
     Failed {
         message: String,
@@ -1461,6 +1467,7 @@ impl From<Completions> for CompletionsDto {
                     kind: item.kind.into(),
                     detail: item.detail,
                     insert: item.insert,
+                    replace_from: item.replace_from.map(Into::into),
                     sort: item.sort,
                     source: item.source,
                     edits: item.edits.into_iter().map(Into::into).collect(),
@@ -1500,6 +1507,7 @@ impl From<LanguageStatus> for LanguageStatusDto {
         match status {
             LanguageStatus::Starting => Self::Starting,
             LanguageStatus::Ready => Self::Ready,
+            LanguageStatus::NeedsNode => Self::NeedsNode,
             LanguageStatus::Failed(message) => Self::Failed { message },
         }
     }

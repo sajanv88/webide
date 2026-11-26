@@ -4,6 +4,7 @@ import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CHANGE_DELAY_MS, createLanguageClient, placeProblems } from "./language-client";
 import { LanguageStatusItem } from "./language-status";
+import { currentPlatform, listed, NodeSetupDialog } from "./node-setup";
 
 const ok = <T,>(value: T): IpcResult<T> => ({ ok: true, value });
 
@@ -45,6 +46,7 @@ function fakePort(overrides: Partial<LanguagePort> = {}) {
             kind: "method",
             detail: "(): string",
             insert: null,
+            replaceFrom: null,
             sort: null,
             source: null,
             edits: [],
@@ -55,6 +57,7 @@ function fakePort(overrides: Partial<LanguagePort> = {}) {
             kind: "function",
             detail: null,
             insert: null,
+            replaceFrom: null,
             sort: null,
             source: "react",
             edits: [],
@@ -206,7 +209,7 @@ describe("createLanguageClient", () => {
 });
 
 describe("LanguageStatusItem", () => {
-  it("shows the server starting, ready with the problems, or failed", () => {
+  it("shows each server starting, ready with the problems, or failed", () => {
     const { port } = fakePort();
     const bus = createEventBus<AppEvents>();
     const registry = createCommandRegistry<AppCommandId>();
@@ -214,22 +217,77 @@ describe("LanguageStatusItem", () => {
     render(<LanguageStatusItem client={client} registry={registry} bus={bus} />);
     expect(registry.get("language.restart")).toBeTruthy();
 
-    act(() => bus.emit("language.status", { state: "starting" }));
+    act(() => bus.emit("language.status", { server: "TypeScript", status: { state: "starting" } }));
     expect(screen.getByText("TypeScript")).toBeTruthy();
     act(() => {
-      bus.emit("language.status", { state: "ready" });
+      bus.emit("language.status", { server: "TypeScript", status: { state: "ready" } });
+      bus.emit("language.status", { server: "JSON", status: { state: "ready" } });
       bus.emit("language.problems", {
         path: "a.ts",
         problems: [{ from: 0, to: 1, severity: "error", message: "x", line: 1, column: 1 }],
       });
     });
     expect(
-      screen.getByRole("status", { name: "TypeScript ready. 1 error, 0 warnings in open files" }),
+      screen.getByRole("status", {
+        name: "Language servers: TypeScript ready, JSON ready. 1 error, 0 warnings in open files",
+      }),
     ).toBeTruthy();
-    act(() => bus.emit("language.status", { state: "failed", message: "no server" }));
+    act(() =>
+      bus.emit("language.status", {
+        server: "JSON",
+        status: { state: "failed", message: "no server" },
+      }),
+    );
     expect(
-      screen.getByRole("button", { name: "TypeScript isn't running: no server. Restart it" }),
+      screen.getByRole("button", {
+        name: "JSON isn't running: no server. Restart the language servers",
+      }),
     ).toBeTruthy();
     client.dispose();
+  });
+
+  it("asks for Node.js once, with the installer typed into a terminal", async () => {
+    const { port, calls } = fakePort();
+    const bus = createEventBus<AppEvents>();
+    const registry = createCommandRegistry<AppCommandId>();
+    const client = createLanguageClient(port, bus);
+    const typed: string[] = [];
+    bus.on("terminal.type", ({ text }) => typed.push(text));
+    render(<LanguageStatusItem client={client} registry={registry} bus={bus} platform="windows" />);
+    act(() => bus.emit("language.status", { server: "JSON", status: { state: "needsNode" } }));
+    const dialog = screen.getByRole("dialog", { name: "Node.js is needed" });
+    expect(dialog.textContent).toContain("JSON features run on Node.js");
+    expect(dialog.textContent).toContain("winget install --id OpenJS.NodeJS.LTS -e");
+    act(() => screen.getByRole("button", { name: "Open the terminal" }).click());
+    expect(typed).toEqual(["winget install --id OpenJS.NodeJS.LTS -e"]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    // Not again by itself; from its button, with Check again restarting the servers.
+    act(() => bus.emit("language.status", { server: "YAML", status: { state: "needsNode" } }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    act(() => screen.getByRole("button", { name: "JSON, YAML need Node.js. Set it up" }).click());
+    await act(async () => screen.getByRole("button", { name: "Check again" }).click());
+    expect(calls).toContain("restart");
+    client.dispose();
+  });
+
+  it("gives Linux the address alone, as package managers differ", () => {
+    const bus = createEventBus<AppEvents>();
+    render(
+      <NodeSetupDialog
+        open
+        onOpenChange={() => {}}
+        servers={["YAML", "CSS"]}
+        bus={bus}
+        onCheckAgain={() => {}}
+        platform="linux"
+      />,
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("YAML and CSS features");
+    expect(dialog.textContent).toContain("nodejs.org/en/download");
+    expect(screen.queryByRole("button", { name: "Open the terminal" })).toBeNull();
+    expect(currentPlatform("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)")).toBe("macos");
+    expect(listed(["JSON", "YAML", "CSS"])).toBe("JSON, YAML and CSS");
   });
 });

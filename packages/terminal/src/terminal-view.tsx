@@ -28,7 +28,15 @@ export interface TerminalViewProps {
   readonly onReady?: (focus: () => void) => void;
   /** The page's theme changed: read the colors again. */
   readonly themeKey?: string;
+  /**
+   * Typed at the shell's prompt once it's up (its output has paused), and
+   * not run: no Enter is pressed.
+   */
+  readonly initialInput?: string | undefined;
 }
+
+/** How long the shell's output pauses before it's taken to be at its prompt. */
+export const PROMPT_QUIET_MS = 400;
 
 const FONT_SIZE = 13;
 const LINE_HEIGHT = 1.2;
@@ -56,6 +64,7 @@ export function TerminalView({
   onStatus,
   onReady,
   themeKey,
+  initialInput,
 }: TerminalViewProps) {
   const host = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal | null>(null);
@@ -143,6 +152,18 @@ export function TerminalView({
 
     const typed = xterm.onData(write);
     let live = true;
+    // What's to be typed once the prompt is up: after the output pauses.
+    let input = initialInput;
+    let quiet: ReturnType<typeof setTimeout> | undefined;
+    const typeWhenQuiet = () => {
+      if (!input) return;
+      clearTimeout(quiet);
+      quiet = setTimeout(() => {
+        if (!input || id === null || exited) return;
+        void port.write(id, input);
+        input = undefined;
+      }, PROMPT_QUIET_MS);
+    };
     const start = size() ?? { cols: 80, rows: 24 };
     xterm.resize(start.cols, start.rows);
     latest.current.onStatus({ kind: "starting" });
@@ -150,6 +171,7 @@ export function TerminalView({
       .open(start.cols, start.rows, (event) => {
         if (event.kind === "output") {
           xterm.write(event.data);
+          typeWhenQuiet();
         } else {
           exited = true;
           const code = event.code ?? null;
@@ -192,6 +214,7 @@ export function TerminalView({
 
     return () => {
       live = false;
+      clearTimeout(quiet);
       observer.disconnect();
       typed.dispose();
       stop();

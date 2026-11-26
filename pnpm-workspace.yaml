@@ -4,6 +4,9 @@ packages:
 
 # Exact versions only. An upgrade is one reviewed line here.
 catalog:
+  # Language servers run on the person's Node, bundled by esbuild into the
+  # app's resources at build time (apps/desktop/scripts/stage-language-servers.mjs).
+  "@angular/language-server": 22.3.0
   "@biomejs/biome": 2.6.8
   # CodeMirror, for the editor surface's language features only: the same
   # versions @nuvui/editor uses, so there's one copy of each.
@@ -25,6 +28,7 @@ catalog:
   "@vitejs/plugin-react": 6.3.0
   # The terminal's renderer (no nuvui terminal exists): @repo/terminal only.
   "@xterm/xterm": 6.0.0
+  esbuild: 0.28.2
   jsdom: 31.0.1
   postcss: 8.5.33
   react: 19.3.1
@@ -35,10 +39,16 @@ catalog:
   typescript: 7.0.2
   vite: 8.3.8
   vitest: 5.1.1
+  vscode-langservers-extracted: 4.10.0
+  yaml-language-server: 2.0.0
 
 # Install scripts are denied unless reviewed and listed here.
 allowBuilds:
   "@parcel/watcher": false
+  # A banner only.
+  core-js: false
+  # Checks its binary, which comes as the platform's own package anyway.
+  esbuild: false
 
 # Supply-chain gates.
 minimumReleaseAge: 1440

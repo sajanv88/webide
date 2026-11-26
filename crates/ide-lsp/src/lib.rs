@@ -1,167 +1,207 @@
-//! Language features from a language server over LSP: for now TypeScript and
-//! JavaScript, from the TypeScript server that ships with the app
-//! (TypeScript 7's native `tsc --lsp --stdio`).
+//! Language features from language servers over LSP: TypeScript and
+//! JavaScript from the TypeScript server that ships with the app (TypeScript
+//! 7's native `tsc --lsp --stdio`), and JSON, CSS, HTML and YAML from servers
+//! the app bundles, run on the person's own Node.
 //!
-//! The program is the app's own; nothing from the workspace is run. It starts
-//! in the workspace folder, and is stopped when the session is dropped.
+//! The programs are the app's own; nothing from the workspace is run. Each
+//! starts in the workspace folder the first time a file of its kind opens,
+//! and is stopped when the session is dropped.
 
 mod rpc;
+mod servers;
 mod uri;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ide_core::language::{
     CodeAction, Completion, CompletionKind, Completions, Definition, HoverText, LanguageServer,
-    LanguageServers, LanguageSink, LanguageStatus, Problem, ResolvedCompletion, Severity,
-    SourceAction, TextEdit, TextPosition, TextRange, script_language,
+    LanguageSink, LanguageStatus, Problem, ResolvedCompletion, Severity, SourceAction, TextEdit,
+    TextPosition, TextRange,
 };
 use ide_core::{IdeError, RelPath, WorkspaceRoot};
 use serde_json::{Value, json};
 
-pub use crate::rpc::{RpcClient, RpcError, read_message, write_message};
+pub use crate::rpc::{OnRequest, RpcClient, RpcError, read_message, write_message};
+pub use crate::servers::{
+    FindNode, LanguageId, Program, ServerSpec, Servers, css_language, html_language, json_language,
+    yaml_language,
+};
 pub use crate::uri::{from_uri, relative_to, to_uri};
 
-/// How long the server may take to start.
+#[cfg(test)]
+pub(crate) use crate::servers::schema_content as schema_content_for_test;
+
+/// How long a server may take to start.
 const START_LIMIT: Duration = Duration::from_secs(60);
 /// How long one question (completion, hover…) may take.
 const ASK_LIMIT: Duration = Duration::from_secs(15);
+/// How long a server that sends its problems unasked has, after a change, to send them.
+const PUSH_WAIT: Duration = Duration::from_secs(2);
 /// At most this many completions are passed on.
 pub const MAX_COMPLETIONS: usize = 1000;
-
-/// [`LanguageServers`] for TypeScript and JavaScript.
-#[derive(Debug, Clone)]
-pub struct TypeScriptServers {
-    program: PathBuf,
-    args: Vec<String>,
-}
-
-impl TypeScriptServers {
-    /// `program` is the server: TypeScript 7's `tsc`, run with `--lsp --stdio`.
-    pub fn new(program: PathBuf) -> Self {
-        Self {
-            program,
-            args: vec!["--lsp".to_owned(), "--stdio".to_owned()],
-        }
-    }
-}
 
 fn failed(error: &RpcError) -> IdeError {
     IdeError::Io(error.to_string())
 }
 
-impl LanguageServers for TypeScriptServers {
-    fn handles(&self, path: &RelPath) -> bool {
-        script_language(path).is_some()
-    }
+/// The problems a server sent unasked (`textDocument/publishDiagnostics`), by file.
+type Pushed = Arc<Mutex<HashMap<RelPath, (Instant, Vec<Value>)>>>;
 
-    fn start(
-        &self,
-        root: &WorkspaceRoot,
-        status: LanguageSink,
-    ) -> Result<Box<dyn LanguageServer>, IdeError> {
-        if !self.program.is_file() {
-            let message = format!(
-                "the TypeScript language server isn't installed with this app ({})",
-                self.program.display()
-            );
-            status(LanguageStatus::Failed(message.clone()));
-            return Err(IdeError::Io(message));
-        }
-        status(LanguageStatus::Starting);
-        let folder = root.display_path();
-        // Said once, when it stops by itself (not when it's asked to).
-        let stopping = Arc::new(AtomicBool::new(false));
-        let (exit_status, exit_stopping) = (Arc::clone(&status), Arc::clone(&stopping));
-        let client = RpcClient::spawn(
-            &self.program,
-            &self.args,
-            std::path::Path::new(&folder),
-            Box::new(|_method, _params| {}),
-            Box::new(move || {
-                if !exit_stopping.load(Ordering::Acquire) {
-                    exit_status(LanguageStatus::Failed(
-                        "the TypeScript server stopped".to_owned(),
-                    ));
-                }
-            }),
-        )
-        .map_err(|error| {
-            let message = format!("couldn't start the TypeScript server: {error}");
-            status(LanguageStatus::Failed(message.clone()));
-            IdeError::Io(message)
-        })?;
+/// Starts one server for the workspace at `root`, as `spec` says, with `program`.
+fn start_session(
+    spec: &ServerSpec,
+    program: &Path,
+    args: &[String],
+    root: &WorkspaceRoot,
+    status: &LanguageSink,
+) -> Result<Session, IdeError> {
+    let name = spec.name;
+    let fail = |message: String| {
+        status(name, LanguageStatus::Failed(message.clone()));
+        IdeError::Io(message)
+    };
+    status(name, LanguageStatus::Starting);
+    let folder = root.display_path();
+    // Said once, when it stops by itself (not when it's asked to).
+    let stopping = Arc::new(AtomicBool::new(false));
+    let (exit_status, exit_stopping) = (Arc::clone(status), Arc::clone(&stopping));
+    let pushed: Pushed = Arc::new(Mutex::new(HashMap::new()));
+    let (push_into, push_folder) = (Arc::clone(&pushed), folder.clone());
+    let client = RpcClient::spawn(
+        program,
+        args,
+        Path::new(&folder),
+        Box::new(move |method, params| {
+            if method != "textDocument/publishDiagnostics" {
+                return;
+            }
+            let Some(path) = params
+                .get("uri")
+                .and_then(Value::as_str)
+                .and_then(from_uri)
+                .and_then(|path| relative_to(&push_folder, &path))
+            else {
+                return;
+            };
+            let items = params
+                .get("diagnostics")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            push_into
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .insert(path, (Instant::now(), items));
+        }),
+        servers::responder(spec),
+        Box::new(move || {
+            if !exit_stopping.load(Ordering::Acquire) {
+                exit_status(
+                    name,
+                    LanguageStatus::Failed(format!("the {name} server stopped")),
+                );
+            }
+        }),
+    )
+    .map_err(|error| fail(format!("couldn't start the {name} server: {error}")))?;
 
-        let root_uri = to_uri(&folder);
-        let initialized = client.request(
-            "initialize",
-            json!({
-                "processId": std::process::id(),
-                "clientInfo": { "name": "webide" },
-                "rootUri": root_uri,
-                "workspaceFolders": [{ "uri": root_uri, "name": root.name() }],
-                "capabilities": {
-                    "general": { "positionEncodings": ["utf-16"] },
-                    "textDocument": {
-                        "synchronization": { "didSave": false },
-                        "completion": {
-                            "completionItem": {
-                                "snippetSupport": false,
-                                "documentationFormat": ["markdown", "plaintext"],
-                                "labelDetailsSupport": true,
-                                // The import a completion adds comes when it's picked.
-                                "resolveSupport": {
-                                    "properties": ["additionalTextEdits", "detail"],
-                                },
+    let root_uri = to_uri(&folder);
+    let initialized = client.request(
+        "initialize",
+        json!({
+            "processId": std::process::id(),
+            "clientInfo": { "name": "webide" },
+            "rootUri": root_uri,
+            "workspaceFolders": [{ "uri": root_uri, "name": root.name() }],
+            "initializationOptions": spec.initialization_options,
+            "capabilities": {
+                "general": { "positionEncodings": ["utf-16"] },
+                "textDocument": {
+                    "synchronization": { "didSave": false },
+                    "completion": {
+                        "completionItem": {
+                            "snippetSupport": false,
+                            "documentationFormat": ["markdown", "plaintext"],
+                            "labelDetailsSupport": true,
+                            // The import a completion adds comes when it's picked.
+                            "resolveSupport": {
+                                "properties": ["additionalTextEdits", "detail"],
                             },
                         },
-                        "codeAction": {
-                            "codeActionLiteralSupport": {
-                                "codeActionKind": {
-                                    "valueSet": ["quickfix", "source", "source.organizeImports"],
-                                },
+                    },
+                    "codeAction": {
+                        "codeActionLiteralSupport": {
+                            "codeActionKind": {
+                                "valueSet": ["quickfix", "source", "source.organizeImports"],
                             },
-                            "isPreferredSupport": true,
-                            "disabledSupport": true,
                         },
-                        "hover": { "contentFormat": ["markdown", "plaintext"] },
-                        "definition": { "linkSupport": true },
-                        "diagnostic": {},
-                        "publishDiagnostics": {},
+                        "isPreferredSupport": true,
+                        "disabledSupport": true,
                     },
-                    "workspace": {
-                        "configuration": true,
-                        "workspaceFolders": true,
-                        "workspaceEdit": { "documentChanges": true },
-                    },
+                    "hover": { "contentFormat": ["markdown", "plaintext"] },
+                    "definition": { "linkSupport": true },
+                    "diagnostic": {},
+                    "publishDiagnostics": {},
                 },
-            }),
-            START_LIMIT,
-        );
-        if let Err(error) = initialized.and_then(|_| client.notify("initialized", json!({}))) {
-            let message = format!("the TypeScript server didn't start: {error}");
-            status(LanguageStatus::Failed(message.clone()));
-            return Err(IdeError::Io(message));
+                "workspace": {
+                    "configuration": true,
+                    "workspaceFolders": true,
+                    "workspaceEdit": { "documentChanges": true },
+                    "didChangeConfiguration": {},
+                },
+            },
+        }),
+        START_LIMIT,
+    );
+    let capabilities = match initialized {
+        Ok(result) => result.get("capabilities").cloned().unwrap_or(Value::Null),
+        Err(error) => return Err(fail(format!("the {name} server didn't start: {error}"))),
+    };
+    let ready = client.notify("initialized", json!({})).and_then(|()| {
+        // Servers that read their settings when told (JSON, YAML) are told now.
+        if spec.settings.is_null() {
+            Ok(())
+        } else {
+            client.notify(
+                "workspace/didChangeConfiguration",
+                json!({ "settings": spec.settings }),
+            )
         }
-        status(LanguageStatus::Ready);
-        Ok(Box::new(Session {
-            client,
-            folder,
-            versions: Mutex::new(HashMap::new()),
-            listed: Mutex::new(Listed::default()),
-            reported: Mutex::new(HashMap::new()),
-            stopping,
-        }))
+    });
+    if let Err(error) = ready {
+        return Err(fail(format!("the {name} server didn't start: {error}")));
     }
+    status(name, LanguageStatus::Ready);
+    Ok(Session {
+        client,
+        folder,
+        language: spec.language,
+        pull: capabilities.get("diagnosticProvider").is_some(),
+        pushed,
+        changed: Mutex::new(HashMap::new()),
+        versions: Mutex::new(HashMap::new()),
+        listed: Mutex::new(Listed::default()),
+        reported: Mutex::new(HashMap::new()),
+        stopping,
+    })
 }
 
 struct Session {
     client: RpcClient,
     /// The workspace folder, as people write it.
     folder: String,
+    /// The LSP language id of a file this server handles.
+    language: LanguageId,
+    /// Whether problems are asked for (`textDocument/diagnostic`); otherwise
+    /// the server sends them unasked, into `pushed`.
+    pull: bool,
+    pushed: Pushed,
+    /// When each open file last changed, so an older push isn't taken as new.
+    changed: Mutex<HashMap<RelPath, Instant>>,
     /// Each open file's version, as the server knows it.
     versions: Mutex<HashMap<RelPath, i64>>,
     /// The last completions listed, as the server wrote them: picking one
@@ -280,6 +320,39 @@ impl Session {
         })
     }
 
+    fn mark_changed(&self, path: &RelPath) {
+        self.changed
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(path.clone(), Instant::now());
+    }
+
+    /// The problems the server sent for `path` since it last changed,
+    /// waiting a moment for them; what it sent before, if it sends none.
+    fn pushed_problems(&self, path: &RelPath) -> Vec<Value> {
+        let since = self
+            .changed
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(path)
+            .copied();
+        let until = Instant::now() + PUSH_WAIT;
+        loop {
+            let latest = self
+                .pushed
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .get(path)
+                .cloned();
+            let fresh = matches!((&latest, since), (Some((at, _)), Some(since)) if *at >= since)
+                || (latest.is_some() && since.is_none());
+            if fresh || Instant::now() >= until || !self.client.is_alive() {
+                return latest.map(|(_, items)| items).unwrap_or_default();
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    }
+
     fn resolve_item(&self, path: &RelPath, resolve: &str) -> Option<Value> {
         let (generation, index) = resolve.split_once(':')?;
         let (generation, index) = (
@@ -305,9 +378,10 @@ impl Session {
 
 impl LanguageServer for Session {
     fn open(&self, path: &RelPath, text: &str) -> Result<(), IdeError> {
-        let Some(language) = script_language(path) else {
+        let Some(language) = (self.language)(path) else {
             return Ok(());
         };
+        self.mark_changed(path);
         let reopened = self
             .versions
             .lock()
@@ -345,6 +419,7 @@ impl LanguageServer for Session {
             *version += 1;
             *version
         };
+        self.mark_changed(path);
         // The whole text each time: simple, and fast enough for a file being typed in.
         self.client
             .notify(
@@ -376,15 +451,19 @@ impl LanguageServer for Session {
     }
 
     fn problems(&self, path: &RelPath) -> Result<Vec<Problem>, IdeError> {
-        let report = self.ask(
-            "textDocument/diagnostic",
-            json!({ "textDocument": { "uri": self.uri(path) } }),
-        )?;
-        let items = report
-            .get("items")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
+        let items = if self.pull {
+            let report = self.ask(
+                "textDocument/diagnostic",
+                json!({ "textDocument": { "uri": self.uri(path) } }),
+            )?;
+            report
+                .get("items")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default()
+        } else {
+            self.pushed_problems(path)
+        };
         let problems = items.iter().filter_map(problem).collect();
         self.reported
             .lock()
@@ -592,6 +671,77 @@ fn problem(value: &Value) -> Option<Problem> {
     })
 }
 
+/// A snippet's text without its places to fill in: `$1` and `$0` go,
+/// `${1:name}` leaves `name`, `${1|a,b|}` leaves `a`, and `\$` is `$`.
+/// Variables (`$TM_FILENAME`) go too: the editor fills in none of them.
+fn snippet_text(snippet: &str) -> String {
+    let chars: Vec<char> = snippet.chars().collect();
+    let mut out = String::new();
+    let mut at = 0;
+    // How many `${…}` are open, and whether each is a choice (`|a,b|`).
+    let mut open: Vec<bool> = Vec::new();
+    while let Some(&c) = chars.get(at) {
+        match c {
+            '\\' if matches!(chars.get(at + 1), Some('$' | '}' | '\\' | '|' | ',')) => {
+                out.push(chars[at + 1]);
+                at += 2;
+            }
+            '$' if chars.get(at + 1) == Some(&'{') => {
+                // `${1:` or `${name:` or `${1|`: skip to the default or the choices.
+                let mut end = at + 2;
+                while chars
+                    .get(end)
+                    .is_some_and(|c| c.is_ascii_alphanumeric() || *c == '_')
+                {
+                    end += 1;
+                }
+                match chars.get(end) {
+                    Some(':') => {
+                        open.push(false);
+                        at = end + 1;
+                    }
+                    Some('|') => {
+                        // The first choice is kept; the rest, to `|}`, go.
+                        let rest: String = chars[end + 1..].iter().collect();
+                        let close = rest.find("|}").unwrap_or(rest.len());
+                        let first = rest[..close].split(',').next().unwrap_or("");
+                        out.push_str(first);
+                        at = end + 1 + rest[..close].chars().count() + 2;
+                    }
+                    _ => {
+                        // `${1}`: nothing to keep.
+                        at = chars[end..]
+                            .iter()
+                            .position(|c| *c == '}')
+                            .map_or(chars.len(), |close| end + close + 1);
+                    }
+                }
+            }
+            '$' if chars
+                .get(at + 1)
+                .is_some_and(|c| c.is_ascii_alphanumeric() || *c == '_') =>
+            {
+                at += 1;
+                while chars
+                    .get(at)
+                    .is_some_and(|c| c.is_ascii_alphanumeric() || *c == '_')
+                {
+                    at += 1;
+                }
+            }
+            '}' if !open.is_empty() => {
+                open.pop();
+                at += 1;
+            }
+            _ => {
+                out.push(c);
+                at += 1;
+            }
+        }
+    }
+    out
+}
+
 fn completion(value: &Value) -> Option<Completion> {
     let text = |key: &str| value.get(key).and_then(Value::as_str).map(str::to_owned);
     let edit = value
@@ -603,7 +753,20 @@ fn completion(value: &Value) -> Option<Completion> {
         label: text("label")?,
         kind: completion_kind(value.get("kind").and_then(Value::as_u64)),
         detail: text("detail"),
-        insert: edit.or_else(|| text("insertText")),
+        // A snippet (some servers send them though told not to) as plain text.
+        insert: edit.or_else(|| text("insertText")).map(|insert| {
+            if value.get("insertTextFormat").and_then(Value::as_u64) == Some(2) {
+                snippet_text(&insert)
+            } else {
+                insert
+            }
+        }),
+        // A TextEdit's range, or an InsertReplaceEdit's `insert` one.
+        replace_from: value
+            .get("textEdit")
+            .and_then(|edit| edit.get("range").or_else(|| edit.get("insert")))
+            .and_then(|range| range.get("start"))
+            .and_then(position),
         sort: text("sortText"),
         source: value
             .get("labelDetails")

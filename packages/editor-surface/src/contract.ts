@@ -88,6 +88,8 @@ export interface SurfaceCompletion {
   readonly detail?: string;
   /** What's inserted, when it isn't the label. */
   readonly insert?: string;
+  /** Where what's inserted starts, when not where the word typed does (a JSON key's quote). */
+  readonly replaceFrom?: SurfacePosition;
   /** Where it comes from when it isn't in scope yet (the module an import would name), shown beside it. */
   readonly source?: string;
   /** Other changes made with it, such as an import, in the text as it was when asked. */
