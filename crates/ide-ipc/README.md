@@ -22,72 +22,72 @@ ts-rs.
 
 ## Commands
 
-| Command                  | Args                                     | Output                                                  |
-| ------------------------ | ---------------------------------------- | ------------------------------------------------------- |
-| `app_info`               | none                                     | `AppInfoDto` (name and version from tauri.conf.json, `os`) |
-| `pick_workspace`         | none                                     | `WorkspaceDto \| null`, after the native folder picker  |
-| `open_recent_workspace`  | `{ path }` (from `recent_workspaces`)    | `WorkspaceDto`                                          |
-| `recent_workspaces`      | none                                     | `RecentWorkspaceDto[]`                                  |
-| `current_workspace`      | none                                     | `WorkspaceDto \| null`                                  |
-| `list_directory`         | `{ workspaceId, path }`                  | `DirListingDto`                                         |
-| `read_file`              | `{ workspaceId, path }`                  | `ReadFileDto` (switch on `kind`)                        |
-| `write_file`             | `{ workspaceId, path, text }`            | `FileStampDto`                                          |
-| `get_settings`           | none                                     | `SettingsDto`                                           |
-| `update_settings`        | `SettingsPatchDto`                       | `SettingsDto`                                           |
-| `search_text`            | `SearchTextArgs`                         | `TextSearchDto` (a newer search cancels this one)       |
-| `list_files`             | `{ workspaceId }`                        | `FileListDto`, for quick open                           |
-| `git_state`              | `{ workspaceId }`                        | `GitStateDto` (switch on `kind`)                        |
-| `git_diff`               | `{ workspaceId, path, side }`            | `GitDiffDto` (switch on `kind`)                         |
-| `git_stage`              | `{ workspaceId, paths }`                 | nothing                                                 |
-| `git_unstage`            | `{ workspaceId, paths }`                 | nothing                                                 |
-| `git_discard`            | `{ workspaceId, paths }`                 | nothing                                                 |
-| `git_commit`             | `{ workspaceId, message }`               | nothing                                                 |
-| `git_branches`           | `{ workspaceId }`                        | `GitBranchDto[]`                                        |
-| `git_switch_branch`      | `{ workspaceId, name, create }`          | nothing                                                 |
-| `git_init`               | `{ workspaceId }`                        | nothing                                                 |
-| `terminal_open`          | `{ workspaceId, cols, rows, channel }`   | `TerminalDto`; `TerminalEventDto`s on the channel       |
-| `terminal_write`         | `{ id, data }`                           | nothing                                                 |
-| `terminal_resize`        | `{ id, cols, rows }`                     | nothing                                                 |
-| `terminal_close`         | `{ id }`                                 | nothing; ends the shell                                 |
-| `lsp_open`, `lsp_change` | `{ workspaceId, path, text }`            | nothing                                                 |
-| `lsp_close`              | `{ workspaceId, path }`                  | nothing                                                 |
-| `lsp_problems`           | `{ workspaceId, path }`                  | `ProblemDto[]`                                          |
-| `lsp_completions`        | `{ workspaceId, path, line, character }` | `CompletionsDto`                                        |
-| `lsp_hover`              | `{ workspaceId, path, line, character }` | `HoverDto \| null`                                      |
-| `lsp_definition`         | `{ workspaceId, path, line, character }` | `DefinitionDto[]` (switch on `kind`)                    |
-| `lsp_resolve_completion` | `{ workspaceId, path, resolve }`         | `ResolvedCompletionDto`: the import a pick adds         |
-| `lsp_fixes`              | `{ workspaceId, path, start, end }`      | `CodeActionDto[]`, each with its edits to this file     |
-| `lsp_source_action`      | `{ workspaceId, path, action }`          | `TextEditDto[] \| null` (`organizeImports`, `fixAll`…)  |
-| `lsp_restart`            | `{ workspaceId }`                        | nothing; it starts again when next needed               |
-| `debug_start`            | `{ workspaceId, path, breakpoints }`     | nothing; ends the program already running, if any       |
-| `debug_stop`             | `{ workspaceId }`                        | nothing; ends the program                               |
-| `debug_breakpoints`      | `{ workspaceId, path, lines }`           | `BreakpointDto[]`, as the debugger placed them          |
-| `debug_resume`           | `{ workspaceId, threadId, step? }`       | nothing; continues, or steps `over`, `into` or `out`    |
-| `debug_pause`            | `{ workspaceId, threadId }`              | nothing                                                 |
-| `debug_stack`            | `{ workspaceId, threadId }`              | `StackFrameDto[]`                                       |
-| `debug_scopes`           | `{ workspaceId, reference }` (a frame)   | `ScopeDto[]`                                            |
-| `debug_variables`        | `{ workspaceId, reference }`             | `VariableDto[]`                                         |
-| `debug_evaluate`         | `{ workspaceId, expression, frameId? }`  | the value, as text                                      |
-| `agent_status`           | none                                     | `AgentStatusDto`                                        |
-| `agent_configure`        | `{ enabled, allowEdits, port }`          | `AgentStatusDto`; saved, and the server restarted       |
-| `agent_new_token`        | none                                     | `AgentStatusDto`; agents with the old token refused     |
-| `assistant_status`       | none                                     | `AssistantStatusDto` (the setup, whether a key is kept) |
-| `assistant_save`         | `{ setup, secret? }`                     | `AssistantStatusDto`; the key to the credential store   |
-| `assistant_forget`       | none                                     | `AssistantStatusDto`; the setup and every key removed   |
-| `assistant_models`       | `{ setup, secret? }`                     | `ModelInfoDto[]`, from the provider                     |
-| `assistant_check`        | `{ setup, secret? }`                     | the model's one-word answer                             |
-| `assistant_send`         | `{ conversationId, text, activePath? }`  | nothing; the reply comes as `assistant` events          |
-| `assistant_stop`         | `{ conversationId }`                     | nothing; a waiting change is rejected                   |
-| `assistant_decide`       | `{ conversationId, callId, accept }`     | nothing; an accepted change is written                  |
-| `assistant_clear`        | `{ conversationId }`                     | nothing; the conversation is forgotten                  |
-| `subscribe_events`       | `{ channel }` (a Tauri `Channel`)        | nothing; `BackendEventDto`s arrive on the channel       |
-| `set_close_guard`        | `{ unsaved }`                            | nothing                                                 |
-| `close_window`           | none                                     | nothing; closes the calling window without asking       |
-| `window_minimize`        | none                                     | nothing                                                 |
-| `window_toggle_maximize` | none                                     | nothing; maximizes the window, or restores it           |
-| `window_drag`            | none                                     | nothing; the window follows the pointer (a press on the title bar) |
+| Command                  | Args                                     | Output                                                                       |
+| ------------------------ | ---------------------------------------- | ---------------------------------------------------------------------------- |
+| `app_info`               | none                                     | `AppInfoDto` (name and version from tauri.conf.json, `os`)                   |
+| `pick_workspace`         | none                                     | `WorkspaceDto \| null`, after the native folder picker                       |
+| `open_recent_workspace`  | `{ path }` (from `recent_workspaces`)    | `WorkspaceDto`                                                               |
+| `recent_workspaces`      | none                                     | `RecentWorkspaceDto[]`                                                       |
+| `current_workspace`      | none                                     | `WorkspaceDto \| null`                                                       |
+| `list_directory`         | `{ workspaceId, path }`                  | `DirListingDto`                                                              |
+| `read_file`              | `{ workspaceId, path }`                  | `ReadFileDto` (switch on `kind`)                                             |
+| `write_file`             | `{ workspaceId, path, text }`            | `FileStampDto`                                                               |
+| `get_settings`           | none                                     | `SettingsDto`                                                                |
+| `update_settings`        | `SettingsPatchDto`                       | `SettingsDto`                                                                |
+| `search_text`            | `SearchTextArgs`                         | `TextSearchDto` (a newer search cancels this one)                            |
+| `list_files`             | `{ workspaceId }`                        | `FileListDto`, for quick open                                                |
+| `git_state`              | `{ workspaceId }`                        | `GitStateDto` (switch on `kind`)                                             |
+| `git_diff`               | `{ workspaceId, path, side }`            | `GitDiffDto` (switch on `kind`)                                              |
+| `git_stage`              | `{ workspaceId, paths }`                 | nothing                                                                      |
+| `git_unstage`            | `{ workspaceId, paths }`                 | nothing                                                                      |
+| `git_discard`            | `{ workspaceId, paths }`                 | nothing                                                                      |
+| `git_commit`             | `{ workspaceId, message }`               | nothing                                                                      |
+| `git_branches`           | `{ workspaceId }`                        | `GitBranchDto[]`                                                             |
+| `git_switch_branch`      | `{ workspaceId, name, create }`          | nothing                                                                      |
+| `git_init`               | `{ workspaceId }`                        | nothing                                                                      |
+| `terminal_open`          | `{ workspaceId, cols, rows, channel }`   | `TerminalDto`; `TerminalEventDto`s on the channel                            |
+| `terminal_write`         | `{ id, data }`                           | nothing                                                                      |
+| `terminal_resize`        | `{ id, cols, rows }`                     | nothing                                                                      |
+| `terminal_close`         | `{ id }`                                 | nothing; ends the shell                                                      |
+| `lsp_open`, `lsp_change` | `{ workspaceId, path, text }`            | nothing                                                                      |
+| `lsp_close`              | `{ workspaceId, path }`                  | nothing                                                                      |
+| `lsp_problems`           | `{ workspaceId, path }`                  | `ProblemDto[]`                                                               |
+| `lsp_completions`        | `{ workspaceId, path, line, character }` | `CompletionsDto`                                                             |
+| `lsp_hover`              | `{ workspaceId, path, line, character }` | `HoverDto \| null`                                                           |
+| `lsp_definition`         | `{ workspaceId, path, line, character }` | `DefinitionDto[]` (switch on `kind`)                                         |
+| `lsp_resolve_completion` | `{ workspaceId, path, resolve }`         | `ResolvedCompletionDto`: the import a pick adds                              |
+| `lsp_fixes`              | `{ workspaceId, path, start, end }`      | `CodeActionDto[]`, each with its edits to this file                          |
+| `lsp_source_action`      | `{ workspaceId, path, action }`          | `TextEditDto[] \| null` (`organizeImports`, `fixAll`…)                       |
+| `lsp_restart`            | `{ workspaceId }`                        | nothing; it starts again when next needed                                    |
+| `debug_start`            | `{ workspaceId, path, breakpoints }`     | nothing; ends the program already running, if any                            |
+| `debug_stop`             | `{ workspaceId }`                        | nothing; ends the program                                                    |
+| `debug_breakpoints`      | `{ workspaceId, path, lines }`           | `BreakpointDto[]`, as the debugger placed them                               |
+| `debug_resume`           | `{ workspaceId, threadId, step? }`       | nothing; continues, or steps `over`, `into` or `out`                         |
+| `debug_pause`            | `{ workspaceId, threadId }`              | nothing                                                                      |
+| `debug_stack`            | `{ workspaceId, threadId }`              | `StackFrameDto[]`                                                            |
+| `debug_scopes`           | `{ workspaceId, reference }` (a frame)   | `ScopeDto[]`                                                                 |
+| `debug_variables`        | `{ workspaceId, reference }`             | `VariableDto[]`                                                              |
+| `debug_evaluate`         | `{ workspaceId, expression, frameId? }`  | the value, as text                                                           |
+| `agent_status`           | none                                     | `AgentStatusDto`                                                             |
+| `agent_configure`        | `{ enabled, allowEdits, port }`          | `AgentStatusDto`; saved, and the server restarted                            |
+| `agent_new_token`        | none                                     | `AgentStatusDto`; agents with the old token refused                          |
+| `assistant_status`       | none                                     | `AssistantStatusDto` (the setup, whether a key is kept)                      |
+| `assistant_save`         | `{ setup, secret? }`                     | `AssistantStatusDto`; the key to the credential store                        |
+| `assistant_forget`       | none                                     | `AssistantStatusDto`; the setup and every key removed                        |
+| `assistant_models`       | `{ setup, secret? }`                     | `ModelInfoDto[]`, from the provider                                          |
+| `assistant_check`        | `{ setup, secret? }`                     | the model's one-word answer                                                  |
+| `assistant_send`         | `{ conversationId, text, activePath? }`  | nothing; the reply comes as `assistant` events                               |
+| `assistant_stop`         | `{ conversationId }`                     | nothing; a waiting change is rejected                                        |
+| `assistant_decide`       | `{ conversationId, callId, accept }`     | nothing; an accepted change is written                                       |
+| `assistant_clear`        | `{ conversationId }`                     | nothing; the conversation is forgotten                                       |
+| `subscribe_events`       | `{ channel }` (a Tauri `Channel`)        | nothing; `BackendEventDto`s arrive on the channel                            |
+| `set_close_guard`        | `{ unsaved }`                            | nothing                                                                      |
+| `close_window`           | none                                     | nothing; closes the calling window without asking                            |
+| `window_minimize`        | none                                     | nothing                                                                      |
+| `window_toggle_maximize` | none                                     | nothing; maximizes the window, or restores it                                |
+| `window_drag`            | none                                     | nothing; the window follows the pointer (a press on the title bar)           |
 | `window_close`           | none                                     | nothing; closes as the system button would (asks first with unsaved changes) |
-| `window_state`           | none                                     | `WindowStateDto` (`maximized`, `fullscreen`)            |
+| `window_state`           | none                                     | `WindowStateDto` (`maximized`, `fullscreen`)                                 |
 
 ## Events (backend → webview)
 
