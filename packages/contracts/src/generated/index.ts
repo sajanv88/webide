@@ -100,5 +100,6 @@ export type * from "./WindowStateDto";
 export type * from "./WorkspaceArgs";
 export type * from "./WorkspaceDto";
 export type * from "./WorkspacePathArgs";
+export type * from "./WorkspaceTrustArgs";
 export type * from "./WriteFileArgs";
 export type * from "./commands";

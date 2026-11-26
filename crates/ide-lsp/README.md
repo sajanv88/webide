@@ -36,6 +36,11 @@ Language features over LSP, from servers the app ships:
   template runs nothing from the workspace, which it only reads (its
   sources and its packages' type declarations). `{workspace}` in a spec's
   `args` is the folder.
+- **Trust:** a spec that runs the folder's own code (its configuration,
+  plugins or packages) sets `needs_trust`. In a folder the person hasn't
+  trusted (`start(root, trusted, status)`), it doesn't start: the first file
+  it would have had reports `Restricted` for it, once, and the file goes to
+  the next server that handles it, if any.
 - **Node:** the JSON, CSS, HTML, YAML and Angular servers run on the person's `node`,
   found when each starts (`FindNode`: the app gives the debugger's
   `find_node`, which also looks where installers put it). Without one they

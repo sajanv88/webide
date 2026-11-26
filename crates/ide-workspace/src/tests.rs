@@ -228,3 +228,53 @@ fn settings_files_are_read_leniently_or_set_aside() {
         }
     }
 }
+
+#[test]
+fn nothing_is_trusted_until_the_person_trusts_it() {
+    let f = Fixture::new();
+    let root = f.store.open(&f.folder("projects/app")).unwrap();
+    assert!(!f.store.is_trusted(&root).unwrap());
+
+    f.store.set_trusted(root.path(), true).unwrap();
+    assert!(f.store.is_trusted(&root).unwrap());
+    // A store reading the same folder agrees: it's kept.
+    let again = JsonWorkspaceStore::with_clock(f.base.join("config"), tick);
+    assert!(again.is_trusted(&root).unwrap());
+    // A sibling isn't.
+    let other = f.store.open(&f.folder("projects/other")).unwrap();
+    assert!(!f.store.is_trusted(&other).unwrap());
+    // A folder whose name starts the same isn't inside it.
+    let lookalike = f.store.open(&f.folder("projects/app-two")).unwrap();
+    assert!(!f.store.is_trusted(&lookalike).unwrap());
+}
+
+#[test]
+fn trusting_a_parent_covers_its_folders_and_distrusting_takes_it_back() {
+    let f = Fixture::new();
+    let app = f.store.open(&f.folder("projects/app")).unwrap();
+    let other = f.store.open(&f.folder("projects/other")).unwrap();
+    f.store.set_trusted(app.path(), true).unwrap();
+    f.store.set_trusted(&f.base.join("projects"), true).unwrap();
+    assert!(f.store.is_trusted(&other).unwrap());
+    // One entry is kept, the parent: the folder in it is covered.
+    let kept = fs::read_to_string(f.base.join("config").join("trusted-folders.json")).unwrap();
+    assert_eq!(kept.matches("projects").count(), 1, "{kept}");
+
+    // Not trusting the folder takes away the parent's trust, which covered it.
+    f.store.set_trusted(app.path(), false).unwrap();
+    assert!(!f.store.is_trusted(&app).unwrap());
+    assert!(!f.store.is_trusted(&other).unwrap());
+}
+
+#[test]
+fn an_unreadable_trust_file_trusts_nothing() {
+    let f = Fixture::new();
+    let root = f.store.open(&f.folder("app")).unwrap();
+    f.store.set_trusted(root.path(), true).unwrap();
+    fs::write(
+        f.base.join("config").join("trusted-folders.json"),
+        "{ not json",
+    )
+    .unwrap();
+    assert!(!f.store.is_trusted(&root).unwrap());
+}

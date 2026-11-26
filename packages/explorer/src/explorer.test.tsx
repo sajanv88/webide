@@ -12,7 +12,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest";
 import { Explorer } from "./explorer";
 
-const workspace: WorkspaceDto = { id: "1", name: "project", path: "/tmp/project" };
+const workspace: WorkspaceDto = { id: "1", name: "project", path: "/tmp/project", trusted: true };
 
 function file(path: string): FileNodeDto {
   const name = path.split("/").pop() ?? path;

@@ -60,6 +60,32 @@ impl RecentFile {
     }
 }
 
+/// The folders the person trusts, canonical.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TrustFile {
+    version: u32,
+    #[serde(default)]
+    folders: Vec<String>,
+}
+
+impl TrustFile {
+    pub(crate) fn from_domain(folders: &[PathBuf]) -> Self {
+        Self {
+            version: VERSION,
+            // A path that isn't valid UTF-8 can't be stored in JSON: not trusted.
+            folders: folders
+                .iter()
+                .filter_map(|folder| Some(folder.to_str()?.to_owned()))
+                .collect(),
+        }
+    }
+
+    pub(crate) fn into_domain(self) -> Vec<PathBuf> {
+        self.folders.into_iter().map(PathBuf::from).collect()
+    }
+}
+
 /// Every field optional, so a missing one takes its default.
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]

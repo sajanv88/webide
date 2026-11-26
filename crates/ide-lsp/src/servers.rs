@@ -2,6 +2,7 @@
 //! each the first time a file of its kind is opened in a workspace.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use ide_core::language::{
@@ -56,6 +57,9 @@ pub struct ServerSpec {
     /// Whether it serves the workspace at this folder; every one when absent.
     /// One that doesn't leaves its files to the next server that handles them.
     pub applies: Option<fn(&Path) -> bool>,
+    /// It runs the folder's own code (its config, plugins or packages), so
+    /// it's off until the person trusts the folder.
+    pub needs_trust: bool,
 }
 
 /// In a server's `args`, the workspace's folder.
@@ -222,6 +226,7 @@ impl ServerSpec {
             schemas: None,
             notifications: Vec::new(),
             applies: Some(angular_workspace),
+            needs_trust: false,
         }
     }
 
@@ -237,6 +242,7 @@ impl ServerSpec {
             schemas: None,
             notifications: Vec::new(),
             applies: None,
+            needs_trust: false,
         }
     }
 
@@ -271,6 +277,7 @@ impl ServerSpec {
             schemas: Some(schemas),
             notifications: Vec::new(),
             applies: None,
+            needs_trust: false,
         }
     }
 
@@ -291,6 +298,7 @@ impl ServerSpec {
             schemas: None,
             notifications: Vec::new(),
             applies: None,
+            needs_trust: false,
         }
     }
 
@@ -314,6 +322,7 @@ impl ServerSpec {
             schemas: None,
             notifications: Vec::new(),
             applies: None,
+            needs_trust: false,
         }
     }
 
@@ -357,6 +366,7 @@ impl ServerSpec {
             // bundle: the server fetches nothing itself.
             notifications: vec![("yaml/registerContentRequest", Value::Null)],
             applies: None,
+            needs_trust: false,
         }
     }
 }
@@ -428,17 +438,31 @@ impl LanguageServers for Servers {
     fn start(
         &self,
         root: &WorkspaceRoot,
+        trusted: bool,
         status: LanguageSink,
     ) -> Result<Box<dyn LanguageServer>, IdeError> {
         let folder = PathBuf::from(root.display_path());
+        // Asked once, as the workspace opens.
+        let applies: Vec<bool> = self
+            .specs
+            .iter()
+            .map(|spec| spec.applies.is_none_or(|applies| applies(&folder)))
+            .collect();
         Ok(Box::new(Workspace {
             root: root.clone(),
             status,
-            // Asked once, as the workspace opens.
+            restricted: self
+                .specs
+                .iter()
+                .zip(&applies)
+                .map(|(spec, applies)| *applies && spec.needs_trust && !trusted)
+                .map(AtomicBool::new)
+                .collect(),
             applies: self
                 .specs
                 .iter()
-                .map(|spec| spec.applies.is_none_or(|applies| applies(&folder)))
+                .zip(applies)
+                .map(|(spec, applies)| applies && (trusted || !spec.needs_trust))
                 .collect(),
             specs: Arc::clone(&self.specs),
             find_node: Arc::clone(&self.find_node),
@@ -462,16 +486,31 @@ struct Workspace {
     specs: Arc<[ServerSpec]>,
     /// Whether each server serves this workspace.
     applies: Vec<bool>,
+    /// The servers that would serve it but need the folder trusted; each is
+    /// cleared once it has said so.
+    restricted: Vec<AtomicBool>,
     find_node: FindNode,
     slots: Mutex<Vec<Slot>>,
 }
 
 impl Workspace {
-    /// The first server that serves this workspace and handles `path`.
+    /// The first server that serves this workspace and handles `path`. A
+    /// server before it that's off until the folder is trusted says so, once.
     fn index_for(&self, path: &RelPath) -> Option<usize> {
-        self.specs.iter().enumerate().position(|(index, spec)| {
+        let index = self.specs.iter().enumerate().position(|(index, spec)| {
             self.applies.get(index).copied().unwrap_or(false) && (spec.language)(path).is_some()
-        })
+        });
+        for (spec, restricted) in self
+            .specs
+            .iter()
+            .zip(&self.restricted)
+            .take(index.unwrap_or(usize::MAX))
+        {
+            if (spec.language)(path).is_some() && restricted.swap(false, Ordering::Relaxed) {
+                (self.status)(spec.name, LanguageStatus::Restricted);
+            }
+        }
+        index
     }
 
     /// The server for `path`, started now if it's the first of its files.

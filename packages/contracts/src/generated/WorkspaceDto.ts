@@ -9,4 +9,10 @@ export type WorkspaceDto = { id: string, name: string,
 /**
  * The folder, as people write it.
  */
-path: string, };
+path: string, 
+/**
+ * The person trusts the authors of its files. Until then it's in
+ * Restricted Mode: nothing runs its own code (git, the debugger, some
+ * language servers).
+ */
+trusted: boolean, };

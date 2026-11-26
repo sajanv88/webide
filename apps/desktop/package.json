@@ -33,6 +33,7 @@
     "@repo/shell": "workspace:*",
     "@repo/tabs": "workspace:*",
     "@repo/terminal": "workspace:*",
+    "@repo/trust": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

@@ -80,6 +80,7 @@ ts-rs.
 | `assistant_stop`         | `{ conversationId }`                     | nothing; a waiting change is rejected                                        |
 | `assistant_decide`       | `{ conversationId, callId, accept }`     | nothing; an accepted change is written                                       |
 | `assistant_clear`        | `{ conversationId }`                     | nothing; the conversation is forgotten                                       |
+| `workspace_trust`        | `{ workspaceId, trusted, parent? }`      | `WorkspaceDto`, with its trust as it is now                                  |
 | `take_launch_file`       | none                                     | `string \| null`: the file `webide <file>` named, once                       |
 | `command_line_status`    | none                                     | `CommandLineStatusDto` (switch on `kind`)                                    |
 | `command_line_install`   | none                                     | `CommandLineStatusDto`; puts `webide` on the PATH                            |
@@ -134,6 +135,18 @@ that's taken is reported in `agent_status`, not as a failed command.
 
 The rules that keep the webview contained:
 
+- **Workspace trust:** a `WorkspaceDto` says whether the person trusts the
+  authors of its files (`trusted`, from `WorkspaceStore::is_trusted`). Until
+  they do, nothing runs the folder's own code:
+  - `git_state` answers `restricted` and the other git commands fail with
+    `restricted` (git can run programs a repository configures);
+  - `debug_start` fails with `restricted`;
+  - the language servers start told it isn't trusted, so those that load
+    the project's code stay off.
+  - `workspace_trust` changes it (`parent`: the folder it's in, and so every
+    folder there). The language servers then stop, to start again under the
+    new trust with the next file, and a program being debugged ends when
+    trust is taken back.
 - The webview can't choose a workspace root. A root is opened only from the
   native picker, or from the recent list that the picker fills.
 - File commands carry the `workspaceId` of the open workspace. A request meant

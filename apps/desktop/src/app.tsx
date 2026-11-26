@@ -21,6 +21,7 @@ import type {
   RecentWorkspaceDto,
   SearchPort,
   TerminalPort,
+  TrustPort,
   WindowStateDto,
   WorkspaceDto,
 } from "@repo/contracts";
@@ -102,6 +103,7 @@ import {
   toggleMaximizeWindow,
   updateSettings,
   windowState,
+  workspaceTrust,
   writeFile,
   writeTerminal,
 } from "@repo/ipc";
@@ -113,6 +115,7 @@ import { SettingsDialog } from "@repo/settings";
 import { type MenuSpec, Shell, type SidebarView, type WindowFrame } from "@repo/shell";
 import { createDocuments, type Documents, DocumentTabs } from "@repo/tabs";
 import { TerminalPanel } from "@repo/terminal";
+import { RestrictedStatusItem, WorkspaceTrust } from "@repo/trust";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AboutDialog } from "./about/about-dialog";
 import { DEFAULT_KEYBINDINGS, terminalPassesKey } from "./keybindings";
@@ -201,6 +204,16 @@ export function App() {
     [workspace],
   );
   const documentsRef = useRef(documents);
+
+  // Whether the open folder's authors are trusted. Kept apart from
+  // `workspace`, whose every change opens the folder afresh.
+  const [trusted, setTrusted] = useState(false);
+  useEffect(() => setTrusted(workspace?.trusted ?? false), [workspace]);
+  const trustPort = useMemo<TrustPort | null>(() => {
+    if (!workspace) return null;
+    const workspaceId = workspace.id;
+    return { setTrust: (next, parent) => workspaceTrust({ workspaceId, trusted: next, parent }) };
+  }, [workspace]);
 
   // The file `webide <file>` named, once its folder is open. (The tabs, a
   // child, already listen by the time this runs.)
@@ -915,6 +928,7 @@ export function App() {
         }
         statusBar={
           <>
+            {workspace ? <RestrictedStatusItem trusted={trusted} registry={registry} /> : null}
             {git ? <BranchStatus store={git} registry={registry} /> : null}
             {language ? (
               <LanguageStatusItem client={language} registry={registry} bus={bus} />
@@ -939,6 +953,22 @@ export function App() {
       ) : null}
       {workspace && git ? (
         <BranchPicker key={`branch-picker-${workspace.id}`} store={git} registry={registry} />
+      ) : null}
+      {workspace && trustPort ? (
+        <WorkspaceTrust
+          key={`trust-${workspace.id}`}
+          workspace={workspace}
+          trusted={trusted}
+          port={trustPort}
+          registry={registry}
+          onChange={(next) => {
+            setTrusted(next);
+            // What needs trust starts or stops: git, and the language servers
+            // (the backend stopped them; they start again with the open files).
+            void git?.refresh();
+            void language?.restart();
+          }}
+        />
       ) : null}
       <SettingsDialog port={settingsPort} registry={registry} bus={bus} />
       <AgentsDialog store={agents} registry={registry} />

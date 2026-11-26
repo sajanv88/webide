@@ -33,7 +33,7 @@ use crate::dto::{
     OpenRecentArgs, ProblemDto, ReadFileDto, RecentWorkspaceDto, ResolvedCompletionDto, ScopeDto,
     SearchTextArgs, SettingsDto, SettingsPatchDto, StackFrameDto, TerminalDto, TerminalIdArgs,
     TerminalResizeArgs, TerminalWriteArgs, TextEditDto, TextSearchDto, VariableDto, WorkspaceArgs,
-    WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
+    WorkspaceDto, WorkspacePathArgs, WorkspaceTrustArgs, WriteFileArgs,
 };
 use crate::error::IpcError;
 
@@ -66,6 +66,19 @@ impl std::fmt::Debug for Services {
 struct OpenWorkspace {
     id: String,
     root: WorkspaceRoot,
+    /// Its files' authors are trusted (`WorkspaceStore::is_trusted`).
+    trusted: bool,
+}
+
+impl OpenWorkspace {
+    fn dto(&self) -> WorkspaceDto {
+        WorkspaceDto {
+            id: self.id.clone(),
+            name: self.root.name().to_owned(),
+            path: self.root.display_path(),
+            trusted: self.trusted,
+        }
+    }
 }
 
 /// A running terminal, and the workspace it belongs to.
@@ -312,7 +325,11 @@ impl IpcState {
                     status: LanguageStatusDto::from(status),
                 });
             });
-        match self.services.languages.start(&root, status) {
+        match self
+            .services
+            .languages
+            .start(&root, self.is_trusted(), status)
+        {
             Ok(server) => {
                 let server: Arc<dyn LanguageServer> = Arc::from(server);
                 *language = Language::Running {
@@ -356,11 +373,14 @@ impl IpcState {
     /// of the previous one.
     fn set_open(&self, root: WorkspaceRoot) -> WorkspaceDto {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed).to_string();
-        let dto = WorkspaceDto {
+        // Not trusted when that can't be read: the safe way to fail.
+        let trusted = self.services.workspace.is_trusted(&root).unwrap_or(false);
+        let open = OpenWorkspace {
             id: id.clone(),
-            name: root.name().to_owned(),
-            path: root.display_path(),
+            root: root.clone(),
+            trusted,
         };
+        let dto = open.dto();
         let mut watch = self.watch.lock().unwrap_or_else(PoisonError::into_inner);
         // Stop the old watch first, so its last events can't follow the new id.
         watch.take();
@@ -373,8 +393,7 @@ impl IpcState {
             search.cancel();
         }
         *watch = Some(self.services.watcher.watch(&root, self.sink(id.clone())));
-        *self.open.write().unwrap_or_else(PoisonError::into_inner) =
-            Some(OpenWorkspace { id, root });
+        *self.open.write().unwrap_or_else(PoisonError::into_inner) = Some(open);
         // The old workspace's terminals were in its folder. Closed after the
         // new one is open, so a terminal still starting for the old one is
         // either closed here or refused when it's stored (`terminal_open`).
@@ -407,6 +426,22 @@ impl IpcState {
             .read()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
+    }
+
+    /// The root of the open workspace, for what runs its own code: only
+    /// once the person trusts it.
+    fn trusted_root(&self, workspace_id: &str) -> Result<WorkspaceRoot, IdeError> {
+        let root = self.root_for(workspace_id)?;
+        if self.is_trusted() {
+            Ok(root)
+        } else {
+            Err(IdeError::Restricted)
+        }
+    }
+
+    /// Whether the open workspace is trusted.
+    fn is_trusted(&self) -> bool {
+        self.current().is_some_and(|open| open.trusted)
     }
 
     /// The root of the open workspace, if `workspace_id` is still the open one.
@@ -457,6 +492,37 @@ pub fn recent_workspaces(state: &IpcState) -> Result<Vec<RecentWorkspaceDto>, Ip
         .collect())
 }
 
+/// Trusts the open workspace's folder (or, with `parent`, the folder it's
+/// in), or stops trusting it. What runs its own code starts or stops with
+/// it: the language servers start again, and a debugged program ends.
+pub fn workspace_trust(
+    state: &IpcState,
+    args: WorkspaceTrustArgs,
+) -> Result<WorkspaceDto, IpcError> {
+    let root = state.root_for(&args.workspace_id)?;
+    let folder = match args.parent {
+        Some(true) => root.path().parent().unwrap_or(root.path()),
+        _ => root.path(),
+    };
+    state.services.workspace.set_trusted(folder, args.trusted)?;
+    let trusted = state.services.workspace.is_trusted(&root)?;
+    let dto = {
+        let mut open = state.open.write().unwrap_or_else(PoisonError::into_inner);
+        match open.as_mut() {
+            Some(open) if open.id == args.workspace_id => {
+                open.trusted = trusted;
+                open.dto()
+            }
+            _ => return Err(IdeError::WorkspaceChanged.into()),
+        }
+    };
+    state.stop_language();
+    if !trusted {
+        state.stop_debugging();
+    }
+    Ok(dto)
+}
+
 /// The file `webide <file>` named, once: later calls (a reloaded page) get none.
 pub fn take_launch_file(state: &IpcState) -> Result<Option<String>, IpcError> {
     Ok(state
@@ -482,11 +548,7 @@ pub fn command_line_uninstall(state: &IpcState) -> Result<CommandLineStatusDto, 
 }
 
 pub fn current_workspace(state: &IpcState) -> Result<Option<WorkspaceDto>, IpcError> {
-    Ok(state.current().map(|open| WorkspaceDto {
-        id: open.id,
-        name: open.root.name().to_owned(),
-        path: open.root.display_path(),
-    }))
+    Ok(state.current().map(|open| open.dto()))
 }
 
 pub fn list_directory(
@@ -574,13 +636,16 @@ fn paths(list: &[String]) -> Result<Vec<RelPath>, IpcError> {
 /// Whether git can be used in the workspace, and its branch and changes.
 pub fn git_state(state: &IpcState, args: WorkspaceArgs) -> Result<GitStateDto, IpcError> {
     let root = state.root_for(&args.workspace_id)?;
+    if !state.is_trusted() {
+        return Ok(GitStateDto::Restricted);
+    }
     Ok(state.services.git.state(&root)?.into())
 }
 
 /// The two versions of a file, each no larger than the "don't open above" size.
 pub fn git_diff(state: &IpcState, args: GitDiffArgs) -> Result<GitDiffDto, IpcError> {
     let path = RelPath::parse(&args.path)?;
-    let root = state.root_for(&args.workspace_id)?;
+    let root = state.trusted_root(&args.workspace_id)?;
     let limit = state
         .services
         .workspace
@@ -596,29 +661,29 @@ pub fn git_diff(state: &IpcState, args: GitDiffArgs) -> Result<GitDiffDto, IpcEr
 
 pub fn git_stage(state: &IpcState, args: GitPathsArgs) -> Result<(), IpcError> {
     let paths = paths(&args.paths)?;
-    let root = state.root_for(&args.workspace_id)?;
+    let root = state.trusted_root(&args.workspace_id)?;
     Ok(state.services.git.stage(&root, &paths)?)
 }
 
 pub fn git_unstage(state: &IpcState, args: GitPathsArgs) -> Result<(), IpcError> {
     let paths = paths(&args.paths)?;
-    let root = state.root_for(&args.workspace_id)?;
+    let root = state.trusted_root(&args.workspace_id)?;
     Ok(state.services.git.unstage(&root, &paths)?)
 }
 
 pub fn git_discard(state: &IpcState, args: GitPathsArgs) -> Result<(), IpcError> {
     let paths = paths(&args.paths)?;
-    let root = state.root_for(&args.workspace_id)?;
+    let root = state.trusted_root(&args.workspace_id)?;
     Ok(state.services.git.discard(&root, &paths)?)
 }
 
 pub fn git_commit(state: &IpcState, args: GitCommitArgs) -> Result<(), IpcError> {
-    let root = state.root_for(&args.workspace_id)?;
+    let root = state.trusted_root(&args.workspace_id)?;
     Ok(state.services.git.commit(&root, &args.message)?)
 }
 
 pub fn git_branches(state: &IpcState, args: WorkspaceArgs) -> Result<Vec<GitBranchDto>, IpcError> {
-    let root = state.root_for(&args.workspace_id)?;
+    let root = state.trusted_root(&args.workspace_id)?;
     Ok(state
         .services
         .git
@@ -629,7 +694,7 @@ pub fn git_branches(state: &IpcState, args: WorkspaceArgs) -> Result<Vec<GitBran
 }
 
 pub fn git_switch_branch(state: &IpcState, args: GitSwitchArgs) -> Result<(), IpcError> {
-    let root = state.root_for(&args.workspace_id)?;
+    let root = state.trusted_root(&args.workspace_id)?;
     Ok(state
         .services
         .git
@@ -637,7 +702,7 @@ pub fn git_switch_branch(state: &IpcState, args: GitSwitchArgs) -> Result<(), Ip
 }
 
 pub fn git_init(state: &IpcState, args: WorkspaceArgs) -> Result<(), IpcError> {
-    let root = state.root_for(&args.workspace_id)?;
+    let root = state.trusted_root(&args.workspace_id)?;
     Ok(state.services.git.init(&root)?)
 }
 
@@ -902,7 +967,7 @@ pub fn lsp_restart(state: &IpcState, args: WorkspaceArgs) -> Result<(), IpcError
 /// breakpoints set before it starts. What it reports arrives as `debug` events.
 pub fn debug_start(state: &IpcState, args: DebugStartArgs) -> Result<(), IpcError> {
     let path = RelPath::parse(&args.path)?;
-    let root = state.root_for(&args.workspace_id)?;
+    let root = state.trusted_root(&args.workspace_id)?;
     if !state.services.debuggers.handles(&path) {
         return Err(
             IdeError::InvalidArgument(format!("{path} can't be run under the debugger")).into(),

@@ -106,7 +106,8 @@ export type AppCommandId =
   | "assistant.newChat"
   | "help.about"
   | "app.installCommandLine"
-  | "app.uninstallCommandLine";
+  | "app.uninstallCommandLine"
+  | "workspace.manageTrust";
 
 /** Events on the app's bus, by name, with their payloads. */
 export interface AppEvents {
@@ -185,6 +186,15 @@ export interface SearchPort {
   /** A new search cancels the one still running (its result says `cancelled`). */
   searchText(query: Omit<SearchTextArgs, "workspaceId">): Promise<IpcResult<TextSearchDto>>;
   listFiles(): Promise<IpcResult<FileListDto>>;
+}
+
+/**
+ * Trusting the open folder's authors. `parent` trusts the folder it's in
+ * (and so every folder there) instead. Resolves to the workspace, with its
+ * trust as it is now.
+ */
+export interface TrustPort {
+  setTrust(trusted: boolean, parent: boolean): Promise<IpcResult<WorkspaceDto>>;
 }
 
 /**

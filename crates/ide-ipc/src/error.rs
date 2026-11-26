@@ -20,6 +20,8 @@ pub enum IpcErrorCode {
     InvalidQuery,
     /// A value the command can't take. `message` says which.
     InvalidArgument,
+    /// The folder isn't trusted, and this would run its own code.
+    Restricted,
     /// Git refused or failed. `message` is git's own words.
     Git,
     Io,
@@ -61,6 +63,7 @@ impl From<IdeError> for IpcError {
             IdeError::NotARecentWorkspace => IpcErrorCode::NotARecentWorkspace,
             IdeError::InvalidSettings(_) => IpcErrorCode::InvalidSettings,
             IdeError::InvalidQuery(_) => IpcErrorCode::InvalidQuery,
+            IdeError::Restricted => IpcErrorCode::Restricted,
             IdeError::Git(_) => IpcErrorCode::Git,
             IdeError::InvalidArgument(_) => IpcErrorCode::InvalidArgument,
             IdeError::Io(_) => IpcErrorCode::Io,

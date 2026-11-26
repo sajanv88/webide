@@ -20,6 +20,15 @@ Status and plan: [checklist.md](checklist.md), from [plan.md](plan.md).
 
 Help → Uninstall 'webide' Command from PATH takes it off again.
 
+## Workspace trust
+
+The first time a folder opens, the app asks whether you trust the authors of
+its files. Until you do, it's in Restricted Mode: nothing runs the folder's
+own code, so source control, Run and Debug, and language servers that load
+the project's code stay off. Editing, search, the terminal and the other
+language features work either way. "Restricted Mode" in the status bar, or
+Manage Workspace Trust in the command palette, changes it.
+
 ## Keys
 
 | Keys (macOS: Cmd for Ctrl)  | Does                      |
@@ -118,7 +127,7 @@ crates/            Rust: ide-core, ide-fs, ide-watcher, ide-workspace, ide-searc
 apps/desktop/      The Vite frontend (src/) and the Tauri composition root (src-tauri/)
 packages/          Frontend modules: contracts, kernel, ipc, shell, explorer, tabs,
                    editor-surface, commands, settings, search, git, terminal, lsp, debug,
-                   mcp, assistant, file-icons, and the shared tsconfig
+                   mcp, assistant, trust, file-icons, and the shared tsconfig
 xtask/             cargo xtask check-boundaries, check-csp, check-contracts
 ```
 

@@ -27,7 +27,9 @@ binds to the open workspace.
   - pressing a row (or Enter on it) shows its changes in a large dialog: the
     app's diff view (`renderDiff`), with Open file. Focus goes back to the
     row when it closes, or to the first file if that row is gone;
-  - outside a repository, Initialize repository; without git, how to get it.
+  - outside a repository, Initialize repository; without git, how to get it;
+  - in a folder that isn't trusted, that source control is off in Restricted
+    Mode, with a button to `workspace.manageTrust` (`restricted`).
   - It reads git's state on mount, 300 ms after changes on disk settle (git's
     own files in `.git` included, so a commit made in a terminal shows up),
     and when the window comes back into focus.

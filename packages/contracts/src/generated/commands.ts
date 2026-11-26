@@ -59,6 +59,7 @@ import type { WindowStateDto } from "./WindowStateDto";
 import type { WorkspaceArgs } from "./WorkspaceArgs";
 import type { WorkspaceDto } from "./WorkspaceDto";
 import type { WorkspacePathArgs } from "./WorkspacePathArgs";
+import type { WorkspaceTrustArgs } from "./WorkspaceTrustArgs";
 import type { WriteFileArgs } from "./WriteFileArgs";
 
 /** Every IPC command: what it takes (`null` for nothing) and what it resolves to. */
@@ -119,6 +120,7 @@ export interface CommandMap {
   assistant_decide: { args: AssistantDecideArgs; output: null };
   assistant_clear: { args: AssistantConversationArgs; output: null };
   take_launch_file: { args: null; output: string | null };
+  workspace_trust: { args: WorkspaceTrustArgs; output: WorkspaceDto };
   command_line_status: { args: null; output: CommandLineStatusDto };
   command_line_install: { args: null; output: CommandLineStatusDto };
   command_line_uninstall: { args: null; output: CommandLineStatusDto };

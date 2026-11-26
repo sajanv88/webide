@@ -258,6 +258,20 @@ export function SourceControlView({
             </EmptyDescription>
           </Empty>
         ) : null}
+        {view.status === "restricted" ? (
+          <Empty className="source-control__empty">
+            <EmptyTitle>Source control is off in Restricted Mode</EmptyTitle>
+            <EmptyDescription>
+              Git can run programs a repository configures, so it doesn't run in a folder whose
+              authors you haven't trusted.
+            </EmptyDescription>
+            <EmptyActions>
+              <Button onClick={() => void registry.execute("workspace.manageTrust")}>
+                Manage Workspace Trust
+              </Button>
+            </EmptyActions>
+          </Empty>
+        ) : null}
         {view.status === "notARepository" ? (
           <Empty className="source-control__empty">
             <EmptyTitle>Not a git repository</EmptyTitle>

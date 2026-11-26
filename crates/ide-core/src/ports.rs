@@ -52,6 +52,16 @@ pub trait WorkspaceStore: Send + Sync {
 
     /// Applies `patch`, saves, and returns the new settings.
     fn update_settings(&self, patch: &SettingsPatch) -> Result<Settings, IdeError>;
+
+    /// Whether the person trusts the authors of `root`'s files: they trusted
+    /// it, or a folder it's in. Until they do, nothing that would run the
+    /// folder's own code (git, the debugger, some language servers) runs in it.
+    fn is_trusted(&self, root: &WorkspaceRoot) -> Result<bool, IdeError>;
+
+    /// Trusts `folder` and everything in it. Not trusting it takes away its
+    /// trust, the trust of the folders in it, and of any folder it's in that
+    /// was trusted (which covered it).
+    fn set_trusted(&self, folder: &Path, trusted: bool) -> Result<(), IdeError>;
 }
 
 /// Watching a workspace for changes made by anyone: this app, other programs, git.
