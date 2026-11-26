@@ -53,6 +53,35 @@ pub struct ServerSpec {
     pub schemas: Option<PathBuf>,
     /// Notifications sent once it has started (method, params).
     pub notifications: Vec<(&'static str, Value)>,
+    /// Whether it serves the workspace at this folder; every one when absent.
+    /// One that doesn't leaves its files to the next server that handles them.
+    pub applies: Option<fn(&Path) -> bool>,
+}
+
+/// In a server's `args`, the workspace's folder.
+pub const WORKSPACE_ARG: &str = "{workspace}";
+
+/// Whether the folder is an Angular project: `angular.json`, or
+/// `@angular/core` in its `package.json`.
+pub fn angular_workspace(folder: &Path) -> bool {
+    let read = |name: &str| -> Option<Value> {
+        serde_json::from_str(&std::fs::read_to_string(folder.join(name)).ok()?).ok()
+    };
+    // angular.json's own shape: its projects.
+    let config = read("angular.json")
+        .is_some_and(|config| config.get("projects").is_some_and(Value::is_object));
+    // Or @angular/core among the package's dependencies.
+    let package = read("package.json").is_some_and(|package| {
+        ["dependencies", "devDependencies", "peerDependencies"]
+            .iter()
+            .any(|kind| {
+                package
+                    .get(kind)
+                    .and_then(|deps| deps.get("@angular/core"))
+                    .is_some()
+            })
+    });
+    config || package
 }
 
 /// SchemaStore's schemas the JSON server checks files against, and the file names each is for.
@@ -165,6 +194,37 @@ fn bundled<'a>(dir: &Path, list: &'a [(&'a str, &'a [&'a str])]) -> Vec<(&'a str
 }
 
 impl ServerSpec {
+    /// Angular's templates (`.html`) in an Angular project: Angular's own
+    /// server (`script`), on Node. It loads TypeScript and
+    /// `@angular/language-service` from the copies bundled beside it
+    /// (`angular/node_modules`), never the project's: opening a template
+    /// runs nothing from the workspace, which it only reads. Listed before
+    /// HTML, which then has the `.html` files of every other project.
+    pub fn angular(script: PathBuf) -> Self {
+        let script = plain_path(script);
+        let bundled = script
+            .with_file_name("angular")
+            .to_string_lossy()
+            .into_owned();
+        Self {
+            name: "Angular",
+            program: Program::Node(script),
+            args: vec![
+                "--stdio".to_owned(),
+                "--tsProbeLocations".to_owned(),
+                bundled.clone(),
+                "--ngProbeLocations".to_owned(),
+                bundled,
+            ],
+            language: html_language,
+            initialization_options: Value::Null,
+            settings: Value::Null,
+            schemas: None,
+            notifications: Vec::new(),
+            applies: Some(angular_workspace),
+        }
+    }
+
     /// TypeScript and JavaScript: TypeScript 7's `tsc`, run with `--lsp --stdio`.
     pub fn typescript(program: PathBuf) -> Self {
         Self {
@@ -176,6 +236,7 @@ impl ServerSpec {
             settings: Value::Null,
             schemas: None,
             notifications: Vec::new(),
+            applies: None,
         }
     }
 
@@ -209,6 +270,7 @@ impl ServerSpec {
             }),
             schemas: Some(schemas),
             notifications: Vec::new(),
+            applies: None,
         }
     }
 
@@ -228,6 +290,7 @@ impl ServerSpec {
             }),
             schemas: None,
             notifications: Vec::new(),
+            applies: None,
         }
     }
 
@@ -250,6 +313,7 @@ impl ServerSpec {
             }),
             schemas: None,
             notifications: Vec::new(),
+            applies: None,
         }
     }
 
@@ -292,6 +356,7 @@ impl ServerSpec {
             // included) are asked of the app, which answers only from the
             // bundle: the server fetches nothing itself.
             notifications: vec![("yaml/registerContentRequest", Value::Null)],
+            applies: None,
         }
     }
 }
@@ -365,9 +430,16 @@ impl LanguageServers for Servers {
         root: &WorkspaceRoot,
         status: LanguageSink,
     ) -> Result<Box<dyn LanguageServer>, IdeError> {
+        let folder = PathBuf::from(root.display_path());
         Ok(Box::new(Workspace {
             root: root.clone(),
             status,
+            // Asked once, as the workspace opens.
+            applies: self
+                .specs
+                .iter()
+                .map(|spec| spec.applies.is_none_or(|applies| applies(&folder)))
+                .collect(),
             specs: Arc::clone(&self.specs),
             find_node: Arc::clone(&self.find_node),
             slots: Mutex::new(vec![Slot::Idle; self.specs.len()]),
@@ -388,17 +460,23 @@ struct Workspace {
     root: WorkspaceRoot,
     status: LanguageSink,
     specs: Arc<[ServerSpec]>,
+    /// Whether each server serves this workspace.
+    applies: Vec<bool>,
     find_node: FindNode,
     slots: Mutex<Vec<Slot>>,
 }
 
 impl Workspace {
+    /// The first server that serves this workspace and handles `path`.
+    fn index_for(&self, path: &RelPath) -> Option<usize> {
+        self.specs.iter().enumerate().position(|(index, spec)| {
+            self.applies.get(index).copied().unwrap_or(false) && (spec.language)(path).is_some()
+        })
+    }
+
     /// The server for `path`, started now if it's the first of its files.
     fn server(&self, path: &RelPath) -> Option<Arc<Session>> {
-        let index = self
-            .specs
-            .iter()
-            .position(|spec| (spec.language)(path).is_some())?;
+        let index = self.index_for(path)?;
         let mut slots = self.slots.lock().unwrap_or_else(PoisonError::into_inner);
         match slots.get(index)? {
             Slot::Running(session) => return Some(Arc::clone(session)),
@@ -423,10 +501,7 @@ impl Workspace {
 
     /// The server for `path`, if it's running.
     fn running(&self, path: &RelPath) -> Option<Arc<Session>> {
-        let index = self
-            .specs
-            .iter()
-            .position(|spec| (spec.language)(path).is_some())?;
+        let index = self.index_for(path)?;
         match self
             .slots
             .lock()
@@ -436,6 +511,15 @@ impl Workspace {
             Slot::Running(session) => Some(Arc::clone(session)),
             _ => None,
         }
+    }
+
+    /// `spec`'s arguments, with the workspace's folder in them.
+    fn args(&self, spec: &ServerSpec) -> Vec<String> {
+        let folder = self.root.display_path();
+        spec.args
+            .iter()
+            .map(|arg| arg.replace(WORKSPACE_ARG, &folder))
+            .collect()
     }
 
     /// What to run for `spec`, or why it can't be (said to the person).
@@ -453,7 +537,7 @@ impl Workspace {
         };
         match &spec.program {
             Program::Native(program) if program.is_file() => {
-                Some((program.clone(), spec.args.clone()))
+                Some((program.clone(), self.args(spec)))
             }
             Program::Native(program) => missing(program),
             Program::Node(script) if !script.is_file() => missing(script),
@@ -463,7 +547,7 @@ impl Workspace {
                     return None;
                 };
                 let mut args = vec![script.to_string_lossy().into_owned()];
-                args.extend(spec.args.iter().cloned());
+                args.extend(self.args(spec));
                 Some((node, args))
             }
         }

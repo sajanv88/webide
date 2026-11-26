@@ -507,3 +507,123 @@ fn snippets_become_plain_text() {
         std::path::PathBuf::from("/usr/lib/app")
     );
 }
+
+#[test]
+fn angular_takes_an_angular_projects_templates_without_running_its_code() {
+    let (Some(node), Some(staged)) = (node_on_path(), staged_servers()) else {
+        eprintln!("skipping: no node, or the language servers aren't staged (run pnpm build)");
+        return;
+    };
+    let servers = Servers::new(
+        vec![
+            ServerSpec::angular(staged.join("angular-server.cjs")),
+            ServerSpec::html(staged.join("html-server.cjs")),
+        ],
+        Arc::new(move || Some(node.clone())),
+    );
+    let at = |line, character| TextPosition { line, character };
+    let start = |dir: &std::path::Path| {
+        let root = WorkspaceRoot::from_canonical(std::fs::canonicalize(dir).unwrap()).unwrap();
+        let statuses = Arc::new(Mutex::new(Vec::new()));
+        let seen = Arc::clone(&statuses);
+        let server = servers
+            .start(
+                &root,
+                Arc::new(move |name: &str, status| {
+                    seen.lock().unwrap().push(format!("{name} {status:?}"));
+                }),
+            )
+            .unwrap();
+        (server, statuses)
+    };
+    let template = RelPath::parse("src/app/app.html").unwrap();
+
+    // An Angular project whose own TypeScript and language service would
+    // leave a mark if they were run.
+    let project = tempfile::Builder::new().prefix("webide").tempdir().unwrap();
+    let folder = project.path();
+    std::fs::write(folder.join("angular.json"), r#"{ "projects": {} }"#).unwrap();
+    std::fs::write(
+        folder.join("tsconfig.json"),
+        r#"{ "compilerOptions": { "strict": true }, "include": ["src"] }"#,
+    )
+    .unwrap();
+    std::fs::create_dir_all(folder.join("src/app")).unwrap();
+    std::fs::write(
+        folder.join("src/app/app.ts"),
+        "export class App {\n  title = 'demo';\n}\n",
+    )
+    .unwrap();
+    std::fs::write(folder.join("src/app/app.html"), "<h1>{{ title }}</h1>\n").unwrap();
+    let marker = folder.join("ran");
+    let trap = format!(
+        "require('fs').writeFileSync({:?}, 'yes'); module.exports = {{}};\n",
+        marker.to_string_lossy()
+    );
+    for (package, version, main) in [
+        ("typescript", "6.0.3", "lib/tsserverlibrary.js"),
+        ("@angular/language-service", "22.3.0", "index.js"),
+    ] {
+        let dir = folder.join("node_modules").join(package);
+        std::fs::create_dir_all(dir.join(main).parent().unwrap()).unwrap();
+        std::fs::write(
+            dir.join("package.json"),
+            format!(r#"{{ "name": "{package}", "version": "{version}", "main": "{main}" }}"#),
+        )
+        .unwrap();
+        std::fs::write(dir.join(main), &trap).unwrap();
+    }
+    let (server, statuses) = start(folder);
+    server.open(&template, "<h1>{{ title }}</h1>\n").unwrap();
+    server.problems(&template).unwrap();
+    server.hover(&template, at(0, 2)).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let said = statuses.lock().unwrap().clone();
+    assert!(said.contains(&"Angular Ready".to_owned()), "{said:?}");
+    assert!(!said.iter().any(|s| s.contains("Failed")), "{said:?}");
+    assert!(!marker.exists(), "the project's own packages were run");
+    drop(server);
+
+    // Not an Angular project: its HTML is the HTML server's.
+    let plain = tempfile::Builder::new().prefix("webide").tempdir().unwrap();
+    let (server, statuses) = start(plain.path());
+    server
+        .open(&RelPath::parse("index.html").unwrap(), "<p>hi</p>\n")
+        .unwrap();
+    assert_eq!(*statuses.lock().unwrap(), ["HTML Starting", "HTML Ready"]);
+}
+
+#[test]
+fn an_angular_project_is_known_by_its_config_or_its_dependencies() {
+    let is = |files: &[(&str, &str)]| {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, text) in files {
+            std::fs::write(dir.path().join(name), text).unwrap();
+        }
+        crate::angular_workspace(dir.path())
+    };
+    assert!(!is(&[]));
+    assert!(is(&[(
+        "angular.json",
+        r#"{ "version": 1, "projects": { "app": {} } }"#
+    )]));
+    assert!(is(&[(
+        "package.json",
+        r#"{ "dependencies": { "@angular/core": "22" } }"#
+    )]));
+    assert!(is(&[(
+        "package.json",
+        r#"{ "devDependencies": { "@angular/core": "22" } }"#
+    )]));
+    // Not its shape, or only its name somewhere else: not Angular.
+    assert!(!is(&[("angular.json", "{}")]));
+    assert!(!is(&[("angular.json", "not json")]));
+    assert!(!is(&[(
+        "package.json",
+        r#"{ "description": "\"@angular/core\" fan site" }"#
+    )]));
+    assert!(!is(&[(
+        "package.json",
+        r#"{ "dependencies": { "react": "19" } }"#
+    )]));
+}

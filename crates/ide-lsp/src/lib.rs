@@ -27,8 +27,8 @@ use serde_json::{Value, json};
 
 pub use crate::rpc::{OnRequest, RpcClient, RpcError, read_message, write_message};
 pub use crate::servers::{
-    FindNode, LanguageId, Program, ServerSpec, Servers, css_language, html_language, json_language,
-    yaml_language,
+    FindNode, LanguageId, Program, ServerSpec, Servers, WORKSPACE_ARG, angular_workspace,
+    css_language, html_language, json_language, yaml_language,
 };
 pub use crate::uri::{from_uri, relative_to, to_uri};
 

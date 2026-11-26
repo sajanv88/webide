@@ -49,7 +49,7 @@ export interface NodeSetupDialogProps {
 }
 
 /**
- * Asks for Node.js, which the JSON, YAML, HTML and CSS servers run on: with
+ * Asks for Node.js, which the JSON, YAML, HTML, CSS and Angular servers run on: with
  * the system's installer, typed into a terminal for the person to run (never
  * run for them), or by hand from Node's site. Then they look again.
  */

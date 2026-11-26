@@ -64,6 +64,8 @@ fn main() -> ExitCode {
                         ),
                         ServerSpec::json(servers.join("json-server.cjs"), schemas.clone()),
                         ServerSpec::css(servers.join("css-server.cjs")),
+                        // Before HTML: in an Angular project, its templates are Angular's.
+                        ServerSpec::angular(servers.join("angular-server.cjs")),
                         ServerSpec::html(servers.join("html-server.cjs")),
                         ServerSpec::yaml(servers.join("yaml-server.mjs"), schemas),
                     ],
