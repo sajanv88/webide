@@ -24,7 +24,13 @@ import type {
   WorkspaceDto,
 } from "@repo/contracts";
 import { createDebugStore, DebugView, debuggable } from "@repo/debug";
-import { DiffSurface, EditorSurface, type SurfaceDisplay } from "@repo/editor-surface";
+import {
+  DiffSurface,
+  EditorSurface,
+  type EditorSurfaceHandle,
+  type SurfaceDisplay,
+  type SurfaceSourceAction,
+} from "@repo/editor-surface";
 import { Explorer, type ExplorerSource } from "@repo/explorer";
 import { BranchPicker, BranchStatus, createGitStore, SourceControlView } from "@repo/git";
 import {
@@ -70,10 +76,13 @@ import {
   lspClose,
   lspCompletions,
   lspDefinition,
+  lspFixes,
   lspHover,
   lspOpen,
   lspProblems,
+  lspResolveCompletion,
   lspRestart,
+  lspSourceAction,
   openRecentWorkspace,
   openTerminal,
   pickWorkspace,
@@ -409,6 +418,9 @@ export function App() {
         lspCompletions({ workspaceId, path, line, character }),
       hover: (path, line, character) => lspHover({ workspaceId, path, line, character }),
       definition: (path, line, character) => lspDefinition({ workspaceId, path, line, character }),
+      resolveCompletion: (path, resolve) => lspResolveCompletion({ workspaceId, path, resolve }),
+      fixes: (path, start, end) => lspFixes({ workspaceId, path, start, end }),
+      sourceAction: (path, action) => lspSourceAction({ workspaceId, path, action }),
       restart: () => lspRestart({ workspaceId }),
     };
   }, [workspace]);
@@ -461,6 +473,70 @@ export function App() {
     const tab = state?.tabs.find((candidate) => candidate.id === state.activeId);
     return tab?.content.kind === "text" ? tab.path : undefined;
   }, []);
+
+  // The editor, for the commands that change the text it shows: quick fixes
+  // and the source actions (Organize Imports…), from its language server.
+  const editorHandle = useRef<EditorSurfaceHandle | null>(null);
+  useEffect(() => {
+    const handled = () => {
+      const path = currentFile();
+      return path !== undefined && language?.handles(path) === true;
+    };
+    const sourceActions: readonly {
+      id: AppCommandId;
+      action: SurfaceSourceAction;
+      title: string;
+      nothing: string;
+    }[] = [
+      {
+        id: "editor.organizeImports",
+        action: "organizeImports",
+        title: "Organize Imports",
+        nothing: "The imports are already organized",
+      },
+      {
+        id: "editor.sortImports",
+        action: "sortImports",
+        title: "Sort Imports",
+        nothing: "The imports are already sorted",
+      },
+      {
+        id: "editor.removeUnusedImports",
+        action: "removeUnusedImports",
+        title: "Remove Unused Imports",
+        nothing: "Every import is used",
+      },
+      { id: "editor.fixAll", action: "fixAll", title: "Fix All", nothing: "Nothing to fix" },
+    ];
+    const disposers = [
+      registry.register({
+        id: "editor.quickFix",
+        title: "Quick Fix…",
+        category: "Code",
+        isEnabled: handled,
+        run: () => editorHandle.current?.showFixes(),
+      }),
+      ...sourceActions.map(({ id, action, title, nothing }) =>
+        registry.register({
+          id,
+          title,
+          category: "Code",
+          isEnabled: handled,
+          run: async () => {
+            const result = await editorHandle.current?.runSourceAction(action);
+            if (result === "unchanged") toast(nothing);
+            else if (result === "unavailable") toast(`${title} isn't offered for this file`);
+            else if (result === "stale") {
+              toast("The file changed meanwhile", { description: `Run ${title} again.` });
+            }
+          },
+        }),
+      ),
+    ];
+    return () => {
+      for (const dispose of disposers) dispose();
+    };
+  }, [language, currentFile]);
 
   const views = useMemo<SidebarView[]>(
     () =>
@@ -608,6 +684,18 @@ export function App() {
         ],
       },
       {
+        label: "Code",
+        items: [
+          { kind: "command", command: "editor.quickFix" },
+          { kind: "separator" },
+          { kind: "command", command: "editor.organizeImports" },
+          { kind: "command", command: "editor.sortImports" },
+          { kind: "command", command: "editor.removeUnusedImports" },
+          { kind: "separator" },
+          { kind: "command", command: "editor.fixAll" },
+        ],
+      },
+      {
         label: "Run",
         items: [
           { kind: "command", command: "debug.start" },
@@ -692,6 +780,10 @@ export function App() {
               renderEditor={(document) => (
                 <EditorSurface
                   {...document}
+                  ref={(handle) => {
+                    document.ref(handle);
+                    editorHandle.current = handle;
+                  }}
                   aria-label={`Text of ${document.path}`}
                   styleNonce={styleNonce}
                   display={display}

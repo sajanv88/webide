@@ -72,6 +72,13 @@ export interface SurfacePosition {
   readonly character: number;
 }
 
+/** A change to the text: what's between `from` and `to` becomes `insert`. */
+export interface SurfaceEdit {
+  readonly from: SurfacePosition;
+  readonly to: SurfacePosition;
+  readonly insert: string;
+}
+
 /** One suggestion while typing. */
 export interface SurfaceCompletion {
   readonly label: string;
@@ -81,7 +88,31 @@ export interface SurfaceCompletion {
   readonly detail?: string;
   /** What's inserted, when it isn't the label. */
   readonly insert?: string;
+  /** Where it comes from when it isn't in scope yet (the module an import would name), shown beside it. */
+  readonly source?: string;
+  /** Other changes made with it, such as an import, in the text as it was when asked. */
+  readonly edits?: readonly SurfaceEdit[];
+  /** Asked when it's picked: the other changes it makes (the import it adds). */
+  readonly resolve?: () => Promise<readonly SurfaceEdit[]>;
 }
+
+/** A fix offered for a problem: "Add import from \"react\"". */
+export interface SurfaceFix {
+  readonly title: string;
+  /** The one the language thinks is meant: first, and focused. */
+  readonly preferred: boolean;
+  readonly edits: readonly SurfaceEdit[];
+}
+
+/** A change to the whole text, made on request. */
+export type SurfaceSourceAction =
+  | "organizeImports"
+  | "removeUnusedImports"
+  | "sortImports"
+  | "fixAll";
+
+/** What became of a source action: made, nothing to change, not offered here, or the text changed meanwhile. */
+export type SurfaceActionResult = "changed" | "unchanged" | "unavailable" | "stale";
 
 /**
  * Language features for the document shown, answered by its owner (a
@@ -93,6 +124,10 @@ export interface SurfaceLanguage {
   hover(at: SurfacePosition): Promise<string | null>;
   /** Goes to where the thing at `at` is defined (F12, or Ctrl/Cmd and a click). */
   goToDefinition(at: SurfacePosition): void;
+  /** The fixes for the problems between `from` and `to` (the cursor, or the selection). */
+  fixes?(from: SurfacePosition, to: SurfacePosition): Promise<readonly SurfaceFix[] | null>;
+  /** The edits that make `action`, in the text as it is now; `null` when it isn't offered here. */
+  sourceAction?(action: SurfaceSourceAction): Promise<readonly SurfaceEdit[] | null>;
 }
 
 /** The editor from outside, for the document it shows now. */
@@ -107,6 +142,10 @@ export interface EditorSurfaceHandle {
    * units), scrolls to it and focuses; for a document just shown, once it's drawn.
    */
   revealPosition(line: number, column: number): void;
+  /** Shows the fixes for the problem at the cursor, as a menu there (or says there are none). */
+  showFixes(): void;
+  /** Makes a change to the whole text, such as organizing its imports. */
+  runSourceAction(action: SurfaceSourceAction): Promise<SurfaceActionResult>;
 }
 
 /** Two versions of a file, side by side (or in one column when narrow), to review. */

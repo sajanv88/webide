@@ -33,6 +33,23 @@ change the editor, change this package only.
   macOS), which then doesn't add a cursor. These are CodeMirror extensions
   (`@codemirror/state`, `view`, `autocomplete`, the versions nuvui uses), made
   once; they ask the `language` of the document shown.
+- **Imports:** a completion from a module not imported yet shows where it
+  comes from (`source`, beside it). Picking it adds the import: its `edits`
+  in the same change, or those `resolve` gives once it's picked, in a change
+  of their own if the text before them is still as it was (their places were
+  counted in it).
+- **Quick fixes** (`showFixes()` on the handle; the app runs it for Ctrl+. or
+  Cmd+.): the language's `fixes` for the problem at the cursor, in a menu
+  there (`role="menu"`), the preferred one first and focused. The arrow keys,
+  Home and End move through it, Enter or a click makes the fix, Escape or Tab
+  closes it and gives the editor its focus back. Typing or moving the cursor
+  closes it too. With none, a note says so until the next key. A fix is made
+  only on the text it was made for.
+- **Source actions** (`runSourceAction(action)`: `organizeImports`,
+  `sortImports`, `removeUnusedImports`, `fixAll`): the language's edits to
+  the whole text, made as one change (undone at once). It says what came of
+  it: `changed`, `unchanged`, `unavailable` (not offered, or read only), or
+  `stale` (the text changed while the server worked).
 - **Breakpoints** (`breakpoints`, `onToggleBreakpoint`): a gutter beside the
   line numbers, where a press (or F9, on the cursor's line) toggles a line's
   breakpoint, drawn as a dot. Without `onToggleBreakpoint` the gutter does
@@ -73,11 +90,13 @@ nuvui (a way to drop a path).
   `executionLine?`, `display?` (`SurfaceDisplay`: `indentGuides`,
   `rulerColumn`, `whitespace`, `lineHighlight`), `aria-label` (required),
   `styleNonce?`, `ref`.
-- `SurfaceLanguage` (`completions`, `hover`, `goToDefinition`), `SurfacePosition`,
-  `SurfaceCompletion`.
+- `SurfaceLanguage` (`completions`, `hover`, `goToDefinition`, `fixes?`,
+  `sourceAction?`), `SurfacePosition`, `SurfaceCompletion` (with `source?`,
+  `edits?`, `resolve?`), `SurfaceEdit`, `SurfaceFix`, `SurfaceSourceAction`,
+  `SurfaceActionResult`.
 - `EditorSurfaceHandle` (through `ref`): `getValue()`, `setValue(value)` (calls
   `onChange`, and can be undone), `focus()`, `revealPosition(line, column)`
-  (both from 1, clamped).
+  (both from 1, clamped), `showFixes()`, `runSourceAction(action)`.
 - `SurfaceDiagnostic`.
 - `DiffSurface` with `DiffSurfaceProps`: `path`, `original`, `modified`,
   `aria-label` (required), `styleNonce?`.

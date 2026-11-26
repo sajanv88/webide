@@ -41,6 +41,17 @@ pub struct AppPaths {
     pub resource_dir: PathBuf,
 }
 
+/// When set to an absolute folder, the app keeps its settings, recent folders
+/// and the rest there instead of in its own place: a separate profile, for
+/// trying a build without touching the one used day to day.
+pub const CONFIG_DIR_VAR: &str = "WEBIDE_CONFIG_DIR";
+
+/// The folder [`CONFIG_DIR_VAR`] names, if it's set to an absolute path.
+pub fn config_dir_override(value: Option<std::ffi::OsString>) -> Option<PathBuf> {
+    let dir = PathBuf::from(value?);
+    dir.is_absolute().then_some(dir)
+}
+
 /// Builds and runs the app until the last window closes.
 ///
 /// `context` comes from `tauri::generate_context!()`, which must be expanded in
@@ -85,7 +96,10 @@ where
         })
         .setup(move |app| {
             let paths = AppPaths {
-                config_dir: app.path().app_config_dir()?,
+                config_dir: match config_dir_override(std::env::var_os(CONFIG_DIR_VAR)) {
+                    Some(dir) => dir,
+                    None => app.path().app_config_dir()?,
+                },
                 resource_dir: app.path().resource_dir()?,
             };
             let info = AppInfoDto {

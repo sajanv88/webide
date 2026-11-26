@@ -20,8 +20,9 @@ use ide_core::git::{
     DiffSide, DiffTexts, GitBranch, GitChange, GitFileStatus, GitHead, GitState, GitStatus,
 };
 use ide_core::language::{
-    Completions, Definition, HoverText, LanguageServer, LanguageServers, LanguageSink,
-    LanguageStatus, Problem, Severity, TextPosition, TextRange,
+    CodeAction, Completions, Definition, HoverText, LanguageServer, LanguageServers, LanguageSink,
+    LanguageStatus, Problem, ResolvedCompletion, Severity, SourceAction, TextEdit, TextPosition,
+    TextRange,
 };
 use ide_core::search::line_match;
 use ide_core::terminal::{MAX_TERMINALS, MAX_WRITE_BYTES};
@@ -37,9 +38,10 @@ use crate::dto::{
     AgentConfigArgs, AppInfoDto, AssistantConversationArgs, AssistantDecideArgs, AssistantSendArgs,
     AssistantSetupArgs, BackendEventDto, BedrockAuthDto, CloseGuardArgs, DebugStartArgs,
     DebugThreadArgs, DiffSideDto, FileBreakpoints, GitCommitArgs, GitDiffArgs, GitPathsArgs,
-    GitSwitchArgs, LspDocumentArgs, LspPositionArgs, OpenRecentArgs, ProviderKindDto,
-    ProviderSetupDto, ReadFileDto, SearchTextArgs, SettingsPatchDto, StepDto, TerminalIdArgs,
-    TerminalResizeArgs, TerminalWriteArgs, WorkspaceArgs, WorkspacePathArgs, WriteFileArgs,
+    GitSwitchArgs, LspDocumentArgs, LspPositionArgs, LspRangeArgs, LspResolveArgs,
+    LspSourceActionArgs, OpenRecentArgs, ProviderKindDto, ProviderSetupDto, ReadFileDto,
+    SearchTextArgs, SettingsPatchDto, SourceActionDto, StepDto, TerminalIdArgs, TerminalResizeArgs,
+    TerminalWriteArgs, TextPositionDto, WorkspaceArgs, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::{IpcError, IpcErrorCode};
 use crate::handlers::{self, IpcState, Services};
@@ -441,6 +443,46 @@ impl LanguageServer for FakeServer {
                 end: at(0, 7),
             },
         }])
+    }
+    fn resolve_completion(
+        &self,
+        path: &RelPath,
+        resolve: &str,
+    ) -> Result<ResolvedCompletion, IdeError> {
+        self.note(format!("resolve {path} {resolve}"));
+        Ok(ResolvedCompletion {
+            detail: Some("Add import from \"react\"".into()),
+            edits: vec![import_edit()],
+        })
+    }
+    fn fixes(&self, path: &RelPath, range: TextRange) -> Result<Vec<CodeAction>, IdeError> {
+        self.note(format!(
+            "fixes {path} {}:{}-{}:{}",
+            range.start.line, range.start.character, range.end.line, range.end.character
+        ));
+        Ok(vec![CodeAction {
+            title: "Add import from \"react\"".into(),
+            preferred: true,
+            edits: vec![import_edit()],
+        }])
+    }
+    fn source_action(
+        &self,
+        path: &RelPath,
+        action: SourceAction,
+    ) -> Result<Option<Vec<TextEdit>>, IdeError> {
+        self.note(format!("source {path} {action:?}"));
+        Ok((action == SourceAction::OrganizeImports).then(|| vec![import_edit()]))
+    }
+}
+
+fn import_edit() -> TextEdit {
+    TextEdit {
+        range: TextRange {
+            start: at(0, 0),
+            end: at(0, 0),
+        },
+        new_text: "import { useState } from \"react\";\n".into(),
     }
 }
 
@@ -1472,6 +1514,97 @@ fn the_language_server_starts_with_the_first_file_it_handles_and_stops_with_the_
 }
 
 #[test]
+fn imports_and_fixes_come_from_the_files_server() {
+    let fx = fixture();
+    let ws = handlers::open_picked(&fx.state, &folder("alpha")).unwrap();
+    handlers::lsp_open(&fx.state, doc(&ws.id, "a.ts", "one")).unwrap();
+    let edit = json!([{
+        "range": { "start": { "line": 0, "character": 0 }, "end": { "line": 0, "character": 0 } },
+        "newText": "import { useState } from \"react\";\n",
+    }]);
+
+    let resolved = handlers::lsp_resolve_completion(
+        &fx.state,
+        LspResolveArgs {
+            workspace_id: ws.id.clone(),
+            path: "a.ts".into(),
+            resolve: "1:4".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::to_value(&resolved).unwrap(),
+        json!({ "detail": "Add import from \"react\"", "edits": edit })
+    );
+    // A token no server would write isn't passed on.
+    let long = LspResolveArgs {
+        workspace_id: ws.id.clone(),
+        path: "a.ts".into(),
+        resolve: "1".repeat(100),
+    };
+    assert_eq!(
+        code(handlers::lsp_resolve_completion(&fx.state, long)),
+        IpcErrorCode::InvalidArgument
+    );
+
+    let range = |start, end| LspRangeArgs {
+        workspace_id: ws.id.clone(),
+        path: "a.ts".into(),
+        start,
+        end,
+    };
+    let point = |line, character| TextPositionDto { line, character };
+    let fixes = handlers::lsp_fixes(&fx.state, range(point(2, 4), point(2, 9))).unwrap();
+    assert_eq!(
+        serde_json::to_value(&fixes).unwrap(),
+        json!([{ "title": "Add import from \"react\"", "preferred": true, "edits": edit }])
+    );
+    assert_eq!(
+        code(handlers::lsp_fixes(
+            &fx.state,
+            range(point(2, 9), point(2, 4))
+        )),
+        IpcErrorCode::InvalidArgument
+    );
+
+    let source = |action| LspSourceActionArgs {
+        workspace_id: ws.id.clone(),
+        path: "a.ts".into(),
+        action,
+    };
+    let organized =
+        handlers::lsp_source_action(&fx.state, source(SourceActionDto::OrganizeImports)).unwrap();
+    assert_eq!(serde_json::to_value(&organized).unwrap(), edit);
+    assert!(
+        handlers::lsp_source_action(&fx.state, source(SourceActionDto::FixAll))
+            .unwrap()
+            .is_none()
+    );
+    // A file no server handles has none of these.
+    let other = LspSourceActionArgs {
+        workspace_id: ws.id.clone(),
+        path: "notes.md".into(),
+        action: SourceActionDto::OrganizeImports,
+    };
+    assert!(
+        handlers::lsp_source_action(&fx.state, other)
+            .unwrap()
+            .is_none()
+    );
+
+    let log = fx.languages.log.lock().unwrap().clone();
+    assert_eq!(
+        log[2..],
+        [
+            "1 resolve a.ts 1:4",
+            "1 fixes a.ts 2:4-2:9",
+            "1 source a.ts OrganizeImports",
+            "1 source a.ts FixAll",
+        ]
+    );
+}
+
+#[test]
 fn a_server_that_cant_start_isnt_tried_again_until_asked() {
     let fx = fixture();
     fx.languages
@@ -1769,4 +1902,21 @@ fn assistant_messages_carry_the_workspace_and_replies_reach_the_webview() {
             "clear chat-1"
         ]
     );
+}
+
+#[test]
+fn a_separate_profile_needs_an_absolute_folder() {
+    use crate::config_dir_override;
+    let absolute = if cfg!(windows) {
+        r"C:\profiles\test"
+    } else {
+        "/profiles/test"
+    };
+    assert_eq!(
+        config_dir_override(Some(absolute.into())),
+        Some(std::path::PathBuf::from(absolute))
+    );
+    assert_eq!(config_dir_override(Some("relative/dir".into())), None);
+    assert_eq!(config_dir_override(Some("".into())), None);
+    assert_eq!(config_dir_override(None), None);
 }

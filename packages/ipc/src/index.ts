@@ -8,6 +8,7 @@ import type {
   AssistantSetupArgs,
   AssistantStatusDto,
   BreakpointDto,
+  CodeActionDto,
   CompletionsDto,
   DebugBreakpointsArgs,
   DebugEvaluateArgs,
@@ -28,16 +29,21 @@ import type {
   HoverDto,
   LspDocumentArgs,
   LspPositionArgs,
+  LspRangeArgs,
+  LspResolveArgs,
+  LspSourceActionArgs,
   ModelInfoDto,
   OpenRecentArgs,
   ProblemDto,
   ReadFileDto,
   RecentWorkspaceDto,
+  ResolvedCompletionDto,
   ScopeDto,
   SearchTextArgs,
   SettingsDto,
   SettingsPatchDto,
   StackFrameDto,
+  TextEditDto,
   TextSearchDto,
   VariableDto,
   WorkspaceArgs,
@@ -136,6 +142,17 @@ export const lspHover = (args: LspPositionArgs): Promise<IpcResult<HoverDto | nu
 
 export const lspDefinition = (args: LspPositionArgs): Promise<IpcResult<DefinitionDto[]>> =>
   call("lsp_definition", args);
+
+export const lspResolveCompletion = (
+  args: LspResolveArgs,
+): Promise<IpcResult<ResolvedCompletionDto>> => call("lsp_resolve_completion", args);
+
+export const lspFixes = (args: LspRangeArgs): Promise<IpcResult<CodeActionDto[]>> =>
+  call("lsp_fixes", args);
+
+export const lspSourceAction = (
+  args: LspSourceActionArgs,
+): Promise<IpcResult<TextEditDto[] | null>> => call("lsp_source_action", args);
 
 export const lspRestart = (args: WorkspaceArgs): Promise<IpcResult<null>> =>
   call("lsp_restart", args);

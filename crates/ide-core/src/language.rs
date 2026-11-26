@@ -65,6 +65,13 @@ pub enum CompletionKind {
     Other,
 }
 
+/// A change to a file's text: `range` is replaced by `new_text`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextEdit {
+    pub range: TextRange,
+    pub new_text: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Completion {
     pub label: String,
@@ -75,6 +82,56 @@ pub struct Completion {
     pub insert: Option<String>,
     /// The order the server suggests.
     pub sort: Option<String>,
+    /// Where it comes from, when it isn't in scope yet: the module an import
+    /// would name (`react`).
+    pub source: Option<String>,
+    /// Other changes made with it, such as an import.
+    pub edits: Vec<TextEdit>,
+    /// Ask [`LanguageServer::resolve_completion`] with this for what else
+    /// picking it does (the import it adds); `None` when there's nothing more.
+    pub resolve: Option<String>,
+}
+
+/// What else picking a completion does.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ResolvedCompletion {
+    /// What it does, said: `Add import from "react"`.
+    pub detail: Option<String>,
+    /// The changes made with it, such as the import.
+    pub edits: Vec<TextEdit>,
+}
+
+/// A change the server offers for a problem: "Add import from \"react\"".
+/// Its edits are all to the file it was asked about.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodeAction {
+    pub title: String,
+    /// The one the server thinks is meant.
+    pub preferred: bool,
+    pub edits: Vec<TextEdit>,
+}
+
+/// A change to a whole file the server makes on request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceAction {
+    /// Sorts the imports and removes the unused ones.
+    OrganizeImports,
+    RemoveUnusedImports,
+    SortImports,
+    /// Every fix the server is sure of.
+    FixAll,
+}
+
+impl SourceAction {
+    /// LSP's code action kind for it.
+    pub fn kind(self) -> &'static str {
+        match self {
+            Self::OrganizeImports => "source.organizeImports",
+            Self::RemoveUnusedImports => "source.removeUnusedImports",
+            Self::SortImports => "source.sortImports",
+            Self::FixAll => "source.fixAll",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -122,6 +179,27 @@ pub trait LanguageServer: Send + Sync {
     fn completions(&self, path: &RelPath, at: TextPosition) -> Result<Completions, IdeError>;
     fn hover(&self, path: &RelPath, at: TextPosition) -> Result<Option<HoverText>, IdeError>;
     fn definition(&self, path: &RelPath, at: TextPosition) -> Result<Vec<Definition>, IdeError>;
+    /// What else picking a completion does, by its [`Completion::resolve`].
+    fn resolve_completion(
+        &self,
+        _path: &RelPath,
+        _resolve: &str,
+    ) -> Result<ResolvedCompletion, IdeError> {
+        Ok(ResolvedCompletion::default())
+    }
+    /// The fixes for the problems in `range` (an import to add…).
+    fn fixes(&self, _path: &RelPath, _range: TextRange) -> Result<Vec<CodeAction>, IdeError> {
+        Ok(Vec::new())
+    }
+    /// The edits that make `action` on the file; `None` when the server
+    /// doesn't offer it there, empty when there's nothing to change.
+    fn source_action(
+        &self,
+        _path: &RelPath,
+        _action: SourceAction,
+    ) -> Result<Option<Vec<TextEdit>>, IdeError> {
+        Ok(None)
+    }
 }
 
 /// Starts language servers.

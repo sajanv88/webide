@@ -27,6 +27,8 @@ export const DEFAULT_KEYBINDINGS: readonly KeybindingSpec<AppCommandId>[] = [
   { key: "F11", command: "debug.stepInto" },
   { key: "Shift+F11", command: "debug.stepOut" },
   { key: "Mod+,", command: "settings.open" },
+  { key: "Mod+.", command: "editor.quickFix" },
+  { key: "Shift+Alt+O", command: "editor.organizeImports" },
   { key: "Mod+Alt+I", command: "assistant.focus" },
   { key: "Mod+Alt+B", command: "view.toggleAside" },
 ];

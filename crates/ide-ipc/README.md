@@ -55,6 +55,9 @@ ts-rs.
 | `lsp_completions`        | `{ workspaceId, path, line, character }` | `CompletionsDto`                                        |
 | `lsp_hover`              | `{ workspaceId, path, line, character }` | `HoverDto \| null`                                      |
 | `lsp_definition`         | `{ workspaceId, path, line, character }` | `DefinitionDto[]` (switch on `kind`)                    |
+| `lsp_resolve_completion` | `{ workspaceId, path, resolve }`         | `ResolvedCompletionDto`: the import a pick adds         |
+| `lsp_fixes`              | `{ workspaceId, path, start, end }`      | `CodeActionDto[]`, each with its edits to this file     |
+| `lsp_source_action`      | `{ workspaceId, path, action }`          | `TextEditDto[] \| null` (`organizeImports`, `fixAll`…)  |
 | `lsp_restart`            | `{ workspaceId }`                        | nothing; it starts again when next needed               |
 | `debug_start`            | `{ workspaceId, path, breakpoints }`     | nothing; ends the program already running, if any       |
 | `debug_stop`             | `{ workspaceId }`                        | nothing; ends the program                               |
@@ -144,6 +147,10 @@ The rules that keep the webview contained:
 
 - `run(context, services)`, with `Services { fs, workspace, watcher, search, git, terminals,
   languages }` and `AppPaths` (`config_dir`, `resource_dir`).
+- `CONFIG_DIR_VAR` (`WEBIDE_CONFIG_DIR`): set to an absolute folder, the app
+  keeps its settings, recent folders and the rest there instead of its own
+  place (a separate profile, to try a build without touching yours);
+  `config_dir_override` reads it.
 - `COMMAND_NAMES`, `IpcError`, `IpcErrorCode`, `MAIN_WINDOW`.
 
 ## May depend on

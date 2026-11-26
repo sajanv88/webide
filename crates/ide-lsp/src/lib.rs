@@ -15,9 +15,9 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use ide_core::language::{
-    Completion, CompletionKind, Completions, Definition, HoverText, LanguageServer,
-    LanguageServers, LanguageSink, LanguageStatus, Problem, Severity, TextPosition, TextRange,
-    script_language,
+    CodeAction, Completion, CompletionKind, Completions, Definition, HoverText, LanguageServer,
+    LanguageServers, LanguageSink, LanguageStatus, Problem, ResolvedCompletion, Severity,
+    SourceAction, TextEdit, TextPosition, TextRange, script_language,
 };
 use ide_core::{IdeError, RelPath, WorkspaceRoot};
 use serde_json::{Value, json};
@@ -111,14 +111,32 @@ impl LanguageServers for TypeScriptServers {
                             "completionItem": {
                                 "snippetSupport": false,
                                 "documentationFormat": ["markdown", "plaintext"],
+                                "labelDetailsSupport": true,
+                                // The import a completion adds comes when it's picked.
+                                "resolveSupport": {
+                                    "properties": ["additionalTextEdits", "detail"],
+                                },
                             },
+                        },
+                        "codeAction": {
+                            "codeActionLiteralSupport": {
+                                "codeActionKind": {
+                                    "valueSet": ["quickfix", "source", "source.organizeImports"],
+                                },
+                            },
+                            "isPreferredSupport": true,
+                            "disabledSupport": true,
                         },
                         "hover": { "contentFormat": ["markdown", "plaintext"] },
                         "definition": { "linkSupport": true },
                         "diagnostic": {},
                         "publishDiagnostics": {},
                     },
-                    "workspace": { "configuration": true, "workspaceFolders": true },
+                    "workspace": {
+                        "configuration": true,
+                        "workspaceFolders": true,
+                        "workspaceEdit": { "documentChanges": true },
+                    },
                 },
             }),
             START_LIMIT,
@@ -133,6 +151,8 @@ impl LanguageServers for TypeScriptServers {
             client,
             folder,
             versions: Mutex::new(HashMap::new()),
+            listed: Mutex::new(Listed::default()),
+            reported: Mutex::new(HashMap::new()),
             stopping,
         }))
     }
@@ -144,7 +164,58 @@ struct Session {
     folder: String,
     /// Each open file's version, as the server knows it.
     versions: Mutex<HashMap<RelPath, i64>>,
+    /// The last completions listed, as the server wrote them: picking one
+    /// asks the server about it again (`completionItem/resolve`).
+    listed: Mutex<Listed>,
+    /// Each file's problems as the server last reported them: a request for
+    /// fixes sends back the ones it's about.
+    reported: Mutex<HashMap<RelPath, Vec<Value>>>,
     stopping: Arc<AtomicBool>,
+}
+
+/// The last completion list: which, for which file, and its items.
+#[derive(Default)]
+struct Listed {
+    generation: u64,
+    path: Option<RelPath>,
+    items: Vec<Value>,
+}
+
+/// Each `edits` list in a workspace edit, by the file it changes (as a URI).
+/// `None` when it does more than edit text (creates, renames or deletes files).
+fn edits_by_file(edit: &Value) -> Option<Vec<(&str, &Value)>> {
+    let mut files = Vec::new();
+    if let Some(changes) = edit.get("changes").and_then(Value::as_object) {
+        files.extend(changes.iter().map(|(uri, edits)| (uri.as_str(), edits)));
+    }
+    if let Some(changes) = edit.get("documentChanges").and_then(Value::as_array) {
+        for change in changes {
+            let uri = change.get("textDocument")?.get("uri")?.as_str()?;
+            files.push((uri, change.get("edits")?));
+        }
+    }
+    Some(files)
+}
+
+fn text_edits(list: &Value) -> Vec<TextEdit> {
+    list.as_array()
+        .map(|edits| {
+            edits
+                .iter()
+                .filter_map(|edit| {
+                    Some(TextEdit {
+                        range: range(edit.get("range")?)?,
+                        new_text: edit.get("newText")?.as_str()?.to_owned(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Whether two ranges meet (touching counts: a cursor at a problem's end is on it).
+fn meets(a: TextRange, b: TextRange) -> bool {
+    a.start <= b.end && b.start <= a.end
 }
 
 impl Session {
@@ -167,6 +238,60 @@ impl Session {
         self.client
             .request(method, params, ASK_LIMIT)
             .map_err(|error| failed(&error))
+    }
+
+    /// The edits of a workspace edit, when they're all to `path`.
+    fn edits_to(&self, path: &RelPath, edit: &Value) -> Option<Vec<TextEdit>> {
+        let mut edits = Vec::new();
+        for (uri, list) in edits_by_file(edit)? {
+            let file = relative_to(&self.folder, &from_uri(uri)?)?;
+            if &file != path {
+                return None;
+            }
+            edits.extend(text_edits(list));
+        }
+        Some(edits)
+    }
+
+    /// The server's code actions of the `only` kind over `range`, given `diagnostics`.
+    fn code_actions(
+        &self,
+        path: &RelPath,
+        range: TextRange,
+        diagnostics: Vec<Value>,
+        only: &str,
+    ) -> Result<Vec<Value>, IdeError> {
+        let point = |at: TextPosition| json!({ "line": at.line, "character": at.character });
+        let result = self.ask(
+            "textDocument/codeAction",
+            json!({
+                "textDocument": { "uri": self.uri(path) },
+                "range": { "start": point(range.start), "end": point(range.end) },
+                "context": { "diagnostics": diagnostics, "only": [only] },
+            }),
+        )?;
+        Ok(match result {
+            Value::Array(actions) => actions
+                .into_iter()
+                // A command alone (no edit) isn't run: only edits are made.
+                .filter(|action| action.get("disabled").is_none() && action.get("edit").is_some())
+                .collect(),
+            _ => Vec::new(),
+        })
+    }
+
+    fn resolve_item(&self, path: &RelPath, resolve: &str) -> Option<Value> {
+        let (generation, index) = resolve.split_once(':')?;
+        let (generation, index) = (
+            generation.parse::<u64>().ok()?,
+            index.parse::<usize>().ok()?,
+        );
+        let listed = self.listed.lock().unwrap_or_else(PoisonError::into_inner);
+        // Only the latest list, of this file: an older one's items are gone.
+        if listed.generation != generation || listed.path.as_ref() != Some(path) {
+            return None;
+        }
+        listed.items.get(index).cloned()
     }
 
     fn definition_of(&self, uri: &str, range: TextRange) -> Option<Definition> {
@@ -255,11 +380,17 @@ impl LanguageServer for Session {
             "textDocument/diagnostic",
             json!({ "textDocument": { "uri": self.uri(path) } }),
         )?;
-        Ok(report
+        let items = report
             .get("items")
             .and_then(Value::as_array)
-            .map(|items| items.iter().filter_map(problem).collect())
-            .unwrap_or_default())
+            .cloned()
+            .unwrap_or_default();
+        let problems = items.iter().filter_map(problem).collect();
+        self.reported
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(path.clone(), items);
+        Ok(problems)
     }
 
     fn completions(&self, path: &RelPath, at: TextPosition) -> Result<Completions, IdeError> {
@@ -276,12 +407,28 @@ impl LanguageServer for Session {
             ),
             _ => (&[][..], false),
         };
+        let incomplete = incomplete || items.len() > MAX_COMPLETIONS;
+        let items = &items[..items.len().min(MAX_COMPLETIONS)];
+        let generation = {
+            let mut listed = self.listed.lock().unwrap_or_else(PoisonError::into_inner);
+            listed.generation += 1;
+            listed.path = Some(path.clone());
+            listed.items = items.to_vec();
+            listed.generation
+        };
         Ok(Completions {
-            incomplete: incomplete || items.len() > MAX_COMPLETIONS,
+            incomplete,
             items: items
                 .iter()
-                .take(MAX_COMPLETIONS)
-                .filter_map(completion)
+                .enumerate()
+                .filter_map(|(index, item)| {
+                    let mut found = completion(item)?;
+                    // Only an item the server has more to say about is asked again.
+                    if item.get("data").is_some() {
+                        found.resolve = Some(format!("{generation}:{index}"));
+                    }
+                    Some(found)
+                })
                 .collect(),
         })
     }
@@ -315,6 +462,86 @@ impl LanguageServer for Session {
                 self.definition_of(uri, range)
             })
             .collect())
+    }
+
+    fn resolve_completion(
+        &self,
+        path: &RelPath,
+        resolve: &str,
+    ) -> Result<ResolvedCompletion, IdeError> {
+        let Some(item) = self.resolve_item(path, resolve) else {
+            return Err(IdeError::NotFound);
+        };
+        let resolved = self.ask("completionItem/resolve", item)?;
+        Ok(ResolvedCompletion {
+            detail: resolved
+                .get("detail")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            edits: resolved
+                .get("additionalTextEdits")
+                .map(text_edits)
+                .unwrap_or_default(),
+        })
+    }
+
+    fn fixes(&self, path: &RelPath, range: TextRange) -> Result<Vec<CodeAction>, IdeError> {
+        // The problems there, as the server reports them now: its fixes are for
+        // those, and the last report may be from before the latest typing.
+        self.problems(path)?;
+        let diagnostics: Vec<Value> = self
+            .reported
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(path)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter(|item| {
+                        item.get("range")
+                            .and_then(self::range)
+                            .is_some_and(|at| meets(at, range))
+                    })
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+        if diagnostics.is_empty() {
+            return Ok(Vec::new());
+        }
+        let actions = self.code_actions(path, range, diagnostics, "quickfix")?;
+        Ok(actions
+            .iter()
+            .filter_map(|action| {
+                Some(CodeAction {
+                    title: action.get("title")?.as_str()?.to_owned(),
+                    preferred: action
+                        .get("isPreferred")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                    // Only fixes that change this file alone: it's the one being edited.
+                    edits: self.edits_to(path, action.get("edit")?)?,
+                })
+            })
+            .filter(|action| !action.edits.is_empty())
+            .collect())
+    }
+
+    fn source_action(
+        &self,
+        path: &RelPath,
+        action: SourceAction,
+    ) -> Result<Option<Vec<TextEdit>>, IdeError> {
+        let start = TextPosition {
+            line: 0,
+            character: 0,
+        };
+        let kind = action.kind();
+        let actions = self.code_actions(path, TextRange { start, end: start }, Vec::new(), kind)?;
+        Ok(actions
+            .iter()
+            .find(|found| found.get("kind").and_then(Value::as_str) == Some(kind))
+            .and_then(|found| self.edits_to(path, found.get("edit")?)))
     }
 }
 
@@ -378,6 +605,16 @@ fn completion(value: &Value) -> Option<Completion> {
         detail: text("detail"),
         insert: edit.or_else(|| text("insertText")),
         sort: text("sortText"),
+        source: value
+            .get("labelDetails")
+            .and_then(|details| details.get("description"))
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        edits: value
+            .get("additionalTextEdits")
+            .map(text_edits)
+            .unwrap_or_default(),
+        resolve: None,
     })
 }
 

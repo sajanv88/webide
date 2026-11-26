@@ -13,14 +13,15 @@ use tauri_plugin_dialog::DialogExt;
 use crate::dto::{
     AgentConfigArgs, AgentStatusDto, AppInfoDto, AssistantConversationArgs, AssistantDecideArgs,
     AssistantSendArgs, AssistantSetupArgs, AssistantStatusDto, BreakpointDto, CloseGuardArgs,
-    CompletionsDto, DebugBreakpointsArgs, DebugEvaluateArgs, DebugReferenceArgs, DebugStartArgs,
-    DebugThreadArgs, DefinitionDto, DirListingDto, FileListDto, FileStampDto, GitBranchDto,
-    GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs, HoverDto,
-    LspDocumentArgs, LspPositionArgs, ModelInfoDto, OpenRecentArgs, ProblemDto, ReadFileDto,
-    RecentWorkspaceDto, ScopeDto, SearchTextArgs, SettingsDto, SettingsPatchDto, StackFrameDto,
+    CodeActionDto, CompletionsDto, DebugBreakpointsArgs, DebugEvaluateArgs, DebugReferenceArgs,
+    DebugStartArgs, DebugThreadArgs, DefinitionDto, DirListingDto, FileListDto, FileStampDto,
+    GitBranchDto, GitCommitArgs, GitDiffArgs, GitDiffDto, GitPathsArgs, GitStateDto, GitSwitchArgs,
+    HoverDto, LspDocumentArgs, LspPositionArgs, LspRangeArgs, LspResolveArgs, LspSourceActionArgs,
+    ModelInfoDto, OpenRecentArgs, ProblemDto, ReadFileDto, RecentWorkspaceDto,
+    ResolvedCompletionDto, ScopeDto, SearchTextArgs, SettingsDto, SettingsPatchDto, StackFrameDto,
     SubscribeEventsArgs, TerminalDto, TerminalEventDto, TerminalIdArgs, TerminalOpenArgs,
-    TerminalResizeArgs, TerminalWriteArgs, TextSearchDto, VariableDto, WorkspaceArgs, WorkspaceDto,
-    WorkspacePathArgs, WriteFileArgs,
+    TerminalResizeArgs, TerminalWriteArgs, TextEditDto, TextSearchDto, VariableDto, WorkspaceArgs,
+    WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::IpcError;
 use crate::events::EventHub;
@@ -97,6 +98,9 @@ ipc_commands! {
         lsp_completions(LspPositionArgs) -> CompletionsDto;
         lsp_hover(LspPositionArgs) -> Option<HoverDto>;
         lsp_definition(LspPositionArgs) -> Vec<DefinitionDto>;
+        lsp_resolve_completion(LspResolveArgs) -> ResolvedCompletionDto;
+        lsp_fixes(LspRangeArgs) -> Vec<CodeActionDto>;
+        lsp_source_action(LspSourceActionArgs) -> Option<Vec<TextEditDto>>;
         lsp_restart(WorkspaceArgs) -> ();
         debug_start(DebugStartArgs) -> ();
         debug_stop(WorkspaceArgs) -> ();
@@ -375,6 +379,36 @@ pub async fn lsp_definition(
     args: LspPositionArgs,
 ) -> Result<Vec<DefinitionDto>, IpcError> {
     run_blocking(&state, move |state| handlers::lsp_definition(state, args)).await
+}
+
+#[tauri::command]
+pub async fn lsp_resolve_completion(
+    state: Shared<'_>,
+    args: LspResolveArgs,
+) -> Result<ResolvedCompletionDto, IpcError> {
+    run_blocking(&state, move |state| {
+        handlers::lsp_resolve_completion(state, args)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn lsp_fixes(
+    state: Shared<'_>,
+    args: LspRangeArgs,
+) -> Result<Vec<CodeActionDto>, IpcError> {
+    run_blocking(&state, move |state| handlers::lsp_fixes(state, args)).await
+}
+
+#[tauri::command]
+pub async fn lsp_source_action(
+    state: Shared<'_>,
+    args: LspSourceActionArgs,
+) -> Result<Option<Vec<TextEditDto>>, IpcError> {
+    run_blocking(&state, move |state| {
+        handlers::lsp_source_action(state, args)
+    })
+    .await
 }
 
 #[tauri::command]

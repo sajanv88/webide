@@ -51,7 +51,8 @@ Types only (`export type *`):
 - `TerminalPort`: `open(cols, rows, onEvent)` → `OpenTerminal`, `write`, `resize`, `close`,
   for `@repo/terminal`.
 - `LanguagePort`: `open`, `change`, `close`, `problems`, `completions`, `hover`,
-  `definition`, `restart`, for `@repo/lsp`.
+  `definition`, `resolveCompletion`, `fixes`, `sourceAction`, `restart`, for
+  `@repo/lsp`.
 - `DebugPort`: `start(path, breakpoints)`, `stop`, `setBreakpoints`,
   `resume(threadId, step?)`, `pause`, `stack`, `scopes`, `variables`, `evaluate`,
   for `@repo/debug`.
