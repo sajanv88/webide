@@ -26,7 +26,7 @@ pub use commands::COMMAND_NAMES;
 pub use error::{IpcError, IpcErrorCode};
 pub use handlers::Services;
 
-use crate::dto::AppInfoDto;
+use crate::dto::{AppInfoDto, BackendEventDto, OsDto, WindowStateDto};
 use crate::events::EventHub;
 use crate::handlers::{Emit, IpcState};
 
@@ -93,6 +93,15 @@ where
             {
                 api.prevent_close();
             }
+            // The title bar draws the window's buttons: it follows maximizing.
+            if let WindowEvent::Resized(_) = event
+                && let Some(hub) = window.try_state::<Arc<EventHub>>()
+            {
+                let state = window_state(window);
+                if hub.window_state_changed(state) {
+                    hub.send(BackendEventDto::WindowState { state });
+                }
+            }
         })
         .setup(move |app| {
             let paths = AppPaths {
@@ -105,6 +114,7 @@ where
             let info = AppInfoDto {
                 name: app.package_info().name.clone(),
                 version: app.package_info().version.to_string(),
+                os: OsDto::current(),
             };
             let state = Arc::new(IpcState::new(services(&paths), info, emit));
             state.start_agents();
@@ -127,6 +137,14 @@ where
         }
     });
     Ok(())
+}
+
+/// Whether `window` is maximized or full screen (not when it can't tell).
+pub(crate) fn window_state<R: Runtime>(window: &tauri::Window<R>) -> WindowStateDto {
+    WindowStateDto {
+        maximized: window.is_maximized().unwrap_or(false),
+        fullscreen: window.is_fullscreen().unwrap_or(false),
+    }
 }
 
 /// The window title comes from `productName`, so the name lives in one place.

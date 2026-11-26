@@ -20,8 +20,8 @@ use crate::dto::{
     ModelInfoDto, OpenRecentArgs, ProblemDto, ReadFileDto, RecentWorkspaceDto,
     ResolvedCompletionDto, ScopeDto, SearchTextArgs, SettingsDto, SettingsPatchDto, StackFrameDto,
     SubscribeEventsArgs, TerminalDto, TerminalEventDto, TerminalIdArgs, TerminalOpenArgs,
-    TerminalResizeArgs, TerminalWriteArgs, TextEditDto, TextSearchDto, VariableDto, WorkspaceArgs,
-    WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
+    TerminalResizeArgs, TerminalWriteArgs, TextEditDto, TextSearchDto, VariableDto, WindowStateDto,
+    WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
 };
 use crate::error::IpcError;
 use crate::events::EventHub;
@@ -129,6 +129,11 @@ ipc_commands! {
         subscribe_events(SubscribeEventsArgs) -> ();
         set_close_guard(CloseGuardArgs) -> ();
         close_window() -> ();
+        window_minimize() -> ();
+        window_toggle_maximize() -> ();
+        window_drag() -> ();
+        window_close() -> ();
+        window_state() -> WindowStateDto;
         terminal_open(TerminalOpenArgs) -> TerminalDto;
     }
 }
@@ -588,4 +593,43 @@ pub fn close_window(window: WebviewWindow, hub: Hub<'_>) -> Result<(), IpcError>
     window
         .destroy()
         .map_err(|error| IpcError::internal(format!("couldn't close the window: {error}")))
+}
+
+/// The window's own buttons and title bar, which the page draws.
+fn window_failed(what: &str) -> impl FnOnce(tauri::Error) -> IpcError + '_ {
+    move |error| IpcError::internal(format!("couldn't {what} the window: {error}"))
+}
+
+#[tauri::command]
+pub fn window_minimize(window: WebviewWindow) -> Result<(), IpcError> {
+    window.minimize().map_err(window_failed("minimize"))
+}
+
+/// Maximizes the window, or restores it when it's maximized.
+#[tauri::command]
+pub fn window_toggle_maximize(window: WebviewWindow) -> Result<(), IpcError> {
+    if window.is_maximized().map_err(window_failed("maximize"))? {
+        window.unmaximize().map_err(window_failed("restore"))
+    } else {
+        window.maximize().map_err(window_failed("maximize"))
+    }
+}
+
+/// Moves the window with the pointer, from a press on the title bar.
+#[tauri::command]
+pub fn window_drag(window: WebviewWindow) -> Result<(), IpcError> {
+    window.start_dragging().map_err(window_failed("move"))
+}
+
+/// Asks the window to close, as its system button would: with unsaved
+/// changes, the page is asked first (`closeRequested`).
+#[tauri::command]
+pub fn window_close(window: WebviewWindow) -> Result<(), IpcError> {
+    window.close().map_err(window_failed("close"))
+}
+
+/// Whether the window is maximized or full screen now.
+#[tauri::command]
+pub fn window_state(window: WebviewWindow) -> Result<WindowStateDto, IpcError> {
+    Ok(crate::window_state(&window.as_ref().window()))
 }

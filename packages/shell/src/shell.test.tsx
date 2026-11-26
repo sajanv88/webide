@@ -203,4 +203,91 @@ describe("Shell", () => {
     unmount();
     expect(registry.get("view.toggleAside")).toBeUndefined();
   });
+
+  it("draws the window's frame: buttons, moving, and a border that shows focus", () => {
+    const registry = createCommandRegistry<AppCommandId>();
+    const frame = {
+      os: "windows" as const,
+      maximized: false,
+      fullscreen: false,
+      minimize: vi.fn(),
+      toggleMaximize: vi.fn(),
+      close: vi.fn(),
+      startDrag: vi.fn(),
+    };
+    const { container, rerender } = render(
+      <Shell title="Test IDE" registry={registry} menus={menus} main={<p>main</p>} frame={frame} />,
+    );
+    const shell = container.firstElementChild as HTMLElement;
+    expect(shell.classList.contains("app-shell--bordered")).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
+    fireEvent.click(screen.getByRole("button", { name: "Maximize" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(frame.minimize).toHaveBeenCalledOnce();
+    expect(frame.toggleMaximize).toHaveBeenCalledOnce();
+    expect(frame.close).toHaveBeenCalledOnce();
+
+    // The bar's empty parts move the window; a double click maximizes it.
+    const title = screen.getByRole("heading", { level: 1, name: "Test IDE" });
+    fireEvent.mouseDown(title, { button: 0, detail: 1 });
+    expect(frame.startDrag).toHaveBeenCalledOnce();
+    fireEvent.doubleClick(title, { button: 0 });
+    expect(frame.toggleMaximize).toHaveBeenCalledTimes(2);
+    // The menus and buttons don't.
+    fireEvent.mouseDown(screen.getByRole("menuitem", { name: "File" }), { button: 0, detail: 1 });
+    fireEvent.mouseDown(screen.getByRole("button", { name: "Close" }), { button: 0, detail: 1 });
+    expect(frame.startDrag).toHaveBeenCalledOnce();
+
+    act(() => {
+      window.dispatchEvent(new Event("blur"));
+    });
+    expect(shell.classList.contains("app-shell--inactive")).toBe(true);
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(shell.classList.contains("app-shell--inactive")).toBe(false);
+
+    // Maximized: no border, and the button restores.
+    rerender(
+      <Shell
+        title="Test IDE"
+        registry={registry}
+        menus={menus}
+        main={<p>main</p>}
+        frame={{ ...frame, maximized: true }}
+      />,
+    );
+    expect(shell.classList.contains("app-shell--bordered")).toBe(false);
+    expect(screen.getByRole("button", { name: "Restore" })).toBeTruthy();
+  });
+
+  it("leaves the buttons to macOS, which draws its own", () => {
+    const registry = createCommandRegistry<AppCommandId>();
+    const frame = {
+      os: "macos" as const,
+      maximized: false,
+      fullscreen: false,
+      minimize: vi.fn(),
+      toggleMaximize: vi.fn(),
+      close: vi.fn(),
+      startDrag: vi.fn(),
+    };
+    const { container } = render(
+      <Shell title="Test IDE" registry={registry} menus={menus} main={<p>main</p>} frame={frame} />,
+    );
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    expect(
+      (container.firstElementChild as HTMLElement).classList.contains("app-shell--macos"),
+    ).toBe(true);
+  });
+
+  it("draws no frame without a window", () => {
+    const registry = createCommandRegistry<AppCommandId>();
+    const { container } = render(
+      <Shell title="Test IDE" registry={registry} menus={menus} main={<p>main</p>} />,
+    );
+    expect((container.firstElementChild as HTMLElement).className).toBe("app-shell");
+    expect(screen.queryByRole("button", { name: "Minimize" })).toBeNull();
+  });
 });

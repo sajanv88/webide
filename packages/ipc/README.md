@@ -31,6 +31,9 @@ The only package that imports `@tauri-apps/api`. It turns the commands in
   window closing, the debugger, AI agents' calls, the assistant) over a Tauri `Channel`; resolves to the function that stops.
 - `setCloseGuard(unsaved)`, `closeWindow()`: the window asks before closing
   while there are unsaved changes.
+- `minimizeWindow()`, `toggleMaximizeWindow()`, `dragWindow()`,
+  `requestCloseWindow()` (asks first, as the system button does) and
+  `windowState()`: the title bar the page draws; `windowState` events follow it.
 - `IpcResult<T>`: `{ ok: true, value }` or `{ ok: false, error: IpcError }`. Calls
   never throw for expected failures.
 - `toIpcError(unknown)`: a rejection as an `IpcError`. Anything that isn't one,

@@ -1,0 +1,31 @@
+// The window's buttons, as wide as the system's and the bar's full height.
+.window-controls {
+  display: flex;
+  align-self: stretch;
+
+  &__button {
+    display: grid;
+    place-items: center;
+    inline-size: calc(var(--spacing) * 11.5);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--color-surface-foreground);
+    cursor: default;
+
+    &:hover {
+      background-color: var(--color-muted);
+    }
+  }
+
+  &__button--close:hover {
+    background-color: var(--color-danger);
+    color: var(--color-danger-foreground);
+  }
+
+  &__glyph {
+    fill: none;
+    stroke: currentcolor;
+    stroke-width: 1;
+  }
+}

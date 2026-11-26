@@ -821,6 +821,7 @@ fn fixture() -> Fixture {
     let info = AppInfoDto {
         name: "test".to_owned(),
         version: "0.0.0".to_owned(),
+        os: crate::dto::OsDto::current(),
     };
     let emitted = Arc::new(Mutex::new(Vec::new()));
     let sent = Arc::clone(&emitted);

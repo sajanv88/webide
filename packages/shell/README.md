@@ -15,7 +15,14 @@ The window frame, after nuvui's `app-shell` block:
 - the work area, and under it a resizable, collapsible panel (the terminals),
   hidden until shown, its size remembered; and after it a secondary side
   bar (the assistant), the same way, with a button in the top bar;
-- a status bar.
+- a status bar;
+- with a `frame`, the window's own frame, the same on every system: the top
+  bar is the title bar (the title in the middle, its empty parts move the
+  window, a double click maximizes or restores it), with minimize,
+  maximize/restore and close at the end on Windows and Linux (on macOS the
+  system's buttons stay, at the start). A 1px line around the window is the
+  accent colour while it has focus and the border colour without, and goes
+  away while it's maximized or full screen. The title fades without focus.
 
 It fills named slots and doesn't know what's in them.
 
@@ -41,7 +48,10 @@ either while focus is in it gives focus back to where it was before.
     the first shown first; without any, the work area fills the window;
   - `main`, `panel?` (`{ title, content }`: a region named `title`),
     `aside?` (`{ title, icon, content }`: a complementary landmark named
-    `title`), `statusBar?`.
+    `title`), `statusBar?`;
+  - `frame?`: `WindowFrame` (`os`, `maximized`, `fullscreen`, and
+    `minimize`, `toggleMaximize`, `close`, `startDrag`).
+- `WindowFrame`.
 - `SidebarView`.
 - `MenuSpec`, `MenuShortcut`, `MenuItemSpec`: `command` (with an optional `label` and `args`),
   `separator`, and `submenu` (shown disabled when empty).
