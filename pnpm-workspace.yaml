@@ -26,6 +26,9 @@ catalog:
   "@types/react": 19.3.0
   "@types/react-dom": 19.3.0
   "@vitejs/plugin-react": 6.3.0
+  # Vue's language server, in its own TypeScript mode (`vue.hybridMode`
+  # false), which 3.x no longer has: one server for all of a .vue file.
+  "@vue/language-server": 2.2.12
   # The terminal's renderer (no nuvui terminal exists): @repo/terminal only.
   "@xterm/xterm": 6.0.0
   esbuild: 0.28.2
@@ -36,11 +39,18 @@ catalog:
   sass: 1.108.2
   stylelint: 18.0.0
   stylelint-config-standard-scss: 18.0.0
+  svelte-language-server: 0.18.6
   typescript: 7.0.2
   vite: 8.3.8
   vitest: 5.1.1
   vscode-langservers-extracted: 4.10.0
   yaml-language-server: 2.0.0
+
+# volar-service-emmet 0.0.64 (Vue's language service) names a git branch of
+# @emmetio/css-parser; 0.0.62 used the registry's ^0.4.0. The registry's
+# release, pinned, instead of an unpinned git branch.
+overrides:
+  "@emmetio/css-parser": 0.4.1
 
 # Install scripts are denied unless reviewed and listed here.
 allowBuilds:

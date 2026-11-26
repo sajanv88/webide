@@ -144,6 +144,32 @@ describe("createLanguageClient", () => {
     client.dispose();
   });
 
+  it("reads the open files' problems again when a server says they changed", async () => {
+    const { port } = fakePort();
+    const problems = vi.spyOn(port, "problems");
+    const bus = createEventBus<AppEvents>();
+    const client = createLanguageClient(port, bus);
+    bus.emit("document.opened", { path: "src/a.ts", text: "x" });
+    await vi.runAllTimersAsync();
+    const asked = () => problems.mock.calls.length;
+    const before = asked();
+    bus.emit("language.problemsChanged", {});
+    bus.emit("language.problemsChanged", {});
+    await vi.runAllTimersAsync();
+    // Once, for the open file.
+    expect(asked()).toBe(before + 1);
+    client.dispose();
+  });
+
+  it("hands Vue and Svelte components to the backend too", () => {
+    const { port } = fakePort();
+    const client = createLanguageClient(port, createEventBus<AppEvents>());
+    expect(client.handles("src/App.vue")).toBe(true);
+    expect(client.handles("src/routes/+page.svelte")).toBe(true);
+    expect(client.handles("notes.md")).toBe(false);
+    client.dispose();
+  });
+
   it("sends pending text before asking for completions, and goes to definitions", async () => {
     const { port, calls } = fakePort();
     const bus = createEventBus<AppEvents>();

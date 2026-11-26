@@ -171,6 +171,11 @@ pub enum LanguageStatus {
     /// It would run the folder's own code, and the person hasn't trusted
     /// the folder: it stays off.
     Restricted,
+    /// Not a state: the problems it found may have changed by themselves
+    /// (it pushed new ones, or asked to be asked again, as servers do once
+    /// their project has loaded). The open files' problems are worth
+    /// reading again.
+    ProblemsChanged,
 }
 
 /// Where the language servers' statuses go, from their own threads: the

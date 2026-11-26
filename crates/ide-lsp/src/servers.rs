@@ -210,6 +210,27 @@ pub fn html_language(path: &RelPath) -> Option<&'static str> {
     matches!(extension(path)?.as_str(), "html" | "htm").then_some("html")
 }
 
+pub fn vue_language(path: &RelPath) -> Option<&'static str> {
+    (extension(path)?.as_str() == "vue").then_some("vue")
+}
+
+pub fn svelte_language(path: &RelPath) -> Option<&'static str> {
+    (extension(path)?.as_str() == "svelte").then_some("svelte")
+}
+
+/// The folder of the TypeScript bundled beside a server's `script`
+/// (`node_modules/typescript/lib`), as a server's `tsdk` names it.
+fn bundled_typescript(script: &Path) -> String {
+    script
+        .parent()
+        .unwrap_or(script)
+        .join("node_modules")
+        .join("typescript")
+        .join("lib")
+        .to_string_lossy()
+        .into_owned()
+}
+
 /// The files ESLint checks: scripts, and Vue and Svelte components.
 pub fn eslint_language(path: &RelPath) -> Option<&'static str> {
     script_language(path).or_else(|| match extension(path)?.as_str() {
@@ -248,14 +269,15 @@ fn bundled<'a>(dir: &Path, list: &'a [(&'a str, &'a [&'a str])]) -> Vec<(&'a str
 impl ServerSpec {
     /// Angular's templates (`.html`) in an Angular project: Angular's own
     /// server (`script`), on Node. It loads TypeScript and
-    /// `@angular/language-service` from the copies bundled beside it
-    /// (`angular/node_modules`), never the project's: opening a template
-    /// runs nothing from the workspace, which it only reads. Listed before
-    /// HTML, which then has the `.html` files of every other project.
+    /// `@angular/language-service` from the copies bundled beside it (in
+    /// `node_modules` there), never the project's: opening a template runs
+    /// nothing from the workspace, which it only reads. Listed before HTML,
+    /// which then has the `.html` files of every other project.
     pub fn angular(script: PathBuf) -> Self {
         let script = plain_path(script);
         let bundled = script
-            .with_file_name("angular")
+            .parent()
+            .unwrap_or(&script)
             .to_string_lossy()
             .into_owned();
         Self {
@@ -353,6 +375,62 @@ impl ServerSpec {
             notifications: Vec::new(),
             applies: None,
             needs_trust: false,
+            role: Role::Primary,
+            switch: None,
+        }
+    }
+
+    /// Vue's single-file components (`.vue`): Vue's server (`script`, 2.x)
+    /// on Node, in its own TypeScript mode (`hybridMode` off), so it answers
+    /// for the template, the script and the styles. Its TypeScript is the
+    /// copy bundled beside it (`node_modules/typescript`). It reads the
+    /// project's `tsconfig.json`, whose `vueCompilerOptions` can name plugins
+    /// it loads, so it needs the folder trusted.
+    pub fn vue(script: PathBuf) -> Self {
+        let script = plain_path(script);
+        let tsdk = bundled_typescript(&script);
+        Self {
+            name: "Vue",
+            program: Program::Node(script),
+            args: vec!["--stdio".to_owned()],
+            language: vue_language,
+            initialization_options: json!({
+                "typescript": { "tsdk": tsdk },
+                "vue": { "hybridMode": false },
+            }),
+            settings: Value::Null,
+            schemas: None,
+            notifications: Vec::new(),
+            applies: None,
+            needs_trust: true,
+            role: Role::Primary,
+            switch: None,
+        }
+    }
+
+    /// Svelte components (`.svelte`): Svelte's server (`script`) on Node. It
+    /// loads the project's own `svelte` compiler and runs its
+    /// `svelte.config.js`, so it needs the folder trusted. Its TypeScript is
+    /// the copy bundled beside it.
+    pub fn svelte(script: PathBuf) -> Self {
+        let script = plain_path(script);
+        Self {
+            name: "Svelte",
+            program: Program::Node(script),
+            args: vec!["--stdio".to_owned()],
+            language: svelte_language,
+            initialization_options: json!({
+                "configuration": {
+                    "svelte": { "plugin": { "svelte": { "format": { "enable": false } } } },
+                },
+            }),
+            settings: json!({
+                "svelte": { "plugin": { "svelte": { "format": { "enable": false } } } },
+            }),
+            schemas: None,
+            notifications: Vec::new(),
+            applies: None,
+            needs_trust: true,
             role: Role::Primary,
             switch: None,
         }

@@ -319,10 +319,15 @@ impl IpcState {
         let id = workspace_id.to_owned();
         let status: ide_core::language::LanguageSink =
             Arc::new(move |server: &str, status: LanguageStatus| {
-                emit(BackendEventDto::LanguageStatus {
-                    workspace_id: id.clone(),
-                    server: server.to_owned(),
-                    status: LanguageStatusDto::from(status),
+                emit(match LanguageStatusDto::from_status(status) {
+                    Some(status) => BackendEventDto::LanguageStatus {
+                        workspace_id: id.clone(),
+                        server: server.to_owned(),
+                        status,
+                    },
+                    None => BackendEventDto::LanguageProblemsChanged {
+                        workspace_id: id.clone(),
+                    },
                 });
             });
         let options = StartOptions {

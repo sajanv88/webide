@@ -813,3 +813,89 @@ fn eslint_beside_typescript_adds_its_problems_once_turned_on_and_trusted() {
     );
     assert!(marker.exists());
 }
+
+/// Waits a little for `server`'s problems in `file` to say `what`.
+fn problems_saying(
+    server: &dyn ide_core::language::LanguageServer,
+    file: &RelPath,
+    what: &str,
+) -> Vec<ide_core::language::Problem> {
+    let mut found = Vec::new();
+    for _ in 0..60 {
+        found = server.problems(file).unwrap_or_default();
+        if found.iter().any(|problem| problem.message.contains(what)) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    found
+}
+
+#[test]
+fn vue_and_svelte_components_get_their_servers_in_a_trusted_folder() {
+    let (Some(node), Some(staged)) = (node_on_path(), staged_servers()) else {
+        eprintln!("skipping: no node, or the language servers aren't staged (run pnpm build)");
+        return;
+    };
+    let dir = tempfile::Builder::new().prefix("webide").tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("tsconfig.json"),
+        r#"{ "compilerOptions": { "strict": true, "noEmit": true } }"#,
+    )
+    .unwrap();
+    let root = WorkspaceRoot::from_canonical(std::fs::canonicalize(dir.path()).unwrap()).unwrap();
+    let statuses = Arc::new(Mutex::new(Vec::new()));
+    let seen = Arc::clone(&statuses);
+    let server = Servers::new(
+        vec![
+            ServerSpec::vue(staged.join("vue-server.cjs")),
+            ServerSpec::svelte(staged.join("svelte-server.cjs")),
+        ],
+        Arc::new(move || Some(node.clone())),
+    )
+    .start(
+        &root,
+        ide_core::language::StartOptions {
+            trusted: true,
+            eslint: false,
+        },
+        Arc::new(move |name: &str, status| seen.lock().unwrap().push(format!("{name} {status:?}"))),
+    )
+    .unwrap();
+
+    // Vue: TypeScript in the script block, checked.
+    let vue = RelPath::parse("App.vue").unwrap();
+    server
+        .open(
+            &vue,
+            "<script setup lang=\"ts\">\nconst count: number = \"one\";\n</script>\n\n<template>\n  <p>{{ count }}</p>\n</template>\n",
+        )
+        .unwrap();
+    let found = problems_saying(server.as_ref(), &vue, "not assignable");
+    assert!(
+        found
+            .iter()
+            .any(|problem| problem.message.contains("not assignable")
+                && problem.range.start.line == 1),
+        "{found:?} {:?}",
+        statuses.lock().unwrap()
+    );
+
+    // Svelte: TypeScript in the script, checked.
+    let svelte = RelPath::parse("App.svelte").unwrap();
+    server
+        .open(
+            &svelte,
+            "<script lang=\"ts\">\n  let count: number = \"one\";\n</script>\n\n<p>{count}</p>\n",
+        )
+        .unwrap();
+    let found = problems_saying(server.as_ref(), &svelte, "not assignable");
+    assert!(
+        found
+            .iter()
+            .any(|problem| problem.message.contains("not assignable")
+                && problem.range.start.line == 1),
+        "{found:?} {:?}",
+        statuses.lock().unwrap()
+    );
+}

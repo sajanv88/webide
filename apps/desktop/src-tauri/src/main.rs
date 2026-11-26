@@ -84,6 +84,9 @@ fn main() -> ExitCode {
                         // Before HTML: in an Angular project, its templates are Angular's.
                         ServerSpec::angular(servers.join("angular-server.cjs")),
                         ServerSpec::html(servers.join("html-server.cjs")),
+                        // In trusted folders: each loads the project's own code.
+                        ServerSpec::vue(servers.join("vue-server.cjs")),
+                        ServerSpec::svelte(servers.join("svelte-server.cjs")),
                         ServerSpec::yaml(servers.join("yaml-server.mjs"), schemas),
                         // Beside the others, when turned on, in trusted folders.
                         ServerSpec::eslint(servers.join("eslint-server.cjs")),

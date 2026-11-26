@@ -14,6 +14,8 @@ Language features over LSP, from servers the app ships:
 | Angular    | `.html` templates, in an Angular project (`angular.json`, or `@angular/core` in `package.json`) | Angular's server, on Node, with its own TypeScript |
 | HTML       | `.html`, `.htm` (with the CSS and JavaScript in them), in any other project                     | VS Code's HTML server, on Node                     |
 | YAML       | `.yaml`, `.yml`                                                                                 | Red Hat's YAML server, on Node                     |
+| Vue        | `.vue`, in a trusted folder                                                                     | Vue's server 2.2, on Node, with its own TypeScript |
+| Svelte     | `.svelte`, in a trusted folder                                                                  | Svelte's server, on Node, with its own TypeScript  |
 | ESLint     | scripts, `.vue`, `.svelte`, beside their own server: when turned on, in a trusted folder        | VS Code's ESLint server, on Node                   |
 
 - **The programs** are the app's own: `tsc` from its `typescript`
@@ -42,6 +44,22 @@ Language features over LSP, from servers the app ships:
   trusted (`StartOptions { trusted, .. }`), it doesn't start: the first file
   it would have had reports `Restricted` for it, once, and the file goes to
   the next server that handles it, if any.
+- **Vue** is Vue's language server 2.2 in its own TypeScript mode
+  (`vue.hybridMode` off), one server for a whole `.vue` file: template,
+  script and styles. Version 3 dropped that mode and needs TypeScript's own
+  server beside it, with a plugin, and its requests passed between them.
+  It reads the project's `tsconfig.json`, whose `vueCompilerOptions` can
+  name plugins it loads, so it `needs_trust`.
+- **Svelte** is Svelte's language server. It loads the project's own
+  `svelte` compiler and runs `svelte.config.js`, so it `needs_trust`. In a
+  folder without `svelte`, it uses the Svelte 4 compiler and types bundled
+  beside it.
+- **Their TypeScript** (and Angular's) is one copy of TypeScript 6 bundled
+  in `node_modules` beside the servers. It has the JavaScript API these
+  servers need, which the repository's own TypeScript 7 doesn't. Vue's
+  finds it by path (`typescript.tsdk`), the others as a package.
+- **Solid** and other JSX libraries are TypeScript's (`.tsx`, `.jsx`, with
+  the project's `jsxImportSource`).
 - **Linters:** a spec's `role` is `Primary` (the first one that handles a
   file answers everything about it) or `Linter` (beside it: told about the
   file too, its problems and quick fixes added to the primary's). A linter
@@ -123,11 +141,11 @@ Language features over LSP, from servers the app ships:
 - `Servers::new(specs, find_node)` (implements `ide_core::LanguageServers`),
   with `ServerSpec::typescript(program)`, `json(script, schemas)`,
   `css(script)`, `angular(script)`, `html(script)`, `yaml(script, schemas)`,
-  `eslint(script)`; `Program` (`Native`, `Node`), `Role` (`Primary`,
+  `vue(script)`, `svelte(script)`, `eslint(script)`; `Program` (`Native`, `Node`), `Role` (`Primary`,
   `Linter`), `FindNode`, `LanguageId`, `WORKSPACE_ARG`,
   `WORKSPACE_URI_SETTING`, `WORKSPACE_NAME_SETTING`, `angular_workspace`, and
   `json_language`, `css_language`, `html_language`, `yaml_language`,
-  `eslint_language`.
+  `vue_language`, `svelte_language`, `eslint_language`.
 - `RpcClient`, `RpcError`, `OnRequest`, `read_message`, `write_message`;
   `to_uri`, `from_uri`, `relative_to`; `MAX_COMPLETIONS`.
 
