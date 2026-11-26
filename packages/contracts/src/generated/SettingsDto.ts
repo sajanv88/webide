@@ -10,4 +10,8 @@ readOnlyAboveBytes: number,
 /**
  * Files larger than this don't open.
  */
-refuseAboveBytes: number, editor: EditorSettingsDto, };
+refuseAboveBytes: number, editor: EditorSettingsDto, 
+/**
+ * ESLint checks JavaScript and TypeScript files, in trusted folders.
+ */
+eslint: boolean, };

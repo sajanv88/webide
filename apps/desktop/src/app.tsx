@@ -336,6 +336,7 @@ export function App() {
         if (current.ok) setWorkspace(current.value);
         if (nextRecent.ok) setRecent(nextRecent.value);
         if (settings.ok) {
+          eslintOn.current = settings.value.eslint;
           applyTheme(settings.value.theme);
           setDisplay(settings.value.editor);
         }
@@ -524,6 +525,18 @@ export function App() {
     [languagePort],
   );
   useEffect(() => () => language?.dispose(), [language]);
+  // ESLint turned on or off: the backend stopped the servers; they start
+  // again, with it or without it, with the open files.
+  const eslintOn = useRef<boolean | null>(null);
+  useEffect(
+    () =>
+      bus.on("settings.changed", (settings) => {
+        const before = eslintOn.current;
+        eslintOn.current = settings.eslint;
+        if (before !== null && before !== settings.eslint) void language?.restart();
+      }),
+    [language],
+  );
   // The problems of each open file, for its editor.
   const [problems, setProblems] = useState<ReadonlyMap<string, readonly EditorProblem[]>>(
     new Map(),

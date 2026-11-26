@@ -16,6 +16,9 @@ Ctrl+, (Cmd+, on macOS). A nuvui `Dialog` with a form:
   (a switch, and the column, 10 to 500), show spaces and tabs (never, in
   selected text, always), and how the cursor's line is marked (outline, tint,
   both, nothing). They apply as soon as the settings are saved.
+- **Languages** (a fieldset): ESLint (a switch, off by default). It checks
+  JavaScript, TypeScript, Vue and Svelte files with the project's own ESLint,
+  in trusted folders. Saving it starts the language servers again.
 
 It reads the settings each time it opens and saves them through the
 `SettingsPort` the app gives it. The backend checks them again and keeps

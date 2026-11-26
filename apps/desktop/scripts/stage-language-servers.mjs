@@ -83,6 +83,11 @@ const SERVERS = [
     out: "html-server.cjs",
     entry: join(extracted, "lib/html-language-server/node/htmlServerMain.js"),
   },
+  // ESLint's: it loads the project's own eslint (in trusted folders only).
+  {
+    out: "eslint-server.cjs",
+    entry: join(extracted, "lib/eslint-language-server/eslintServer.js"),
+  },
   // An ES module: it uses import.meta, so `require` is made for what it bundles.
   {
     out: "yaml-server.mjs",

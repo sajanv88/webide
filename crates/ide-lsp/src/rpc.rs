@@ -329,7 +329,11 @@ pub fn answer_server_request(method: &str, params: Option<&Value>, settings: &Va
 }
 
 /// A setting by its dotted section: `yaml.schemas` in `{ "yaml": { "schemas": … } }`.
+/// The empty section is all of them (ESLint asks so).
 fn setting<'a>(settings: &'a Value, section: &str) -> Option<&'a Value> {
+    if section.is_empty() {
+        return Some(settings);
+    }
     section
         .split('.')
         .try_fold(settings, |value, key| value.get(key))

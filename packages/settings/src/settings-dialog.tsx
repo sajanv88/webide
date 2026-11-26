@@ -182,6 +182,7 @@ function ReadyForm({ port, initial, onSaved }: FormProps & { readonly initial: S
   const [lineHighlight, setLineHighlight] = useState<LineHighlightDto>(
     initial.editor.lineHighlight,
   );
+  const [eslint, setEslint] = useState(initial.eslint);
   const [errors, setErrors] = useState<{ readOnly?: string; refuse?: string; ruler?: string }>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -221,6 +222,7 @@ function ReadyForm({ port, initial, onSaved }: FormProps & { readonly initial: S
         whitespace,
         lineHighlight,
       },
+      eslint,
     });
     setSaving(false);
     if (!result.ok) {
@@ -379,6 +381,24 @@ function ReadyForm({ port, initial, onSaved }: FormProps & { readonly initial: S
             </RadioGroup>
           </FieldControl>
         </Field>
+      </Fieldset>
+
+      <Fieldset className="settings-dialog__group">
+        <FieldsetLegend>Languages</FieldsetLegend>
+        <div className="settings-dialog__switch">
+          <Switch
+            id="settings-eslint"
+            checked={eslint}
+            onCheckedChange={setEslint}
+            aria-describedby="settings-eslint-about"
+          />
+          <label htmlFor="settings-eslint">ESLint</label>
+        </div>
+        <p id="settings-eslint-about" className="settings-dialog__about">
+          Checks JavaScript, TypeScript, Vue and Svelte files with the project's own ESLint and its
+          configuration, in folders whose authors you trust. A project without ESLint gets nothing
+          from it.
+        </p>
       </Fieldset>
 
       <DialogFooter>

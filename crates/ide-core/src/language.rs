@@ -216,13 +216,22 @@ pub trait LanguageServers: Send + Sync {
     /// Whether a server here handles this file (by its extension).
     fn handles(&self, path: &RelPath) -> bool;
     /// Starts one for the workspace at `root`; its status goes to `status`.
-    /// Unless `trusted`, a server that would run the folder's own code stays off.
     fn start(
         &self,
         root: &WorkspaceRoot,
-        trusted: bool,
+        options: StartOptions,
         status: LanguageSink,
     ) -> Result<Box<dyn LanguageServer>, IdeError>;
+}
+
+/// What a workspace's language servers start with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct StartOptions {
+    /// The person trusts the folder's authors. Until then, a server that
+    /// would run the folder's own code stays off.
+    pub trusted: bool,
+    /// ESLint is turned on in the settings.
+    pub eslint: bool,
 }
 
 /// The LSP language id of a JavaScript or TypeScript file, by its extension.
