@@ -1,0 +1,5 @@
+// In the status bar while the folder is in Restricted Mode.
+.restricted-status {
+  gap: calc(var(--spacing) * 1);
+  color: var(--color-warning);
+}

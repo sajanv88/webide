@@ -33,6 +33,9 @@ pub enum IdeError {
     /// A value the operation can't take (a terminal size, too many terminals…).
     #[error("{0}")]
     InvalidArgument(String),
+    /// The folder isn't trusted, and this would run its own code.
+    #[error("Restricted Mode: trust this folder's authors to use this")]
+    Restricted,
     /// Git refused or failed; git's own words.
     #[error("{0}")]
     Git(String),

@@ -31,8 +31,10 @@ binds to the open workspace.
 - `LanguageStatusItem`, for the status bar: each server by name (TypeScript,
   JSON, YAML…) as it starts (a spinner) and is ready, with the open files'
   errors and warnings (all said in words). One that failed is a button that
-  restarts them; one that needs Node.js is a "Node.js needed" button. It
-  registers `language.restart` ("Restart the Language Servers").
+  restarts them; one that needs Node.js is a "Node.js needed" button; one
+  that's off until the folder is trusted (`restricted`) is a button to
+  `workspace.manageTrust`. It registers `language.restart` ("Restart the
+  Language Servers").
 - `NodeSetupDialog`: asks for Node.js the first time a server needs it (and
   from that button). On Windows and macOS, "Open the terminal" types the
   system's installer command into a new terminal (`terminal.type`) for the

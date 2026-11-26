@@ -7,6 +7,8 @@
 //!   ones take their defaults. A file that can't be read as valid settings is
 //!   moved aside to `settings.invalid.json` and defaults are used, so a typo
 //!   never stops the app from starting and is never silently overwritten.
+//! - `trusted-folders.json`: the folders the person trusts. One that can't be
+//!   read trusts nothing (Restricted Mode everywhere), the safe way to fail.
 
 mod files;
 
@@ -18,11 +20,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use ide_core::workspace::MAX_RECENT;
 use ide_core::{IdeError, RecentWorkspace, Settings, SettingsPatch, WorkspaceRoot, WorkspaceStore};
 
-use crate::files::{RecentFile, SettingsFile};
+use crate::files::{RecentFile, SettingsFile, TrustFile};
 
 const RECENT_FILE: &str = "recent-workspaces.json";
 const SETTINGS_FILE: &str = "settings.json";
 const INVALID_SETTINGS_FILE: &str = "settings.invalid.json";
+const TRUST_FILE: &str = "trusted-folders.json";
 
 /// Milliseconds since the Unix epoch.
 pub type Clock = fn() -> u64;
@@ -61,6 +64,13 @@ impl JsonWorkspaceStore {
         match files::read_json::<RecentFile>(&self.file(RECENT_FILE)) {
             Ok(Some(file)) => file.into_domain(),
             // Missing, or unreadable: the recent list isn't worth failing over.
+            Ok(None) | Err(_) => Vec::new(),
+        }
+    }
+
+    fn load_trusted(&self) -> Vec<PathBuf> {
+        match files::read_json::<TrustFile>(&self.file(TRUST_FILE)) {
+            Ok(Some(file)) => file.into_domain(),
             Ok(None) | Err(_) => Vec::new(),
         }
     }
@@ -139,6 +149,35 @@ impl WorkspaceStore for JsonWorkspaceStore {
             &SettingsFile::from_domain(&next),
         )?;
         Ok(next)
+    }
+
+    fn is_trusted(&self, root: &WorkspaceRoot) -> Result<bool, IdeError> {
+        let _guard = self.locked();
+        Ok(self
+            .load_trusted()
+            .iter()
+            .any(|folder| root.path().starts_with(folder)))
+    }
+
+    fn set_trusted(&self, folder: &Path, trusted: bool) -> Result<(), IdeError> {
+        let folder = fs::canonicalize(folder)?;
+        let _guard = self.locked();
+        let mut folders = self.load_trusted();
+        if trusted {
+            if folders.iter().any(|kept| folder.starts_with(kept)) {
+                return Ok(());
+            }
+            // The folders in it are covered now.
+            folders.retain(|kept| !kept.starts_with(&folder));
+            folders.push(folder);
+        } else {
+            folders.retain(|kept| !kept.starts_with(&folder) && !folder.starts_with(kept));
+        }
+        files::write_json(
+            &self.config_dir,
+            TRUST_FILE,
+            &TrustFile::from_domain(&folders),
+        )
     }
 }
 

@@ -6,7 +6,7 @@
 
 Implements `ide_core::WorkspaceStore`: opens a workspace folder (canonicalise,
 check it's a folder, record it), keeps the recent list (most recent first,
-deduplicated, at most 10), and persists settings. The data lives in two
+deduplicated, at most 10), and persists settings. The data lives in
 versioned JSON files in the config folder the composition root passes in
 (Tauri's app config dir):
 
@@ -15,8 +15,13 @@ versioned JSON files in the config folder the composition root passes in
   ignored and missing ones take defaults. A
   file that isn't valid settings is moved to `settings.invalid.json`, and the
   defaults are used.
+- `trusted-folders.json`: the folders whose authors the person trusts
+  (canonical). A folder is trusted when it or a folder it's in is listed;
+  trusting a parent drops the entries inside it, and not trusting a folder
+  drops it, the entries inside it, and any parent that covered it. A file
+  that can't be read trusts nothing.
 
-Both are written atomically. The on-disk format is separate from the domain
+All are written atomically. The on-disk format is separate from the domain
 types, so either can change.
 
 ## Public API

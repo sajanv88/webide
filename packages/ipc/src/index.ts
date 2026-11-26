@@ -50,6 +50,7 @@ import type {
   WorkspaceArgs,
   WorkspaceDto,
   WorkspacePathArgs,
+  WorkspaceTrustArgs,
   WriteFileArgs,
 } from "@repo/contracts";
 import { call, type IpcResult } from "./call";
@@ -78,6 +79,10 @@ export const openRecentWorkspace = (args: OpenRecentArgs): Promise<IpcResult<Wor
 
 export const recentWorkspaces = (): Promise<IpcResult<RecentWorkspaceDto[]>> =>
   call("recent_workspaces");
+
+/** Trusts the open folder (or, with `parent`, the folder it's in), or stops trusting it. */
+export const workspaceTrust = (args: WorkspaceTrustArgs): Promise<IpcResult<WorkspaceDto>> =>
+  call("workspace_trust", args);
 
 /** The file `webide <file>` named as the app started, once; `null` after that. */
 export const takeLaunchFile = (): Promise<IpcResult<string | null>> => call("take_launch_file");

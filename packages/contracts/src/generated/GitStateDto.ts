@@ -5,7 +5,7 @@ import type { GitHeadDto } from "./GitHeadDto";
 /**
  * Whether the workspace can use git, and if so its branch and changes.
  */
-export type GitStateDto = { "kind": "unavailable" } | { "kind": "notARepository" } | { "kind": "repository", head: GitHeadDto, 
+export type GitStateDto = { "kind": "unavailable" } | { "kind": "restricted" } | { "kind": "notARepository" } | { "kind": "repository", head: GitHeadDto, 
 /**
  * In path order.
  */

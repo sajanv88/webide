@@ -168,6 +168,9 @@ pub enum LanguageStatus {
     NeedsNode,
     /// It couldn't start, or stopped; why.
     Failed(String),
+    /// It would run the folder's own code, and the person hasn't trusted
+    /// the folder: it stays off.
+    Restricted,
 }
 
 /// Where the language servers' statuses go, from their own threads: the
@@ -213,9 +216,11 @@ pub trait LanguageServers: Send + Sync {
     /// Whether a server here handles this file (by its extension).
     fn handles(&self, path: &RelPath) -> bool;
     /// Starts one for the workspace at `root`; its status goes to `status`.
+    /// Unless `trusted`, a server that would run the folder's own code stays off.
     fn start(
         &self,
         root: &WorkspaceRoot,
+        trusted: bool,
         status: LanguageSink,
     ) -> Result<Box<dyn LanguageServer>, IdeError>;
 }

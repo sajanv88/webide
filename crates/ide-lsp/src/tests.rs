@@ -94,6 +94,7 @@ fn the_typescript_server_answers_about_a_real_project() {
     let server = servers
         .start(
             &root,
+            true,
             Arc::new(move |name: &str, status| {
                 assert_eq!(name, "TypeScript");
                 seen.lock().unwrap().push(status);
@@ -195,6 +196,7 @@ fn a_missing_server_says_so() {
     let server = servers
         .start(
             &root,
+            true,
             Arc::new(move |_: &str, status| seen.lock().unwrap().push(status)),
         )
         .unwrap();
@@ -226,6 +228,7 @@ fn a_server_on_node_asks_for_node_when_there_is_none() {
     let server = servers
         .start(
             &root,
+            true,
             Arc::new(move |name: &str, status| {
                 seen.lock().unwrap().push((name.to_owned(), status))
             }),
@@ -293,7 +296,7 @@ fn imports_come_with_completions_fixes_and_organizing() {
     std::fs::write(dir.path().join("a.ts"), "").unwrap();
     let root = WorkspaceRoot::from_canonical(std::fs::canonicalize(dir.path()).unwrap()).unwrap();
     let server = typescript(program)
-        .start(&root, Arc::new(|_: &str, _| {}))
+        .start(&root, true, Arc::new(|_: &str, _| {}))
         .unwrap();
     let a = RelPath::parse("a.ts").unwrap();
     let at = |line, character| TextPosition { line, character };
@@ -406,6 +409,7 @@ fn the_bundled_servers_check_json_yaml_and_css() {
     let server = servers
         .start(
             &root,
+            true,
             Arc::new(move |name: &str, status| {
                 seen.lock().unwrap().push(format!("{name} {status:?}"))
             }),
@@ -529,6 +533,7 @@ fn angular_takes_an_angular_projects_templates_without_running_its_code() {
         let server = servers
             .start(
                 &root,
+                true,
                 Arc::new(move |name: &str, status| {
                     seen.lock().unwrap().push(format!("{name} {status:?}"));
                 }),
@@ -626,4 +631,46 @@ fn an_angular_project_is_known_by_its_config_or_its_dependencies() {
         "package.json",
         r#"{ "dependencies": { "react": "19" } }"#
     )]));
+}
+
+#[test]
+fn a_server_that_runs_the_folders_code_waits_for_trust() {
+    let dir = tempfile::tempdir().unwrap();
+    let script = dir.path().join("json-server.cjs");
+    std::fs::write(&script, "").unwrap();
+    let root = WorkspaceRoot::from_canonical(std::fs::canonicalize(dir.path()).unwrap()).unwrap();
+    let spec = || ServerSpec {
+        needs_trust: true,
+        ..ServerSpec::json(script.clone(), dir.path().join("schemas"))
+    };
+    let package = RelPath::parse("package.json").unwrap();
+    let statuses = Arc::new(Mutex::new(Vec::new()));
+    let start = |trusted: bool| {
+        let seen = Arc::clone(&statuses);
+        Servers::new(vec![spec()], Arc::new(|| None))
+            .start(
+                &root,
+                trusted,
+                Arc::new(move |name: &str, status| {
+                    seen.lock().unwrap().push((name.to_owned(), status))
+                }),
+            )
+            .unwrap()
+    };
+
+    // Untrusted: it says so, once, and doesn't start (so doesn't look for Node).
+    let server = start(false);
+    server.open(&package, "{}").unwrap();
+    server.open(&package, "{}").unwrap();
+    assert_eq!(
+        statuses.lock().unwrap().drain(..).collect::<Vec<_>>(),
+        [("JSON".to_owned(), LanguageStatus::Restricted)]
+    );
+    // Trusted: it starts (here, it finds no Node).
+    let server = start(true);
+    server.open(&package, "{}").unwrap();
+    assert_eq!(
+        *statuses.lock().unwrap(),
+        [("JSON".to_owned(), LanguageStatus::NeedsNode)]
+    );
 }

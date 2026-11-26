@@ -38,10 +38,11 @@ use crate::dto::{
     AgentConfigArgs, AppInfoDto, AssistantConversationArgs, AssistantDecideArgs, AssistantSendArgs,
     AssistantSetupArgs, BackendEventDto, BedrockAuthDto, CloseGuardArgs, CommandLineStatusDto,
     DebugStartArgs, DebugThreadArgs, DiffSideDto, FileBreakpoints, GitCommitArgs, GitDiffArgs,
-    GitPathsArgs, GitSwitchArgs, LspDocumentArgs, LspPositionArgs, LspRangeArgs, LspResolveArgs,
-    LspSourceActionArgs, OpenRecentArgs, ProviderKindDto, ProviderSetupDto, ReadFileDto,
-    SearchTextArgs, SettingsPatchDto, SourceActionDto, StepDto, TerminalIdArgs, TerminalResizeArgs,
-    TerminalWriteArgs, TextPositionDto, WorkspaceArgs, WorkspacePathArgs, WriteFileArgs,
+    GitPathsArgs, GitStateDto, GitSwitchArgs, LspDocumentArgs, LspPositionArgs, LspRangeArgs,
+    LspResolveArgs, LspSourceActionArgs, OpenRecentArgs, ProviderKindDto, ProviderSetupDto,
+    ReadFileDto, SearchTextArgs, SettingsPatchDto, SourceActionDto, StepDto, TerminalIdArgs,
+    TerminalResizeArgs, TerminalWriteArgs, TextPositionDto, WorkspaceArgs, WorkspacePathArgs,
+    WorkspaceTrustArgs, WriteFileArgs,
 };
 use crate::error::{IpcError, IpcErrorCode};
 use crate::handlers::{self, IpcState, Services};
@@ -112,10 +113,12 @@ impl WorkspaceFs for FakeFs {
     }
 }
 
-/// Opens any absolute path; the recent list is fixed.
+/// Opens any absolute path; the recent list is fixed. Every folder is
+/// trusted until `trusted` lists the ones that are.
 struct FakeStore {
     recent: Vec<RecentWorkspace>,
     opened: Mutex<Vec<PathBuf>>,
+    trusted: Mutex<Option<Vec<PathBuf>>>,
 }
 
 impl WorkspaceStore for FakeStore {
@@ -131,6 +134,22 @@ impl WorkspaceStore for FakeStore {
     }
     fn update_settings(&self, patch: &SettingsPatch) -> Result<Settings, IdeError> {
         Settings::default().apply(patch)
+    }
+    fn is_trusted(&self, root: &WorkspaceRoot) -> Result<bool, IdeError> {
+        Ok(match &*self.trusted.lock().unwrap() {
+            None => true,
+            Some(folders) => folders.iter().any(|folder| root.path().starts_with(folder)),
+        })
+    }
+    fn set_trusted(&self, folder: &Path, trusted: bool) -> Result<(), IdeError> {
+        let mut kept = self.trusted.lock().unwrap();
+        let folders = kept.get_or_insert_with(Vec::new);
+        if trusted {
+            folders.push(folder.to_path_buf());
+        } else {
+            folders.retain(|kept| !kept.starts_with(folder) && !folder.starts_with(kept));
+        }
+        Ok(())
     }
 }
 
@@ -360,6 +379,8 @@ impl Drop for FakeSession {
 struct FakeLanguages {
     log: Arc<Mutex<Vec<String>>>,
     fail: std::sync::atomic::AtomicBool,
+    /// Whether each start was in a trusted folder.
+    trusted: Mutex<Vec<bool>>,
 }
 
 struct FakeServer {
@@ -374,8 +395,10 @@ impl LanguageServers for FakeLanguages {
     fn start(
         &self,
         root: &WorkspaceRoot,
+        trusted: bool,
         status: LanguageSink,
     ) -> Result<Box<dyn LanguageServer>, IdeError> {
+        self.trusted.lock().unwrap().push(trusted);
         let mut log = self.log.lock().unwrap();
         let n = log.iter().filter(|line| line.starts_with("start")).count() + 1;
         log.push(format!("start {n} in {}", root.name()));
@@ -827,6 +850,7 @@ fn fixture_with(launch: Option<ide_core::cli::Launch>) -> Fixture {
             },
         ],
         opened: Mutex::new(Vec::new()),
+        trusted: Mutex::new(None),
     });
     let watcher = Arc::new(FakeWatcher::default());
     let search = Arc::new(FakeSearch::default());
@@ -2006,5 +2030,133 @@ fn the_command_line_commands_say_where_it_stands() {
         })
         .unwrap(),
         serde_json::json!({ "kind": "unavailable", "reason": "why" })
+    );
+}
+
+#[test]
+fn an_untrusted_folder_runs_none_of_its_own_code_until_it_is_trusted() {
+    let f = fixture();
+    // Nothing trusted yet.
+    *f.store.trusted.lock().unwrap() = Some(Vec::new());
+    let open = handlers::open_recent_workspace(
+        &f.state,
+        OpenRecentArgs {
+            path: ide_core::workspace::display_path(&folder("alpha")),
+        },
+    )
+    .unwrap();
+    assert!(!open.trusted);
+    let id = open.id.clone();
+    let workspace = || WorkspaceArgs {
+        workspace_id: id.clone(),
+    };
+
+    // Git: a state that says so, and no command reaches it.
+    assert_eq!(
+        handlers::git_state(&f.state, workspace()).unwrap(),
+        GitStateDto::Restricted
+    );
+    assert_eq!(
+        code(handlers::git_branches(&f.state, workspace())),
+        IpcErrorCode::Restricted
+    );
+    assert_eq!(
+        code(handlers::git_commit(
+            &f.state,
+            GitCommitArgs {
+                workspace_id: id.clone(),
+                message: "x".to_owned(),
+            }
+        )),
+        IpcErrorCode::Restricted
+    );
+    // The debugger doesn't start.
+    assert_eq!(
+        code(handlers::debug_start(&f.state, start(&id, "main.js"))),
+        IpcErrorCode::Restricted
+    );
+    // The language servers start, told the folder isn't trusted.
+    handlers::lsp_open(&f.state, doc(&id, "main.ts", "")).unwrap();
+    assert_eq!(f.languages.trusted.lock().unwrap().as_slice(), [false]);
+    // Reading and the rest work as ever.
+    handlers::list_directory(&f.state, args(&id, "")).unwrap();
+
+    // Trusted now: git runs, and the servers start again, trusted.
+    let trusted = handlers::workspace_trust(
+        &f.state,
+        WorkspaceTrustArgs {
+            workspace_id: id.clone(),
+            trusted: true,
+            parent: None,
+        },
+    )
+    .unwrap();
+    assert!(trusted.trusted);
+    assert_eq!(trusted.id, id, "the same workspace, still open");
+    assert!(
+        handlers::current_workspace(&f.state)
+            .unwrap()
+            .unwrap()
+            .trusted
+    );
+    assert_ne!(
+        handlers::git_state(&f.state, workspace()).unwrap(),
+        GitStateDto::Restricted
+    );
+    handlers::lsp_open(&f.state, doc(&id, "main.ts", "")).unwrap();
+    assert_eq!(
+        f.languages.trusted.lock().unwrap().as_slice(),
+        [false, true]
+    );
+    // It's kept: opened again, it's trusted.
+    let again = handlers::open_recent_workspace(
+        &f.state,
+        OpenRecentArgs {
+            path: ide_core::workspace::display_path(&folder("alpha")),
+        },
+    )
+    .unwrap();
+    assert!(again.trusted);
+}
+
+#[test]
+fn trusting_the_parent_trusts_the_folders_beside_it() {
+    let f = fixture();
+    *f.store.trusted.lock().unwrap() = Some(Vec::new());
+    let open = handlers::open_recent_workspace(
+        &f.state,
+        OpenRecentArgs {
+            path: ide_core::workspace::display_path(&folder("alpha")),
+        },
+    )
+    .unwrap();
+    handlers::workspace_trust(
+        &f.state,
+        WorkspaceTrustArgs {
+            workspace_id: open.id,
+            trusted: true,
+            parent: Some(true),
+        },
+    )
+    .unwrap();
+    let beta = handlers::open_recent_workspace(
+        &f.state,
+        OpenRecentArgs {
+            path: ide_core::workspace::display_path(&folder("beta")),
+        },
+    )
+    .unwrap();
+    assert!(beta.trusted);
+    // Another workspace's id can't change this one's trust.
+    assert_eq!(
+        code(handlers::workspace_trust(
+            &f.state,
+            WorkspaceTrustArgs {
+                workspace_id: "old".to_owned(),
+                trusted: false,
+                parent: None,
+            },
+        )),
+        IpcErrorCode::WorkspaceChanged
     );
 }

@@ -275,6 +275,16 @@ describe("SourceControlView", () => {
     expect(await screen.findByText("Git isn't installed")).toBeTruthy();
   });
 
+  it("is off in Restricted Mode, with a way to trust the folder", async () => {
+    const { port } = fakeRepo([], { state: async () => ok({ kind: "restricted" }) });
+    const { registry } = renderView(port);
+    const manage = vi.fn();
+    registry.register({ id: "workspace.manageTrust", title: "Manage", run: manage });
+    expect(await screen.findByText("Source control is off in Restricted Mode")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Manage Workspace Trust" }));
+    expect(manage).toHaveBeenCalledOnce();
+  });
+
   it("reads the state again once changes on disk settle", async () => {
     const state = vi.fn(fakeRepo([]).port.state);
     const { bus } = renderView({ ...fakeRepo([]).port, state });

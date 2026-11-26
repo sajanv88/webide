@@ -113,6 +113,10 @@ pub struct WorkspaceDto {
     pub name: String,
     /// The folder, as people write it.
     pub path: String,
+    /// The person trusts the authors of its files. Until then it's in
+    /// Restricted Mode: nothing runs its own code (git, the debugger, some
+    /// language servers).
+    pub trusted: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -470,6 +474,9 @@ pub struct GitHeadDto {
 pub enum GitStateDto {
     /// No `git` program was found.
     Unavailable,
+    /// The folder isn't trusted: git, which can run a repository's own
+    /// configured programs, doesn't run in it.
+    Restricted,
     NotARepository,
     #[serde(rename_all = "camelCase")]
     Repository {
@@ -691,6 +698,8 @@ pub enum LanguageStatusDto {
     Failed {
         message: String,
     },
+    /// It would run the folder's own code, and the folder isn't trusted.
+    Restricted,
 }
 
 /// What the debugger reports.
@@ -1053,6 +1062,17 @@ pub struct TerminalResizeArgs {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TerminalIdArgs {
     pub id: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkspaceTrustArgs {
+    pub workspace_id: String,
+    pub trusted: bool,
+    /// Trusts the folder it's in instead, and so every folder there.
+    #[serde(default)]
+    #[ts(optional)]
+    pub parent: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, TS)]
@@ -1574,6 +1594,7 @@ impl From<LanguageStatus> for LanguageStatusDto {
             LanguageStatus::Ready => Self::Ready,
             LanguageStatus::NeedsNode => Self::NeedsNode,
             LanguageStatus::Failed(message) => Self::Failed { message },
+            LanguageStatus::Restricted => Self::Restricted,
         }
     }
 }

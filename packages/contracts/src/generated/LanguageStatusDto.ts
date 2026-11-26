@@ -3,4 +3,4 @@
 /**
  * How the open workspace's language server is doing.
  */
-export type LanguageStatusDto = { "state": "starting" } | { "state": "ready" } | { "state": "needsNode" } | { "state": "failed", message: string, };
+export type LanguageStatusDto = { "state": "starting" } | { "state": "ready" } | { "state": "needsNode" } | { "state": "failed", message: string, } | { "state": "restricted" };

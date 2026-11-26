@@ -39,6 +39,7 @@ const CODES: Readonly<Record<IpcErrorCode, true>> = {
   notARecentWorkspace: true,
   invalidSettings: true,
   invalidQuery: true,
+  restricted: true,
   git: true,
   invalidArgument: true,
   io: true,

@@ -4,6 +4,8 @@ import type { GitBranchDto, GitFileDto, GitHeadDto, GitPort, IpcResult } from "@
 export type GitView =
   | { readonly status: "loading" }
   | { readonly status: "unavailable" }
+  /** The folder isn't trusted: git doesn't run in it. */
+  | { readonly status: "restricted" }
   | { readonly status: "notARepository" }
   | { readonly status: "failed"; readonly message: string }
   | {
@@ -73,6 +75,9 @@ export function createGitStore(port: GitPort): GitStore {
     switch (value.kind) {
       case "unavailable":
         set({ view: { status: "unavailable" } });
+        break;
+      case "restricted":
+        set({ view: { status: "restricted" } });
         break;
       case "notARepository":
         set({ view: { status: "notARepository" } });

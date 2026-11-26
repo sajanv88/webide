@@ -1,5 +1,5 @@
 import "./language-status.scss";
-import { AlertTriangleIcon, BracesIcon, XCircleIcon } from "@nuvui/icons";
+import { AlertTriangleIcon, BracesIcon, ShieldAlertIcon, XCircleIcon } from "@nuvui/icons";
 import { Button, Spinner } from "@nuvui/react";
 import type { AppCommandId, AppEvents, EditorProblem, LanguageStatusDto } from "@repo/contracts";
 import type { CommandRegistry, EventBus } from "@repo/kernel";
@@ -22,14 +22,16 @@ const said: Record<LanguageStatusDto["state"], string> = {
   ready: "ready",
   needsNode: "needs Node.js",
   failed: "isn't running",
+  restricted: "is off in Restricted Mode",
 };
 
 /**
  * The language servers in the status bar: each one's name as it starts and
  * is ready, with how many problems the open files have. One that failed is
  * a button that starts them again. One that needs Node.js is a button to
- * the prompt for it, which also opens by itself the first time. It
- * registers `language.restart`.
+ * the prompt for it, which also opens by itself the first time. One that's
+ * off until the folder is trusted is a button to `workspace.manageTrust`.
+ * It registers `language.restart`.
  */
 export function LanguageStatusItem({ client, registry, bus, platform }: LanguageStatusItemProps) {
   const [statuses, setStatuses] = useState<ReadonlyMap<string, LanguageStatusDto>>(new Map());
@@ -128,6 +130,19 @@ export function LanguageStatusItem({ client, registry, bus, platform }: Language
             onClick={() => void registry.execute("language.restart")}
           >
             <XCircleIcon size={14} />
+            {name}
+          </Button>
+        ) : status.state === "restricted" ? (
+          <Button
+            key={name}
+            intent="ghost"
+            size="sm"
+            className="language-status__button"
+            title={`${name} loads the project's own code: trust the folder to turn it on`}
+            aria-label={`${name} is off in Restricted Mode. Manage workspace trust`}
+            onClick={() => void registry.execute("workspace.manageTrust")}
+          >
+            <ShieldAlertIcon size={14} />
             {name}
           </Button>
         ) : null,

@@ -60,6 +60,7 @@ permissions = [
   "allow-assistant-decide",
   "allow-assistant-clear",
   "allow-take-launch-file",
+  "allow-workspace-trust",
   "allow-command-line-status",
   "allow-command-line-install",
   "allow-command-line-uninstall",

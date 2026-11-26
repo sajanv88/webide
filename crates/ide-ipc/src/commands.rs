@@ -21,7 +21,7 @@ use crate::dto::{
     ResolvedCompletionDto, ScopeDto, SearchTextArgs, SettingsDto, SettingsPatchDto, StackFrameDto,
     SubscribeEventsArgs, TerminalDto, TerminalEventDto, TerminalIdArgs, TerminalOpenArgs,
     TerminalResizeArgs, TerminalWriteArgs, TextEditDto, TextSearchDto, VariableDto, WindowStateDto,
-    WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WriteFileArgs,
+    WorkspaceArgs, WorkspaceDto, WorkspacePathArgs, WorkspaceTrustArgs, WriteFileArgs,
 };
 use crate::error::IpcError;
 use crate::events::EventHub;
@@ -124,6 +124,7 @@ ipc_commands! {
         assistant_decide(AssistantDecideArgs) -> ();
         assistant_clear(AssistantConversationArgs) -> ();
         take_launch_file() -> Option<String>;
+        workspace_trust(WorkspaceTrustArgs) -> WorkspaceDto;
         command_line_status() -> CommandLineStatusDto;
         command_line_install() -> CommandLineStatusDto;
         command_line_uninstall() -> CommandLineStatusDto;
@@ -567,6 +568,14 @@ pub async fn assistant_clear(
     args: AssistantConversationArgs,
 ) -> Result<(), IpcError> {
     run_blocking(&state, move |state| handlers::assistant_clear(state, args)).await
+}
+
+#[tauri::command]
+pub async fn workspace_trust(
+    state: Shared<'_>,
+    args: WorkspaceTrustArgs,
+) -> Result<WorkspaceDto, IpcError> {
+    run_blocking(&state, move |state| handlers::workspace_trust(state, args)).await
 }
 
 #[tauri::command]

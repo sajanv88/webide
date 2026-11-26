@@ -58,6 +58,7 @@ const IPC_COMMANDS: &[&str] = &[
     "assistant_decide",
     "assistant_clear",
     "take_launch_file",
+    "workspace_trust",
     "command_line_status",
     "command_line_install",
     "command_line_uninstall",

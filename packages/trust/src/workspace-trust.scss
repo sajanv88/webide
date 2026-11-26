@@ -1,0 +1,24 @@
+// The trust dialog: the folder's path, what stays off, and the parent choice.
+.workspace-trust {
+  &__path {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    overflow-wrap: anywhere;
+  }
+
+  &__list {
+    display: grid;
+    gap: calc(var(--spacing) * 1);
+    margin: 0;
+    padding-inline-start: calc(var(--spacing) * 5);
+    color: var(--color-muted-foreground);
+    font-size: var(--text-sm);
+  }
+
+  &__parent {
+    display: flex;
+    gap: calc(var(--spacing) * 2);
+    align-items: center;
+    font-size: var(--text-sm);
+  }
+}
