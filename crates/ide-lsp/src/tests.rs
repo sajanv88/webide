@@ -507,3 +507,139 @@ fn snippets_become_plain_text() {
         std::path::PathBuf::from("/usr/lib/app")
     );
 }
+
+/// TypeScript 6 as pnpm installed it for Angular's server, if it's there.
+fn installed_typescript_6() -> Option<PathBuf> {
+    let store = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../node_modules/.pnpm");
+    let dir = std::fs::read_dir(&store).ok()?.flatten().find(|entry| {
+        entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with("typescript@6.")
+    })?;
+    let typescript = dir.path().join("node_modules/typescript");
+    typescript
+        .join("lib/tsserverlibrary.js")
+        .is_file()
+        .then_some(typescript)
+}
+
+fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap().flatten() {
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_dir(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+#[test]
+fn angular_takes_an_angular_projects_templates() {
+    let (Some(node), Some(staged), Some(typescript)) =
+        (node_on_path(), staged_servers(), installed_typescript_6())
+    else {
+        eprintln!(
+            "skipping: no node, staged servers or TypeScript 6 (run pnpm install and pnpm build)"
+        );
+        return;
+    };
+    let servers = Servers::new(
+        vec![
+            ServerSpec::angular(staged.join("angular-server.cjs")),
+            ServerSpec::html(staged.join("html-server.cjs")),
+        ],
+        Arc::new(move || Some(node.clone())),
+    );
+    let at = |line, character| TextPosition { line, character };
+    let start = |dir: &std::path::Path| {
+        let root = WorkspaceRoot::from_canonical(std::fs::canonicalize(dir).unwrap()).unwrap();
+        let statuses = Arc::new(Mutex::new(Vec::new()));
+        let seen = Arc::clone(&statuses);
+        let server = servers
+            .start(
+                &root,
+                Arc::new(move |name: &str, status| {
+                    seen.lock().unwrap().push(format!("{name} {status:?}"));
+                }),
+            )
+            .unwrap();
+        (server, statuses)
+    };
+    let template = RelPath::parse("src/app/app.html").unwrap();
+
+    // An Angular project with its packages: Angular's server, finding the
+    // project's TypeScript and the bundled language service.
+    let project = tempfile::Builder::new().prefix("webide").tempdir().unwrap();
+    let folder = project.path();
+    std::fs::write(folder.join("angular.json"), "{}").unwrap();
+    std::fs::write(
+        folder.join("package.json"),
+        r#"{ "dependencies": { "@angular/core": "22.3.0" } }"#,
+    )
+    .unwrap();
+    std::fs::write(
+        folder.join("tsconfig.json"),
+        r#"{ "compilerOptions": { "strict": true, "experimentalDecorators": true }, "include": ["src"] }"#,
+    )
+    .unwrap();
+    std::fs::create_dir_all(folder.join("src/app")).unwrap();
+    std::fs::write(
+        folder.join("src/app/app.ts"),
+        "export class App {\n  title = 'demo';\n}\n",
+    )
+    .unwrap();
+    std::fs::write(folder.join("src/app/app.html"), "<h1>{{ title }}</h1>\n").unwrap();
+    copy_dir(&typescript, &folder.join("node_modules/typescript"));
+    let (server, statuses) = start(folder);
+    server.open(&template, "<h1>{{ title }}</h1>\n").unwrap();
+    server.problems(&template).unwrap();
+    server.hover(&template, at(0, 2)).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let said = statuses.lock().unwrap().clone();
+    assert!(said.contains(&"Angular Ready".to_owned()), "{said:?}");
+    assert!(!said.iter().any(|s| s.contains("Failed")), "{said:?}");
+    drop(server);
+
+    // The same project without its packages: said plainly, not started.
+    std::fs::remove_dir_all(folder.join("node_modules")).unwrap();
+    let (server, statuses) = start(folder);
+    server.open(&template, "<h1></h1>\n").unwrap();
+    let said = statuses.lock().unwrap().clone();
+    assert!(
+        matches!(&said[..], [only] if only.starts_with("Angular Failed") && only.contains("install the project's packages")),
+        "{said:?}"
+    );
+    drop(server);
+
+    // Not an Angular project: its HTML is the HTML server's.
+    let plain = tempfile::Builder::new().prefix("webide").tempdir().unwrap();
+    let (server, statuses) = start(plain.path());
+    server
+        .open(&RelPath::parse("index.html").unwrap(), "<p>hi</p>\n")
+        .unwrap();
+    assert_eq!(*statuses.lock().unwrap(), ["HTML Starting", "HTML Ready"]);
+}
+
+#[test]
+fn an_angular_project_is_known_by_its_config_or_its_package() {
+    let dir = tempfile::tempdir().unwrap();
+    assert!(!crate::angular_workspace(dir.path()));
+    std::fs::write(
+        dir.path().join("package.json"),
+        r#"{ "dependencies": { "react": "19" } }"#,
+    )
+    .unwrap();
+    assert!(!crate::angular_workspace(dir.path()));
+    std::fs::write(
+        dir.path().join("package.json"),
+        r#"{ "dependencies": { "@angular/core": "22" } }"#,
+    )
+    .unwrap();
+    assert!(crate::angular_workspace(dir.path()));
+    let other = tempfile::tempdir().unwrap();
+    std::fs::write(other.path().join("angular.json"), "{}").unwrap();
+    assert!(crate::angular_workspace(other.path()));
+}

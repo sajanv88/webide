@@ -6,13 +6,14 @@
 
 Language features over LSP, from servers the app ships:
 
-| Server     | Files                                                                         | Runs as                                   |
-| ---------- | ----------------------------------------------------------------------------- | ----------------------------------------- |
-| TypeScript | `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`                  | TypeScript 7's native `tsc --lsp --stdio` |
-| JSON       | `.json`, `.jsonc` (`tsconfig*.json`, `.vscode/*.json`… as JSON with comments) | VS Code's JSON server, on Node            |
-| CSS        | `.css`, `.scss`, `.less`                                                      | VS Code's CSS server, on Node             |
-| HTML       | `.html`, `.htm` (with the CSS and JavaScript in them)                         | VS Code's HTML server, on Node            |
-| YAML       | `.yaml`, `.yml`                                                               | Red Hat's YAML server, on Node            |
+| Server     | Files                                                                                           | Runs as                                   |
+| ---------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| TypeScript | `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`                                    | TypeScript 7's native `tsc --lsp --stdio` |
+| JSON       | `.json`, `.jsonc` (`tsconfig*.json`, `.vscode/*.json`… as JSON with comments)                   | VS Code's JSON server, on Node            |
+| CSS        | `.css`, `.scss`, `.less`                                                                        | VS Code's CSS server, on Node             |
+| Angular    | `.html` templates, in an Angular project (`angular.json`, or `@angular/core` in `package.json`) | Angular's server, on Node                 |
+| HTML       | `.html`, `.htm` (with the CSS and JavaScript in them), in any other project                     | VS Code's HTML server, on Node            |
+| YAML       | `.yaml`, `.yml`                                                                                 | Red Hat's YAML server, on Node            |
 
 - **The programs** are the app's own: `tsc` from its `typescript`
   dependency (`apps/desktop/scripts/stage-typescript.mjs`), the others from
@@ -24,7 +25,16 @@ Language features over LSP, from servers the app ships:
   first time one of its files opens, and reports its status under its own
   name ("TypeScript", "JSON"). One that can't start isn't tried again until
   the servers are restarted.
-- **Node:** the JSON, CSS, HTML and YAML servers run on the person's `node`,
+- **Angular:** a spec can serve only some workspaces (`applies`): Angular's
+  is asked whether the folder is an Angular project, once as it opens, and
+  is listed before HTML, which has the `.html` files of every other one. Its
+  server is the one here that runs the workspace's code: it loads the
+  project's own TypeScript (`--tsProbeLocations`), and the project's
+  `@angular/language-service`, or else the copy the app bundles beside it
+  (`--ngProbeLocations`); `{workspace}` in a spec's `args` is the folder.
+  Without the project's packages (`node_modules/typescript`) it says so
+  (`needs`) rather than starting.
+- **Node:** the JSON, CSS, HTML, YAML and Angular servers run on the person's `node`,
   found when each starts (`FindNode`: the app gives the debugger's
   `find_node`, which also looks where installers put it). Without one they
   report `NeedsNode`, and the app asks for it.
@@ -76,7 +86,9 @@ Language features over LSP, from servers the app ships:
 ### Known limits
 
 - No choosing the project's own TypeScript.
-- No Angular yet, nor formatting by any server.
+- No formatting by any server.
+- Angular covers templates in `.html` files; inline templates (in a
+  component's `.ts`) are TypeScript's, without Angular's checks.
 - Compose files and Renovate's config have no schema: SchemaStore points to
   their projects' own, which aren't bundled.
 - The YAML server's file patterns (`**/.github/workflows/*.yml`) don't match
@@ -90,9 +102,10 @@ Language features over LSP, from servers the app ships:
 
 - `Servers::new(specs, find_node)` (implements `ide_core::LanguageServers`),
   with `ServerSpec::typescript(program)`, `json(script, schemas)`,
-  `css(script)`, `html(script)`, `yaml(script, schemas)`; `Program`
-  (`Native`, `Node`), `FindNode`, `LanguageId`, and `json_language`,
-  `css_language`, `html_language`, `yaml_language`.
+  `css(script)`, `angular(script)`, `html(script)`, `yaml(script, schemas)`;
+  `Program` (`Native`, `Node`), `FindNode`, `LanguageId`, `WORKSPACE_ARG`,
+  `angular_workspace`, and `json_language`, `css_language`, `html_language`,
+  `yaml_language`.
 - `RpcClient`, `RpcError`, `OnRequest`, `read_message`, `write_message`;
   `to_uri`, `from_uri`, `relative_to`; `MAX_COMPLETIONS`.
 

@@ -24,6 +24,12 @@ const cache = join(app, "..", "..", "node_modules", ".cache", "schemastore", loc
 const packageDir = (name) => dirname(require.resolve(`${name}/package.json`));
 const extracted = packageDir("vscode-langservers-extracted");
 const yaml = packageDir("yaml-language-server");
+const angular = packageDir("@angular/language-server");
+// Angular's language service, which its server loads: the project's own
+// first, this copy when the project has none.
+const angularService = dirname(
+  createRequire(join(angular, "package.json")).resolve("@angular/language-service/package.json"),
+);
 const version = (dir) => JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).version;
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
@@ -32,6 +38,8 @@ const stamp = sha256(
   JSON.stringify([
     version(extracted),
     version(yaml),
+    version(angular),
+    version(angularService),
     version(packageDir("esbuild")),
     readFileSync(new URL(import.meta.url)),
     lock,
@@ -87,6 +95,41 @@ for (const server of SERVERS) {
     ...(server.banner ? { banner: { js: server.banner } } : {}),
   });
 }
+// Angular's server is one file already; it's made smaller. Its language
+// service goes in angular/node_modules, where the server looks for it.
+const minify = (entry, outfile) =>
+  esbuild.build({
+    entryPoints: [entry],
+    bundle: false,
+    minify: true,
+    platform: "node",
+    target: "node20",
+    format: "cjs",
+    outfile,
+    legalComments: "linked",
+    logLevel: "warning",
+  });
+await minify(join(angular, "index.js"), join(target, "angular-server.cjs"));
+const serviceTarget = join(target, "angular", "node_modules", "@angular", "language-service");
+mkdirSync(join(serviceTarget, "bundles"), { recursive: true });
+for (const file of [
+  "package.json",
+  "index.js",
+  "api_bundle.js",
+  "factory_bundle.js",
+  "private_bundle.js",
+]) {
+  copyFileSync(join(angularService, file), join(serviceTarget, file));
+}
+await minify(
+  join(angularService, "bundles", "language-service.js"),
+  join(serviceTarget, "bundles", "language-service.js"),
+);
+writeFileSync(
+  join(target, "LICENSE-angular"),
+  "@angular/language-server and @angular/language-service: MIT License, Copyright Google LLC.\nhttps://angular.dev/license\n",
+);
+
 // The YAML server's messages, read from a folder beside it.
 mkdirSync(join(target, "yaml-l10n"));
 copyFileSync(join(yaml, "l10n", "bundle.l10n.json"), join(target, "yaml-l10n", "bundle.l10n.json"));
@@ -121,5 +164,5 @@ writeFileSync(
 
 writeFileSync(marker, stamp);
 console.log(
-  `stage-language-servers: ${SERVERS.length} servers and ${Object.keys(lock.files).length} schemas → src-tauri/resources/language-servers`,
+  `stage-language-servers: ${SERVERS.length + 1} servers and ${Object.keys(lock.files).length} schemas → src-tauri/resources/language-servers`,
 );
